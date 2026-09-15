@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -14,6 +15,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("JSONL state round trip", TestJsonLinesAsync),
     ("Process timeout kills and reports", TestProcessTimeoutAsync),
+    ("Post-exit output drain is bounded", TestPostExitOutputDrainAsync),
     ("Bad executable reports start failure", TestBadExecutableAsync),
     ("File lease acquisition is bounded", TestExclusiveFileLeaseAsync),
     ("JSONL tail tolerates concurrent append", TestConcurrentJsonLineTailAsync),
@@ -73,6 +75,31 @@ static async Task<int> RunFakeAgentAsync(string[] input)
             await Console.Out.FlushAsync().ConfigureAwait(false);
             await Task.Delay(TimeSpan.FromMinutes(1)).ConfigureAwait(false);
             return 0;
+        case "spawn-pipe-holder":
+            Console.WriteLine("before-parent-exit");
+            await Console.Out.FlushAsync().ConfigureAwait(false);
+            var executable = Environment.ProcessPath
+                ?? throw new InvalidOperationException("The self-test process path is unavailable.");
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = executable,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (var argument in SelfInvocationArguments("fake-agent", "hold-pipes"))
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            using (var child = Process.Start(startInfo))
+            {
+                True(child is not null, "Pipe-holder process start");
+            }
+
+            return 0;
+        case "hold-pipes":
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            return 0;
         default:
             Console.Error.WriteLine("Unknown fake-agent role: " + role);
             return 2;
@@ -121,6 +148,25 @@ static async Task TestBadExecutableAsync()
         True(!result.Success, "Start failure result");
         True(result.StandardError.Contains(missing, StringComparison.Ordinal), "Start failure executable path");
     }).ConfigureAwait(false);
+}
+
+static async Task TestPostExitOutputDrainAsync()
+{
+    var executable = Environment.ProcessPath
+        ?? throw new InvalidOperationException("The self-test process path is unavailable.");
+    var result = await new ProcessRunner().RunAsync(
+            executable,
+            SelfInvocationArguments("fake-agent", "spawn-pipe-holder"),
+            Environment.CurrentDirectory,
+            timeout: TimeSpan.FromMilliseconds(300))
+        .ConfigureAwait(false);
+    True(result.TimedOut, "Post-exit drain timeout marker");
+    True(result.OutputTruncated, "Post-exit truncated-output marker");
+    True(!result.Success, "Post-exit drain failure");
+    True(result.StandardOutput.Contains("before-parent-exit", StringComparison.Ordinal), "Post-exit partial output");
+    True(result.StandardError.Contains("output drain timed out", StringComparison.OrdinalIgnoreCase),
+        "Post-exit drain timeout detail");
+    True(result.Duration < TimeSpan.FromSeconds(2), "Post-exit drain duration bound");
 }
 
 static async Task TestExclusiveFileLeaseAsync()

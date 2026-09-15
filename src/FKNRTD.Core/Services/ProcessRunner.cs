@@ -55,8 +55,8 @@ public sealed class ProcessRunner
             }
         }
 
-        var output = new StringBuilder();
-        var error = new StringBuilder();
+        var output = new OutputCapture();
+        var error = new OutputCapture();
         StreamWriter? log = null;
         if (!string.IsNullOrWhiteSpace(logPath))
         {
@@ -123,6 +123,7 @@ public sealed class ProcessRunner
             using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCancellation.CancelAfter(effectiveTimeout);
             var waitCancellation = timeoutCancellation.Token;
+            var processExited = false;
 
             try
             {
@@ -135,22 +136,29 @@ public sealed class ProcessRunner
                 }
 
                 await process.WaitForExitAsync(waitCancellation).ConfigureAwait(false);
+                processExited = true;
+                await Task.WhenAll(stdoutTask, stderrTask).WaitAsync(waitCancellation).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (
                 timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 TryKill(process);
-                await DrainAfterKillAsync(process, stdoutTask, stderrTask, pumpCancellation).ConfigureAwait(false);
+                var pumpsDrained = processExited
+                    ? await CancelAndDrainPumpsAsync(stdoutTask, stderrTask, pumpCancellation).ConfigureAwait(false)
+                    : await DrainAfterKillAsync(process, stdoutTask, stderrTask, pumpCancellation).ConfigureAwait(false);
                 stopwatch.Stop();
-                var timeoutMessage =
-                    $"Process '{executable}' timed out after {effectiveTimeout.TotalSeconds:0.###} seconds.";
+                var timeoutMessage = processExited
+                    ? $"Process '{executable}' output drain timed out after " +
+                      $"{effectiveTimeout.TotalSeconds:0.###} seconds; captured output was truncated."
+                    : $"Process '{executable}' timed out after {effectiveTimeout.TotalSeconds:0.###} seconds.";
                 return new CommandResult
                 {
                     ExitCode = -1,
-                    StandardOutput = output.ToString(),
+                    StandardOutput = output.Buffer.ToString(),
                     StandardError = AppendError(error, timeoutMessage),
                     Duration = stopwatch.Elapsed,
-                    TimedOut = true
+                    TimedOut = true,
+                    OutputTruncated = output.Truncated || error.Truncated || !pumpsDrained
                 };
             }
             catch (OperationCanceledException)
@@ -160,14 +168,14 @@ public sealed class ProcessRunner
                 throw;
             }
 
-            await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
             stopwatch.Stop();
             return new CommandResult
             {
                 ExitCode = process.ExitCode,
-                StandardOutput = output.ToString(),
-                StandardError = error.ToString(),
-                Duration = stopwatch.Elapsed
+                StandardOutput = output.Buffer.ToString(),
+                StandardError = error.Buffer.ToString(),
+                Duration = stopwatch.Elapsed,
+                OutputTruncated = output.Truncated || error.Truncated
             };
         }
         finally
@@ -211,7 +219,7 @@ public sealed class ProcessRunner
 
     private static async Task PumpAsync(
         StreamReader reader,
-        StringBuilder capture,
+        OutputCapture capture,
         bool isError,
         StreamWriter? log,
         SemaphoreSlim logGate,
@@ -226,10 +234,15 @@ public sealed class ProcessRunner
                 break;
             }
 
-            if (capture.Length < CaptureLimitCharacters)
+            if (capture.Buffer.Length < CaptureLimitCharacters)
             {
-                var remaining = CaptureLimitCharacters - capture.Length;
-                capture.AppendLine(line.Length <= remaining ? line : line[..remaining]);
+                var remaining = CaptureLimitCharacters - capture.Buffer.Length;
+                capture.Buffer.AppendLine(line.Length <= remaining ? line : line[..remaining]);
+                capture.Truncated |= line.Length > remaining;
+            }
+            else
+            {
+                capture.Truncated = true;
             }
 
             if (log is not null)
@@ -276,7 +289,7 @@ public sealed class ProcessRunner
         }
     }
 
-    private static async Task DrainAfterKillAsync(
+    private static async Task<bool> DrainAfterKillAsync(
         Process process,
         Task stdoutTask,
         Task stderrTask,
@@ -302,15 +315,43 @@ public sealed class ProcessRunner
         try
         {
             await Task.WhenAll(stdoutTask, stderrTask).WaitAsync(KillDrainTimeout).ConfigureAwait(false);
+            return !pumpCancellation.IsCancellationRequested;
         }
         catch (Exception exception) when (exception is OperationCanceledException or TimeoutException)
         {
             pumpCancellation.Cancel();
+            return false;
         }
     }
 
-    private static string AppendError(StringBuilder error, string message) =>
-        error.Length == 0 ? message : error.ToString().TrimEnd() + Environment.NewLine + message;
+    private static async Task<bool> CancelAndDrainPumpsAsync(
+        Task stdoutTask,
+        Task stderrTask,
+        CancellationTokenSource pumpCancellation)
+    {
+        pumpCancellation.Cancel();
+        try
+        {
+            await Task.WhenAll(stdoutTask, stderrTask).WaitAsync(KillDrainTimeout).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or TimeoutException)
+        {
+            // Output readers may be blocked in inherited pipe handles or user callbacks. Do not wait forever.
+        }
+
+        return false;
+    }
+
+    private static string AppendError(OutputCapture error, string message) =>
+        error.Buffer.Length == 0
+            ? message
+            : error.Buffer.ToString().TrimEnd() + Environment.NewLine + message;
+
+    private sealed class OutputCapture
+    {
+        public StringBuilder Buffer { get; } = new();
+        public bool Truncated { get; set; }
+    }
 }
 
 public static class ExecutableLocator

@@ -191,6 +191,7 @@ public sealed record CommandResult
     public TimeSpan Duration { get; init; }
     public bool TimedOut { get; init; }
     public bool StartFailed { get; init; }
+    public bool OutputTruncated { get; init; }
     public bool Success => ExitCode == 0 && !TimedOut && !StartFailed;
 }
 
