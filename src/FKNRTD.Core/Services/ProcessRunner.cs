@@ -7,6 +7,8 @@ namespace FKNRTD.Services;
 public sealed class ProcessRunner
 {
     private const int CaptureLimitCharacters = 2_000_000;
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan KillDrainTimeout = TimeSpan.FromSeconds(5);
 
     public async Task<CommandResult> RunAsync(
         string executable,
@@ -17,8 +19,16 @@ public sealed class ProcessRunner
         string? logPath = null,
         Func<string, bool, Task>? onLine = null,
         Action<int>? onStarted = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null)
     {
+        if (timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout), "Process timeout must be greater than zero.");
+        }
+
+        var effectiveTimeout = timeout ?? DefaultTimeout;
+
         var startInfo = new ProcessStartInfo
         {
             FileName = executable,
@@ -64,30 +74,89 @@ public sealed class ProcessRunner
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            if (!process.Start())
+            try
             {
-                throw new InvalidOperationException($"Unable to start process '{executable}'.");
+                if (!process.Start())
+                {
+                    stopwatch.Stop();
+                    var message = $"Unable to start process '{executable}': Process.Start returned false.";
+                    if (log is not null)
+                    {
+                        await log.WriteLineAsync("[ERR] " + message).ConfigureAwait(false);
+                    }
+
+                    return new CommandResult
+                    {
+                        ExitCode = -1,
+                        StandardError = message,
+                        Duration = stopwatch.Elapsed,
+                        StartFailed = true
+                    };
+                }
+            }
+            catch (System.ComponentModel.Win32Exception exception)
+            {
+                stopwatch.Stop();
+                var message = $"Unable to start process '{executable}': {exception.Message}";
+                if (log is not null)
+                {
+                    await log.WriteLineAsync("[ERR] " + message).ConfigureAwait(false);
+                }
+
+                return new CommandResult
+                {
+                    ExitCode = -1,
+                    StandardError = message,
+                    Duration = stopwatch.Elapsed,
+                    StartFailed = true
+                };
             }
 
             onStarted?.Invoke(process.Id);
 
-            if (standardInput is not null)
-            {
-                await process.StandardInput.WriteAsync(standardInput).ConfigureAwait(false);
-                await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
-                process.StandardInput.Close();
-            }
+            using var pumpCancellation = new CancellationTokenSource();
+            var stdoutTask = PumpAsync(
+                process.StandardOutput, output, false, log, logGate, onLine, pumpCancellation.Token);
+            var stderrTask = PumpAsync(
+                process.StandardError, error, true, log, logGate, onLine, pumpCancellation.Token);
 
-            var stdoutTask = PumpAsync(process.StandardOutput, output, false, log, logGate, onLine, cancellationToken);
-            var stderrTask = PumpAsync(process.StandardError, error, true, log, logGate, onLine, cancellationToken);
+            using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCancellation.CancelAfter(effectiveTimeout);
+            var waitCancellation = timeoutCancellation.Token;
 
             try
             {
-                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+                if (standardInput is not null)
+                {
+                    await process.StandardInput.WriteAsync(standardInput.AsMemory(), waitCancellation)
+                        .ConfigureAwait(false);
+                    await process.StandardInput.FlushAsync(waitCancellation).ConfigureAwait(false);
+                    process.StandardInput.Close();
+                }
+
+                await process.WaitForExitAsync(waitCancellation).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (
+                timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                TryKill(process);
+                await DrainAfterKillAsync(process, stdoutTask, stderrTask, pumpCancellation).ConfigureAwait(false);
+                stopwatch.Stop();
+                var timeoutMessage =
+                    $"Process '{executable}' timed out after {effectiveTimeout.TotalSeconds:0.###} seconds.";
+                return new CommandResult
+                {
+                    ExitCode = -1,
+                    StandardOutput = output.ToString(),
+                    StandardError = AppendError(error, timeoutMessage),
+                    Duration = stopwatch.Elapsed,
+                    TimedOut = true
+                };
             }
             catch (OperationCanceledException)
             {
                 TryKill(process);
+                await DrainAfterKillAsync(process, stdoutTask, stderrTask, pumpCancellation).ConfigureAwait(false);
                 throw;
             }
 
@@ -115,7 +184,8 @@ public sealed class ProcessRunner
         string workingDirectory,
         string? logPath = null,
         Func<string, bool, Task>? onLine = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -125,7 +195,8 @@ public sealed class ProcessRunner
                 workingDirectory,
                 logPath: logPath,
                 onLine: onLine,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                timeout: timeout);
         }
 
         return RunAsync(
@@ -134,7 +205,8 @@ public sealed class ProcessRunner
             workingDirectory,
             logPath: logPath,
             onLine: onLine,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            timeout: timeout);
     }
 
     private static async Task PumpAsync(
@@ -198,7 +270,47 @@ public sealed class ProcessRunner
         {
             // The operating system already released the process or denied the kill.
         }
+        catch (NotSupportedException)
+        {
+            // Process-tree termination is unavailable on this platform.
+        }
     }
+
+    private static async Task DrainAfterKillAsync(
+        Process process,
+        Task stdoutTask,
+        Task stderrTask,
+        CancellationTokenSource pumpCancellation)
+    {
+        var exited = false;
+        try
+        {
+            await process.WaitForExitAsync(CancellationToken.None).WaitAsync(KillDrainTimeout).ConfigureAwait(false);
+            exited = true;
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)
+        {
+            // Failed or denied termination must not turn timeout handling into another unbounded wait.
+        }
+
+        if (!exited)
+        {
+            pumpCancellation.Cancel();
+        }
+
+        try
+        {
+            await Task.WhenAll(stdoutTask, stderrTask).WaitAsync(KillDrainTimeout).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or TimeoutException)
+        {
+            pumpCancellation.Cancel();
+        }
+    }
+
+    private static string AppendError(StringBuilder error, string message) =>
+        error.Length == 0 ? message : error.ToString().TrimEnd() + Environment.NewLine + message;
 }
 
 public static class ExecutableLocator
@@ -211,9 +323,10 @@ public static class ExecutableLocator
             return File.Exists(executable) ? Path.GetFullPath(executable) : null;
         }
 
-        var extensions = OperatingSystem.IsWindows()
+        var isWindows = OperatingSystem.IsWindows();
+        var extensions = isWindows
             ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM")
-                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : [string.Empty];
 
         foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
@@ -221,9 +334,12 @@ public static class ExecutableLocator
         {
             var searchDirectory = directory.Trim().Trim('"');
             var exact = Path.Combine(searchDirectory, executable);
-            if (File.Exists(exact))
+            if (!isWindows || Path.HasExtension(executable))
             {
-                return Path.GetFullPath(exact);
+                if (File.Exists(exact))
+                {
+                    return Path.GetFullPath(exact);
+                }
             }
 
             foreach (var extension in extensions)
@@ -240,6 +356,11 @@ public static class ExecutableLocator
                 {
                     return Path.GetFullPath(candidate);
                 }
+            }
+
+            if (isWindows && File.Exists(exact))
+            {
+                return Path.GetFullPath(exact);
             }
         }
 

@@ -9,6 +9,8 @@ public sealed record FknrtdConfig
     public int DefaultMaxRepairRounds { get; init; } = 1;
     public int AgentStaleAfterSeconds { get; init; } = 120;
     public int ClaimStaleAfterSeconds { get; init; } = 300;
+    public int AgentTimeoutSeconds { get; init; } = 3600;
+    public int VerificationTimeoutSeconds { get; init; } = 600;
     public int DashboardRefreshMilliseconds { get; init; } = 1000;
     public bool RequireCleanTreeForLanding { get; init; } = true;
     public bool AutoCommitAgentChanges { get; init; } = true;

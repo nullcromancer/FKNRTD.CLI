@@ -25,46 +25,80 @@ public sealed class DoctorService
                 Name = ".NET runtime",
                 Passed = Environment.Version.Major >= 10,
                 Detail = $"{RuntimeInformation.FrameworkDescription} on {RuntimeInformation.OSDescription}"
-            },
-            new()
-            {
-                Name = "Configuration",
-                Passed = File.Exists(_store.Paths.Config),
-                Detail = _store.Paths.Config
             }
         };
 
+        FknrtdConfig? config = null;
+        var configDetail = _store.Paths.Config;
+        if (File.Exists(_store.Paths.Config))
+        {
+            try
+            {
+                config = await _store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                configDetail += $" ({exception.Message})";
+            }
+        }
+
+        checks.Add(new DoctorCheck
+        {
+            Name = "Configuration",
+            Passed = config is not null,
+            Detail = configDetail
+        });
+
+        var gitExecutable = FindExecutable("git");
         checks.Add(new DoctorCheck
         {
             Name = "Git executable",
-            Passed = ExecutableLocator.Find("git") is not null,
-            Detail = ExecutableLocator.Find("git") ?? "Not found"
+            Passed = gitExecutable is not null,
+            Detail = gitExecutable ?? "Not found"
         });
+        var isRepository = false;
+        try
+        {
+            isRepository = await _git.IsRepositoryAsync(_store.Paths.Root, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // Report failed check below instead of terminating doctor.
+        }
+
         checks.Add(new DoctorCheck
         {
             Name = "Git repository",
-            Passed = await _git.IsRepositoryAsync(_store.Paths.Root, cancellationToken).ConfigureAwait(false),
+            Passed = isRepository,
             Detail = _store.Paths.Root
         });
 
-        var config = await _store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
-        foreach (var agent in config.Agents)
+        foreach (var agent in config?.Agents ?? [])
         {
-            var executable = ExecutableLocator.Find(agent.Executable);
+            var executable = FindExecutable(agent.Executable);
             var detail = executable ?? "Not found on PATH";
+            var launchSucceeded = false;
             if (executable is not null)
             {
-                var version = await GetVersionAsync(executable, cancellationToken).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(version))
+                var result = await GetVersionAsync(
+                        executable,
+                        TimeSpan.FromSeconds(Math.Clamp(config!.AgentTimeoutSeconds, 1, 10)),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                launchSucceeded = !result.StartFailed && !result.TimedOut;
+                var version = (result.StandardOutput + " " + result.StandardError).Trim();
+                if (version.Length > 0)
                 {
-                    detail += $" ({version})";
+                    detail += $" ({(version.Length <= 100 ? version : version[..100])})";
                 }
             }
 
             checks.Add(new DoctorCheck
             {
                 Name = $"Agent: {agent.DisplayName}",
-                Passed = executable is not null || !agent.Enabled,
+                Passed = launchSucceeded || !agent.Enabled,
                 Required = agent.Enabled,
                 Detail = agent.Enabled ? detail : detail + " [disabled]"
             });
@@ -96,22 +130,43 @@ public sealed class DoctorService
         return checks;
     }
 
-    private async Task<string> GetVersionAsync(string executable, CancellationToken cancellationToken)
+    private async Task<CommandResult> GetVersionAsync(
+        string executable,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var result = await _process.RunAsync(
+            return await _process.RunAsync(
                     executable,
                     ["--version"],
                     _store.Paths.Root,
-                    cancellationToken: cancellationToken)
+                    cancellationToken: cancellationToken,
+                    timeout: timeout)
                 .ConfigureAwait(false);
-            var text = (result.StandardOutput + " " + result.StandardError).Trim();
-            return text.Length <= 100 ? text : text[..100];
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            return string.Empty;
+            return new CommandResult
+            {
+                ExitCode = -1,
+                StandardError = $"Unable to launch '{executable}': {exception.Message}",
+                StartFailed = true
+            };
+        }
+    }
+
+    private static string? FindExecutable(string executable)
+    {
+        try
+        {
+            return ExecutableLocator.Find(executable);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
         }
     }
 }

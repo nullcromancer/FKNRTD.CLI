@@ -6,11 +6,23 @@ namespace FKNRTD.Services;
 
 public sealed class StateStore
 {
+    private const long DefaultJsonLineFileByteCap = 8 * 1024 * 1024;
+    private const int TailReadBufferBytes = 16 * 1024;
+    private const int TailReadMaximumBytes = 8 * 1024 * 1024;
     private readonly SemaphoreSlim _appendGate = new(1, 1);
+    private readonly long _jsonLineFileByteCap;
 
-    public StateStore(FknrtdPaths paths)
+    public StateStore(FknrtdPaths paths, long jsonLineFileByteCap = DefaultJsonLineFileByteCap)
     {
+        if (jsonLineFileByteCap <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(jsonLineFileByteCap),
+                "JSONL file byte cap must be greater than zero.");
+        }
+
         Paths = paths;
+        _jsonLineFileByteCap = jsonLineFileByteCap;
     }
 
     public FknrtdPaths Paths { get; }
@@ -254,11 +266,12 @@ public sealed class StateStore
             {
                 try
                 {
+                    RotateJsonLineFileIfNeeded(path, bytes.Length);
                     await using var stream = new FileStream(
                         path,
                         FileMode.Append,
                         FileAccess.Write,
-                        FileShare.Read,
+                        FileShare.Read | FileShare.Delete,
                         16 * 1024,
                         FileOptions.Asynchronous | FileOptions.WriteThrough);
                     await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
@@ -283,23 +296,129 @@ public sealed class StateStore
         int limit,
         CancellationToken cancellationToken)
     {
+        if (limit <= 0 || (!File.Exists(path) && !File.Exists(RotationPath(path))))
+        {
+            return [];
+        }
+
+        try
+        {
+            var current = await ReadJsonLineTailAsync<T>(path, limit, cancellationToken).ConfigureAwait(false);
+            if (current.Count >= limit)
+            {
+                return current;
+            }
+
+            var archive = await ReadJsonLineTailAsync<T>(
+                    RotationPath(path),
+                    limit - current.Count,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (archive.Count == 0)
+            {
+                return current;
+            }
+
+            return archive.Concat(current).ToArray();
+        }
+        catch (IOException)
+        {
+            // Rotation or a concurrent appender can briefly replace the active file.
+            return [];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // A transient sharing restriction must not take down dashboard refresh.
+            return [];
+        }
+    }
+
+    private void RotateJsonLineFileIfNeeded(string path, int incomingBytes)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var length = new FileInfo(path).Length;
+        if (length == 0 || length + incomingBytes <= _jsonLineFileByteCap)
+        {
+            return;
+        }
+
+        File.Move(path, RotationPath(path), overwrite: true);
+    }
+
+    private static async Task<IReadOnlyList<T>> ReadJsonLineTailAsync<T>(
+        string path,
+        int limit,
+        CancellationToken cancellationToken)
+    {
         if (!File.Exists(path) || limit <= 0)
         {
             return [];
         }
 
-        var lines = await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false);
-        var results = new List<T>();
-        foreach (var line in lines.TakeLast(limit))
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            TailReadBufferBytes,
+            FileOptions.Asynchronous | FileOptions.RandomAccess);
+        var position = stream.Length;
+        var newlineCount = 0;
+        var scannedBytes = 0;
+        var chunks = new List<byte[]>();
+        while (position > 0 && newlineCount <= limit && scannedBytes < TailReadMaximumBytes)
         {
-            if (string.IsNullOrWhiteSpace(line))
+            cancellationToken.ThrowIfCancellationRequested();
+            var requested = (int)Math.Min(
+                Math.Min(TailReadBufferBytes, position),
+                TailReadMaximumBytes - scannedBytes);
+            position -= requested;
+            stream.Position = position;
+            var buffer = new byte[requested];
+            var read = 0;
+            while (read < requested)
             {
-                continue;
+                var count = await stream.ReadAsync(buffer.AsMemory(read, requested - read), cancellationToken)
+                    .ConfigureAwait(false);
+                if (count == 0)
+                {
+                    break;
+                }
+
+                read += count;
             }
 
+            if (read != buffer.Length)
+            {
+                Array.Resize(ref buffer, read);
+            }
+
+            newlineCount += buffer.Count(value => value == (byte)'\n');
+            scannedBytes += buffer.Length;
+            chunks.Add(buffer);
+        }
+
+        var byteCount = chunks.Sum(chunk => chunk.Length);
+        var bytes = new byte[byteCount];
+        var destination = 0;
+        for (var index = chunks.Count - 1; index >= 0; index--)
+        {
+            chunks[index].CopyTo(bytes, destination);
+            destination += chunks[index].Length;
+        }
+
+        var lines = Encoding.UTF8.GetString(bytes)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var results = new List<T>(Math.Min(limit, lines.Length));
+        for (var index = lines.Length - 1; index >= 0 && results.Count < limit; index--)
+        {
             try
             {
-                var item = JsonSerializer.Deserialize<T>(line, JsonSupport.Options);
+                var item = JsonSerializer.Deserialize<T>(lines[index], JsonSupport.Options);
                 if (item is not null)
                 {
                     results.Add(item);
@@ -307,16 +426,20 @@ public sealed class StateStore
             }
             catch (JsonException)
             {
-                // Ignore a single malformed event while retaining the rest of the history.
+                // Ignore a partial or malformed record while retaining valid recent history.
             }
         }
 
+        results.Reverse();
         return results;
     }
+
+    private static string RotationPath(string path) => path + ".1";
 }
 
 public sealed class ExclusiveFileLease : IAsyncDisposable, IDisposable
 {
+    private static readonly TimeSpan DefaultAcquisitionTimeout = TimeSpan.FromSeconds(5);
     private readonly FileStream _stream;
     private bool _disposed;
 
@@ -332,31 +455,68 @@ public sealed class ExclusiveFileLease : IAsyncDisposable, IDisposable
         string path,
         string busyMessage,
         int? maximumAttempts,
+        TimeSpan? acquisitionTimeout = null,
         CancellationToken cancellationToken = default)
     {
+        if (maximumAttempts is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumAttempts));
+        }
+
+        var timeout = acquisitionTimeout ?? DefaultAcquisitionTimeout;
+        if (timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(acquisitionTimeout));
+        }
+
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
         for (var attempt = 0; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                stream.SetLength(0);
-                await using var writer = new StreamWriter(stream, Encoding.UTF8, 1024, leaveOpen: true);
-                await writer.WriteAsync(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                    .ConfigureAwait(false);
-                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
-                stream.Position = 0;
-                return new ExclusiveFileLease(path, stream);
-            }
-            catch (IOException) when (maximumAttempts is null || attempt < maximumAttempts.Value)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+                var stream = new FileStream(
+                    path,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.Read | FileShare.Delete);
+                try
+                {
+                    stream.SetLength(0);
+                    await using var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024, leaveOpen: true);
+                    await writer.WriteAsync(
+                            Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                        .ConfigureAwait(false);
+                    await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    stream.Position = 0;
+                    return new ExclusiveFileLease(path, stream);
+                }
+                catch
+                {
+                    stream.Dispose();
+                    throw;
+                }
             }
             catch (IOException exception)
             {
-                throw new InvalidOperationException(
-                    busyMessage, exception);
+                var attemptsExhausted = maximumAttempts is not null && attempt >= maximumAttempts.Value;
+                var timeExhausted = elapsed.Elapsed >= timeout;
+                if (attemptsExhausted || timeExhausted)
+                {
+                    var owner = ReadLockOwner(path);
+                    throw new InvalidOperationException(
+                        $"{busyMessage} Lock held by PID {owner}.", exception);
+                }
+
+                var remaining = timeout - elapsed.Elapsed;
+                var delay = remaining < TimeSpan.FromMilliseconds(100)
+                    ? remaining
+                    : TimeSpan.FromMilliseconds(100);
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
     }
@@ -369,12 +529,42 @@ public sealed class ExclusiveFileLease : IAsyncDisposable, IDisposable
         }
 
         _disposed = true;
-        _stream.Dispose();
+        try
+        {
+            File.Delete(Path);
+        }
+        catch (IOException)
+        {
+            // Another process may already be acquiring or cleaning up this lock path.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Lock release still succeeded even if stale-file cleanup was denied.
+        }
+        finally
+        {
+            _stream.Dispose();
+        }
     }
 
     public ValueTask DisposeAsync()
     {
         Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    private static string ReadLockOwner(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var owner = reader.ReadToEnd().Trim().TrimStart('\uFEFF');
+            return owner.Length == 0 ? "unknown" : owner;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return "unknown";
+        }
     }
 }

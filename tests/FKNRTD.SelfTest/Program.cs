@@ -13,6 +13,14 @@ if (args.FirstOrDefault() == "fake-agent")
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("JSONL state round trip", TestJsonLinesAsync),
+    ("Process timeout kills and reports", TestProcessTimeoutAsync),
+    ("Bad executable reports start failure", TestBadExecutableAsync),
+    ("File lease acquisition is bounded", TestExclusiveFileLeaseAsync),
+    ("JSONL tail tolerates concurrent append", TestConcurrentJsonLineTailAsync),
+    ("JSONL rotation preserves recent entries", TestJsonLineRotationAsync),
+    ("Windows PATHEXT beats extensionless shim", TestExecutableLocatorAsync),
+    ("Legacy config receives timeout defaults", TestConfigTimeoutDefaultsAsync),
+    ("Doctor renders unlaunchable agent", TestDoctorFailureAsync),
     ("Claude usage parsing", TestClaudeUsageAsync),
     ("Codex rate-limit parsing", TestCodexUsageAsync),
     ("Collision classification", TestConflictDetectionAsync),
@@ -60,6 +68,11 @@ static async Task<int> RunFakeAgentAsync(string[] input)
             Console.WriteLine("Independent test audit passed.");
             Console.WriteLine("FKNRTD_VERDICT: PASS");
             return 0;
+        case "hang":
+            Console.WriteLine("before-timeout");
+            await Console.Out.FlushAsync().ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromMinutes(1)).ConfigureAwait(false);
+            return 0;
         default:
             Console.Error.WriteLine("Unknown fake-agent role: " + role);
             return 2;
@@ -79,6 +92,214 @@ static async Task TestJsonLinesAsync()
         Equal("two", events[1].Type, "Second event type");
         var physicalLines = await File.ReadAllLinesAsync(store.Paths.Events).ConfigureAwait(false);
         Equal(2, physicalLines.Length, "JSONL physical line count");
+    }).ConfigureAwait(false);
+}
+
+static async Task TestProcessTimeoutAsync()
+{
+    var executable = Environment.ProcessPath
+        ?? throw new InvalidOperationException("The self-test process path is unavailable.");
+    var result = await new ProcessRunner().RunAsync(
+            executable,
+            SelfInvocationArguments("fake-agent", "hang"),
+            Environment.CurrentDirectory,
+            timeout: TimeSpan.FromMilliseconds(300))
+        .ConfigureAwait(false);
+    True(result.TimedOut, "Timed-out marker");
+    True(!result.Success, "Timed-out process failure");
+    True(result.StandardOutput.Contains("before-timeout", StringComparison.Ordinal), "Partial timeout output");
+    True(result.StandardError.Contains("timed out", StringComparison.OrdinalIgnoreCase), "Timeout detail");
+}
+
+static async Task TestBadExecutableAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var missing = Path.Combine(root, "definitely-missing-executable");
+        var result = await new ProcessRunner().RunAsync(missing, [], root).ConfigureAwait(false);
+        True(result.StartFailed, "Start-failure marker");
+        True(!result.Success, "Start failure result");
+        True(result.StandardError.Contains(missing, StringComparison.Ordinal), "Start failure executable path");
+    }).ConfigureAwait(false);
+}
+
+static async Task TestExclusiveFileLeaseAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var path = Path.Combine(root, "held.lock");
+        var lease = await ExclusiveFileLease.AcquireAsync(path, "lease busy", maximumAttempts: null)
+            .ConfigureAwait(false);
+        try
+        {
+            try
+            {
+                await ExclusiveFileLease.AcquireAsync(
+                        path,
+                        "lease busy",
+                        maximumAttempts: null,
+                        acquisitionTimeout: TimeSpan.FromMilliseconds(200))
+                    .ConfigureAwait(false);
+                throw new InvalidOperationException("Contended lease unexpectedly succeeded.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                True(exception.Message.Contains("lease busy", StringComparison.Ordinal), "Lease busy detail");
+                True(
+                    exception.Message.Contains(Environment.ProcessId.ToString(), StringComparison.Ordinal),
+                    "Lease owner PID");
+            }
+        }
+        finally
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+        }
+
+        True(!File.Exists(path), "Disposed lease file deletion");
+    }).ConfigureAwait(false);
+}
+
+static async Task TestConcurrentJsonLineTailAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        var writer = new StateStore(paths);
+        var reader = new StateStore(paths);
+        await writer.InitializeAsync(new FknrtdConfig { ProjectName = "tail-test" }).ConfigureAwait(false);
+        for (var index = 0; index < 50; index++)
+        {
+            await writer.AppendEventAsync(new FknrtdEvent { Type = $"event-{index}" }).ConfigureAwait(false);
+        }
+
+        var append = Task.Run(async () =>
+        {
+            for (var index = 50; index < 100; index++)
+            {
+                await writer.AppendEventAsync(new FknrtdEvent { Type = $"event-{index}" }).ConfigureAwait(false);
+            }
+        });
+        while (!append.IsCompleted)
+        {
+            var snapshot = await reader.LoadEventsAsync(10).ConfigureAwait(false);
+            True(snapshot.Count <= 10, "Concurrent tail limit");
+        }
+
+        await append.ConfigureAwait(false);
+        var events = await reader.LoadEventsAsync(10).ConfigureAwait(false);
+        Equal(10, events.Count, "Final tail count");
+        Equal("event-90", events[0].Type, "Final tail first event");
+        Equal("event-99", events[^1].Type, "Final tail last event");
+    }).ConfigureAwait(false);
+}
+
+static async Task TestJsonLineRotationAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root), jsonLineFileByteCap: 900);
+        await store.InitializeAsync(new FknrtdConfig { ProjectName = "rotation-test" }).ConfigureAwait(false);
+        for (var index = 0; index < 30; index++)
+        {
+            await store.AppendEventAsync(new FknrtdEvent
+            {
+                Type = $"rot-{index}",
+                Message = new string('x', 80)
+            }).ConfigureAwait(false);
+            await store.AppendMessageAsync(new AgentMessage
+            {
+                FromAgentId = "sender",
+                ToAgentId = "receiver",
+                Text = $"message-{index}-" + new string('x', 80)
+            }).ConfigureAwait(false);
+        }
+
+        True(File.Exists(store.Paths.Events + ".1"), "Rotation archive");
+        True(File.Exists(store.Paths.Messages + ".1"), "Message rotation archive");
+        var events = await store.LoadEventsAsync(3).ConfigureAwait(false);
+        Equal(3, events.Count, "Rotated recent count");
+        Equal("rot-27", events[0].Type, "Rotated first recent event");
+        Equal("rot-29", events[^1].Type, "Rotated last recent event");
+        var messages = await store.LoadMessagesAsync(3).ConfigureAwait(false);
+        Equal(3, messages.Count, "Rotated recent message count");
+        True(messages[0].Text.StartsWith("message-27-", StringComparison.Ordinal), "Rotated first recent message");
+        True(messages[^1].Text.StartsWith("message-29-", StringComparison.Ordinal), "Rotated last recent message");
+    }).ConfigureAwait(false);
+}
+
+static async Task TestExecutableLocatorAsync()
+{
+    if (!OperatingSystem.IsWindows())
+    {
+        return;
+    }
+
+    await WithTemporaryDirectoryAsync(root =>
+    {
+        var extensionless = Path.Combine(root, "codex");
+        var command = Path.Combine(root, "codex.CMD");
+        File.WriteAllText(extensionless, "shim");
+        File.WriteAllText(command, "@exit /b 0");
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        var originalPathExt = Environment.GetEnvironmentVariable("PATHEXT");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", root);
+            Environment.SetEnvironmentVariable("PATHEXT", ".EXE;.CMD;.BAT;.COM");
+            Equal(Path.GetFullPath(command), ExecutableLocator.Find("codex"), "PATHEXT resolution");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+            Environment.SetEnvironmentVariable("PATHEXT", originalPathExt);
+        }
+
+        return Task.CompletedTask;
+    }).ConfigureAwait(false);
+}
+
+static Task TestConfigTimeoutDefaultsAsync()
+{
+    var config = JsonSerializer.Deserialize<FknrtdConfig>(
+        "{\"projectName\":\"legacy\"}",
+        JsonSupport.Options) ?? throw new InvalidOperationException("Legacy config did not deserialize.");
+    Equal(3600, config.AgentTimeoutSeconds, "Default agent timeout");
+    Equal(600, config.VerificationTimeoutSeconds, "Default verification timeout");
+    return Task.CompletedTask;
+}
+
+static async Task TestDoctorFailureAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var process = new ProcessRunner();
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var doctor = new DoctorService(store, new GitService(process), process);
+        var missingConfigChecks = await doctor.RunAsync().ConfigureAwait(false);
+        True(
+            !missingConfigChecks.Single(check => check.Name == "Configuration").Passed,
+            "Missing configuration doctor result");
+
+        var invalidExecutable = Path.Combine(root, OperatingSystem.IsWindows() ? "broken.exe" : "broken");
+        await File.WriteAllTextAsync(invalidExecutable, "not an executable").ConfigureAwait(false);
+        await store.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "doctor-test",
+            AgentTimeoutSeconds = 1,
+            Agents =
+            [
+                new AgentDefinition
+                {
+                    Id = "broken",
+                    DisplayName = "Broken",
+                    Executable = invalidExecutable
+                }
+            ]
+        }).ConfigureAwait(false);
+        var checks = await doctor.RunAsync().ConfigureAwait(false);
+        var agent = checks.Single(check => check.Name == "Agent: Broken");
+        True(!agent.Passed, "Unlaunchable agent doctor result");
+        True(agent.Detail.Contains(invalidExecutable, StringComparison.Ordinal), "Unlaunchable agent detail");
     }).ConfigureAwait(false);
 }
 
@@ -244,6 +465,15 @@ static FileClaim Claim(
     Paths = [path],
     ExpiresAt = expiry
 };
+
+static IReadOnlyList<string> SelfInvocationArguments(params string[] arguments)
+{
+    var executable = Environment.ProcessPath
+        ?? throw new InvalidOperationException("The self-test process path is unavailable.");
+    return Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+        ? [Assembly.GetEntryAssembly()?.Location ?? throw new InvalidOperationException("Assembly path missing."), .. arguments]
+        : arguments;
+}
 
 static void MustSucceed(CommandResult result, string operation)
 {

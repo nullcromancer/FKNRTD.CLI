@@ -22,7 +22,8 @@ public sealed class AgentRunner
         string workingDirectory,
         WorkflowStage stage,
         int attempt,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var cancellationWatcher = WatchCancellationAsync(task.Id, linked, cancellationToken);
@@ -65,7 +66,8 @@ public sealed class AgentRunner
                     logPath,
                     observer.ObserveAsync,
                     processId => runtime.ProcessId = processId,
-                    linked.Token)
+                    linked.Token,
+                    timeout)
                 .ConfigureAwait(false);
 
             runtime.State = result.Success ? AgentActivityState.Completed : AgentActivityState.Failed;
