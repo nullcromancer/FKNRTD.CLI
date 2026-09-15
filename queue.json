@@ -233,6 +233,26 @@
         "backup_ref": "refs/pairing/backups/2/20260914-235551",
         "at": "2026-09-15T03:55:51+00:00"
       }
+    },
+    {
+      "id": 3,
+      "title": "Renderer correctness: display width, layout, frame tests",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0003-renderer-correctness-display-width-layou.cvm",
+      "seat": null,
+      "created": "2026-09-15T04:22:30+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-15T04:22:30+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

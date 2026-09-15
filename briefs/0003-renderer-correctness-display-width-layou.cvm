@@ -1,0 +1,52 @@
+CVM1|B
+G|Make the FKNRTD.CLI terminal UI correct and verifiable: every rendered frame is exactly the requested width at every breakpoint, box borders join as documented, the dashboard cannot crash or lose the selected task, and the renderer is covered by deterministic frame tests.
+S|Canvas display-width correctness and safe truncation
+S|Wide/medium/narrow layout border joining
+S|Pipeline viewport scrolling and selection visibility
+S|Log pane file sharing
+S|Full-frame repaint on terminal resize
+S|Deterministic render entry point and renderer self-tests
+C|Zero new NuGet dependencies. BCL only.
+C|TreatWarningsAsErrors is on; the build must be warning-free.
+C|DashboardApp.Render(snapshot, width, height, useColor) must remain a pure function of its arguments — it is the test seam.
+C|With useColor=false the rendered string must contain no ESC (U+001B) character at all.
+C|Do not change Core service semantics; prior briefs own those files.
+C|Do not redesign the dashboard's information architecture. Fix correctness, do not restyle.
+C|FKNRTD.Cli is an OutputType Exe with AssemblyName 'fknrtd'; referencing it from the self-test must not change its packaging, PackageId, ToolCommandName or produce a second tool entry.
+A|Canvas measures text in terminal display columns, not UTF-16 code units: a cell grid position accounts for East Asian Wide/Fullwidth characters occupying two columns, and combining marks occupying zero, so a repository name, branch, task title or agent intent containing CJK or emoji no longer shifts the box border on that row.
+A|Text.Truncate never splits a surrogate pair or a combining sequence, and truncates to a display-column budget rather than a code-unit count.
+A|Every line of DashboardApp.Render output is exactly the requested width in display columns, for every width in a sweep and for every breakpoint.
+A|Adjacent panels in the wide and medium layouts share a single joined border using the correct box-drawing junctions (┬ ┴ ├ ┤ ┼) instead of emitting doubled '┐┌' and '┘└' seams, so the rendered dashboard matches the layout advertised in README.md.
+A|The PIPELINE panel scrolls: when the task list is longer than the visible rows, the viewport follows the selection so the selected task is always drawn, and an indicator shows there are more tasks above/below.
+A|The task log pane opens log files with FileShare.ReadWrite\pFileShare.Delete so pressing L while an agent is actively writing that log renders the tail instead of throwing IOException.
+A|The dashboard repaints the full frame when the terminal size changes, leaving no stale characters from a previous wider or taller frame.
+A|fknrtd dashboard -once and fknrtd status accept -width and -height options that override the detected terminal size, so a frame can be rendered deterministically in a script or test; detected size is still used when they are absent.
+A|New self-tests in tests/FKNRTD.SelfTest/Program.cs render a fixed synthetic DashboardSnapshot and assert: (a) every output line is exactly the requested display width for widths 60,72,84,100,119,120,140,200 at heights 20,32,48; (b) no ESC character when useColor=false; (c) a snapshot whose repository name and task title contain CJK and emoji still produces exactly-width lines; (d) with more tasks than visible rows, the selected task id appears in the frame; (e) box corner/junction characters form a closed frame at each breakpoint.
+A|dotnet build FKNRTD.CLI.sln -c Release succeeds with 0 warnings and 0 errors.
+A|The self-test binary prints N/N self-tests passed and exits 0.
+A|The self-test project can reach the renderer: tests/FKNRTD.SelfTest adds a ProjectReference to src/FKNRTD.Cli, and FKNRTD.Cli exposes its internals to FKNRTD.SelfTest via an InternalsVisibleTo attribute (src/FKNRTD.Core already has one for the Core assembly; the Cli assembly needs its own). Do not make dashboard internals public to achieve this.
+F|src/FKNRTD.Cli/Dashboard/Canvas.cs:DrawText
+F|src/FKNRTD.Cli/Dashboard/Canvas.cs:DrawBox
+F|src/FKNRTD.Cli/Dashboard/Canvas.cs:DrawGauge
+F|src/FKNRTD.Cli/Dashboard/Canvas.cs:Render
+F|src/FKNRTD.Cli/Dashboard/Canvas.cs:Text.Truncate
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:Render
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:RenderWide
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:RenderMedium
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:RenderPipeline
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:RenderLogs
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:RunAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:DashboardAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:StatusAsync
+F|src/FKNRTD.Cli/FKNRTD.Cli.csproj
+F|tests/FKNRTD.SelfTest/Program.cs
+F|tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj
+F|src/FKNRTD.Cli/Properties/AssemblyInfo.cs
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+X|Core services: ProcessRunner, StateStore, GitService, WorktreeService, Orchestrator
+X|Adding a test framework such as xunit
+X|Restyling, new colour schemes, new panels or new keybindings
+X|README ASCII art edits (a later documentation pass owns those)
+U|East Asian width data is not exposed directly by the BCL. Implement a compact range table for Wide/Fullwidth plus zero-width combining marks rather than taking a dependency; state the ranges covered in the report.
+U|Brief #2 already landed src/FKNRTD.Core/Properties/AssemblyInfo.cs with InternalsVisibleTo("FKNRTD.SelfTest"); follow that existing pattern rather than inventing a new one.
