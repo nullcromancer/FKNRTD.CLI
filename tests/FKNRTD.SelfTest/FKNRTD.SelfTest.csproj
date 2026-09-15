@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\FKNRTD.Core\FKNRTD.Core.csproj" />
+    <ProjectReference Include="..\..\src\FKNRTD.Cli\FKNRTD.Cli.csproj" />
   </ItemGroup>
 </Project>

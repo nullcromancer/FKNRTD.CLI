@@ -14,6 +14,7 @@ internal sealed class DashboardApp
     private readonly StateStore _store;
     private readonly Dictionary<string, Task> _running = new(StringComparer.OrdinalIgnoreCase);
     private int _selectedTask;
+    private string? _selectedTaskId;
     private bool _quit;
     private string _toast = "Ready";
     private DashboardView _view = DashboardView.Overview;
@@ -35,18 +36,25 @@ internal sealed class DashboardApp
         _store = store;
     }
 
-    public async Task RunAsync(bool once, bool useColor, CancellationToken cancellationToken)
+    public async Task RunAsync(
+        bool once,
+        bool useColor,
+        int? widthOverride,
+        int? heightOverride,
+        CancellationToken cancellationToken)
     {
         if (once || Console.IsOutputRedirected || Console.IsInputRedirected)
         {
             var snapshot = await _snapshots.CaptureAsync(cancellationToken).ConfigureAwait(false);
-            Console.WriteLine(Render(snapshot, GetWidth(140), GetHeight(40), useColor));
+            Console.WriteLine(Render(snapshot, widthOverride ?? GetWidth(140), heightOverride ?? GetHeight(40), useColor));
             return;
         }
 
         using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _sessionCancellation = sessionCancellation;
         EnterScreen();
+        var previousWidth = -1;
+        var previousHeight = -1;
         try
         {
             while (!_quit && !cancellationToken.IsCancellationRequested)
@@ -54,8 +62,12 @@ internal sealed class DashboardApp
                 RemoveCompletedRuns();
                 var snapshot = await _snapshots.CaptureAsync(cancellationToken).ConfigureAwait(false);
                 ClampSelection(snapshot);
-                Console.Write("\u001b[H");
-                Console.Write(Render(snapshot, GetWidth(120), GetHeight(32), useColor));
+                var width = widthOverride ?? GetWidth(120);
+                var height = heightOverride ?? GetHeight(32);
+                Console.Write(width == previousWidth && height == previousHeight ? "\u001b[H" : "\u001b[2J\u001b[H");
+                Console.Write(RenderCurrent(snapshot, width, height, useColor));
+                previousWidth = width;
+                previousHeight = height;
 
                 var refresh = TimeSpan.FromMilliseconds(snapshot.Config.DashboardRefreshMilliseconds);
                 var until = DateTimeOffset.UtcNow + refresh;
@@ -93,7 +105,26 @@ internal sealed class DashboardApp
         }
     }
 
-    internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor)
+    internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor) =>
+        RenderFrame(snapshot, width, height, useColor, 0, DashboardView.Overview, "Ready");
+
+    internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor, int selectedTaskIndex) =>
+        RenderFrame(snapshot, width, height, useColor, selectedTaskIndex, DashboardView.Overview, "Ready");
+
+    internal string RenderLog(DashboardSnapshot snapshot, int width, int height, int selectedTaskIndex) =>
+        RenderFrame(snapshot, width, height, useColor: false, selectedTaskIndex, DashboardView.Logs, "Ready");
+
+    private string RenderCurrent(DashboardSnapshot snapshot, int width, int height, bool useColor) =>
+        RenderFrame(snapshot, width, height, useColor, _selectedTask, _view, _toast);
+
+    private string RenderFrame(
+        DashboardSnapshot snapshot,
+        int width,
+        int height,
+        bool useColor,
+        int selectedTaskIndex,
+        DashboardView view,
+        string toast)
     {
         width = Math.Max(60, width);
         height = Math.Max(20, height);
@@ -102,61 +133,69 @@ internal sealed class DashboardApp
         var footer = new Rect(0, height - 2, width, 2);
         var body = new Rect(0, 4, width, height - 6);
 
-        if (_view == DashboardView.Logs)
+        if (view == DashboardView.Logs)
         {
-            RenderLogs(canvas, snapshot, body);
+            RenderLogs(canvas, snapshot, body, selectedTaskIndex);
         }
-        else if (width >= 120 && height >= 28)
+        else if (width >= 120)
         {
-            RenderWide(canvas, snapshot, body);
+            RenderWide(canvas, snapshot, body, selectedTaskIndex);
         }
         else if (width >= 84)
         {
-            RenderMedium(canvas, snapshot, body);
+            RenderMedium(canvas, snapshot, body, selectedTaskIndex);
         }
         else
         {
-            RenderNarrow(canvas, snapshot, body);
+            RenderNarrow(canvas, snapshot, body, selectedTaskIndex);
         }
 
-        RenderFooter(canvas, footer);
+        RenderFooter(canvas, footer, view, toast);
         return canvas.Render(useColor);
     }
 
-    private void RenderWide(Canvas canvas, DashboardSnapshot snapshot, Rect body)
+    private void RenderWide(Canvas canvas, DashboardSnapshot snapshot, Rect body, int selectedTaskIndex)
     {
         var topHeight = Math.Max(10, body.Height / 2);
-        var bottomHeight = body.Height - topHeight;
-        var firstWidth = body.Width * 30 / 100;
-        var secondWidth = body.Width * 38 / 100;
-        var thirdWidth = body.Width - firstWidth - secondWidth;
+        var bottomHeight = body.Height - topHeight + 1;
+        var joinedWidth = body.Width + 2;
+        var firstWidth = joinedWidth * 30 / 100;
+        var secondWidth = joinedWidth * 38 / 100;
+        var thirdWidth = joinedWidth - firstWidth - secondWidth;
+        var secondX = body.X + firstWidth - 1;
+        var thirdX = secondX + secondWidth - 1;
+        var bottomY = body.Y + topHeight - 1;
 
         RenderAgents(canvas, snapshot, new Rect(body.X, body.Y, firstWidth, topHeight));
-        RenderPipeline(canvas, snapshot, new Rect(body.X + firstWidth, body.Y, secondWidth, topHeight));
-        RenderQuality(canvas, snapshot, new Rect(body.X + firstWidth + secondWidth, body.Y, thirdWidth, topHeight));
+        RenderPipeline(canvas, snapshot, new Rect(secondX, body.Y, secondWidth, topHeight), selectedTaskIndex);
+        RenderQuality(canvas, snapshot, new Rect(thirdX, body.Y, thirdWidth, topHeight), selectedTaskIndex);
 
-        RenderMessages(canvas, snapshot, new Rect(body.X, body.Y + topHeight, firstWidth, bottomHeight));
-        RenderConflicts(canvas, snapshot, new Rect(body.X + firstWidth, body.Y + topHeight, secondWidth, bottomHeight));
-        RenderEvents(canvas, snapshot, new Rect(body.X + firstWidth + secondWidth, body.Y + topHeight, thirdWidth, bottomHeight));
+        RenderMessages(canvas, snapshot, new Rect(body.X, bottomY, firstWidth, bottomHeight));
+        RenderConflicts(canvas, snapshot, new Rect(secondX, bottomY, secondWidth, bottomHeight));
+        RenderEvents(canvas, snapshot, new Rect(thirdX, bottomY, thirdWidth, bottomHeight));
     }
 
-    private void RenderMedium(Canvas canvas, DashboardSnapshot snapshot, Rect body)
+    private void RenderMedium(Canvas canvas, DashboardSnapshot snapshot, Rect body, int selectedTaskIndex)
     {
-        var leftWidth = body.Width / 2;
+        var leftWidth = (body.Width + 1) / 2;
+        var rightWidth = body.Width - leftWidth + 1;
         var topHeight = body.Height / 2;
-        RenderPipeline(canvas, snapshot, new Rect(body.X, body.Y, leftWidth, topHeight));
-        RenderAgents(canvas, snapshot, new Rect(body.X + leftWidth, body.Y, body.Width - leftWidth, topHeight));
-        RenderConflicts(canvas, snapshot, new Rect(body.X, body.Y + topHeight, leftWidth, body.Height - topHeight));
+        var bottomHeight = body.Height - topHeight + 1;
+        var rightX = body.X + leftWidth - 1;
+        var bottomY = body.Y + topHeight - 1;
+        RenderPipeline(canvas, snapshot, new Rect(body.X, body.Y, leftWidth, topHeight), selectedTaskIndex);
+        RenderAgents(canvas, snapshot, new Rect(rightX, body.Y, rightWidth, topHeight));
+        RenderConflicts(canvas, snapshot, new Rect(body.X, bottomY, leftWidth, bottomHeight));
         RenderEvents(canvas, snapshot,
-            new Rect(body.X + leftWidth, body.Y + topHeight, body.Width - leftWidth, body.Height - topHeight));
+            new Rect(rightX, bottomY, rightWidth, bottomHeight));
     }
 
-    private void RenderNarrow(Canvas canvas, DashboardSnapshot snapshot, Rect body)
+    private void RenderNarrow(Canvas canvas, DashboardSnapshot snapshot, Rect body, int selectedTaskIndex)
     {
         var pipelineHeight = Math.Max(8, body.Height / 2);
-        RenderPipeline(canvas, snapshot, new Rect(body.X, body.Y, body.Width, pipelineHeight));
+        RenderPipeline(canvas, snapshot, new Rect(body.X, body.Y, body.Width, pipelineHeight), selectedTaskIndex);
         RenderAgents(canvas, snapshot,
-            new Rect(body.X, body.Y + pipelineHeight, body.Width, body.Height - pipelineHeight));
+            new Rect(body.X, body.Y + pipelineHeight - 1, body.Width, body.Height - pipelineHeight + 1));
     }
 
     private static void RenderHeader(Canvas canvas, DashboardSnapshot snapshot, Rect rect)
@@ -176,8 +215,9 @@ internal sealed class DashboardApp
             maxWidth: Math.Max(10, inner.Width - 32));
         var gitText = snapshot.Git.IsClean ? "✓ clean" : $"△ {snapshot.Git.ChangedFiles} changed";
         var right = $"{gitText}  ↑{snapshot.Git.Ahead}↓{snapshot.Git.Behind}  {riskText}";
-        canvas.DrawText(Math.Max(inner.X, rect.Right - right.Length - 2), inner.Y, right, riskColor, bold: risk is not null,
-            maxWidth: right.Length);
+        var rightWidth = Math.Min(inner.Width, Text.DisplayWidth(right));
+        canvas.DrawText(Math.Max(inner.X, rect.Right - rightWidth - 2), inner.Y, right, riskColor,
+            bold: risk is not null, maxWidth: rightWidth);
 
         var claude = snapshot.Usage.FirstOrDefault(item => item.AgentId.Equals("claude", StringComparison.OrdinalIgnoreCase));
         var codex = snapshot.Usage.FirstOrDefault(item => item.AgentId.Equals("codex", StringComparison.OrdinalIgnoreCase));
@@ -195,10 +235,7 @@ internal sealed class DashboardApp
         {
             var runtime = snapshot.Agents.FirstOrDefault(item =>
                 item.AgentId.Equals(definition.Id, StringComparison.OrdinalIgnoreCase));
-            var state = runtime?.State ??
-                        (ExecutableLocator.Find(definition.Executable) is null
-                            ? AgentActivityState.Offline
-                            : AgentActivityState.Idle);
+            var state = runtime?.State ?? AgentActivityState.Offline;
             var role = runtime is null || runtime.Role == AgentRole.Observer ? string.Empty : $" {runtime.Role}";
             var prefix = $"{StateIcon(state)} {definition.DisplayName}{role}";
             canvas.DrawText(inner.X, row, Text.Truncate(prefix, Math.Min(24, inner.Width)),
@@ -228,7 +265,11 @@ internal sealed class DashboardApp
         }
     }
 
-    private void RenderPipeline(Canvas canvas, DashboardSnapshot snapshot, Rect rect)
+    private static void RenderPipeline(
+        Canvas canvas,
+        DashboardSnapshot snapshot,
+        Rect rect,
+        int selectedTaskIndex)
     {
         canvas.DrawBox(rect, "PIPELINE", Theme.Blue);
         var inner = rect.Inset();
@@ -238,17 +279,30 @@ internal sealed class DashboardApp
             return;
         }
 
-        var selected = SelectedTask(snapshot);
+        selectedTaskIndex = Math.Clamp(selectedTaskIndex, 0, snapshot.Tasks.Count - 1);
+        var selected = SelectedTask(snapshot, selectedTaskIndex);
         var row = inner.Y;
-        var maxTaskRows = Math.Max(1, Math.Min(4, inner.Height - 4));
-        for (var index = 0; index < Math.Min(snapshot.Tasks.Count, maxTaskRows); index++)
+        var maxTaskRows = Math.Max(1, Math.Min(5, inner.Height - 4));
+        var visibleTasks = Math.Min(snapshot.Tasks.Count, maxTaskRows);
+        var firstTask = Math.Clamp(selectedTaskIndex - visibleTasks / 2, 0, snapshot.Tasks.Count - visibleTasks);
+        for (var index = firstTask; index < firstTask + visibleTasks; index++)
         {
             var task = snapshot.Tasks[index];
-            var selectedMarker = index == _selectedTask ? "›" : " ";
-            var line = $"{selectedMarker} {StatusIcon(task.Status)} {task.Id} {task.Title}";
+            var selectedMarker = index == selectedTaskIndex ? "›" : " ";
+            var overflowMarker = index == firstTask && firstTask > 0
+                ? "↑"
+                : index == firstTask + visibleTasks - 1 && firstTask + visibleTasks < snapshot.Tasks.Count
+                    ? "↓"
+                    : " ";
+            if (visibleTasks == 1 && firstTask > 0 && firstTask + visibleTasks < snapshot.Tasks.Count)
+            {
+                overflowMarker = "↕";
+            }
+
+            var line = $"{selectedMarker}{overflowMarker} {StatusIcon(task.Status)} {task.Id} {task.Title}";
             canvas.DrawText(inner.X, row++, Text.Truncate(line, inner.Width),
-                index == _selectedTask ? Theme.Foreground : Theme.Muted,
-                bold: index == _selectedTask,
+                index == selectedTaskIndex ? Theme.Foreground : Theme.Muted,
+                bold: index == selectedTaskIndex,
                 maxWidth: inner.Width);
         }
 
@@ -279,11 +333,15 @@ internal sealed class DashboardApp
         }
     }
 
-    private void RenderQuality(Canvas canvas, DashboardSnapshot snapshot, Rect rect)
+    private static void RenderQuality(
+        Canvas canvas,
+        DashboardSnapshot snapshot,
+        Rect rect,
+        int selectedTaskIndex)
     {
         canvas.DrawBox(rect, "CI + USAGE", Theme.Green);
         var inner = rect.Inset();
-        var task = SelectedTask(snapshot);
+        var task = SelectedTask(snapshot, selectedTaskIndex);
         var row = inner.Y;
         if (task is not null)
         {
@@ -414,11 +472,11 @@ internal sealed class DashboardApp
         }
     }
 
-    private void RenderLogs(Canvas canvas, DashboardSnapshot snapshot, Rect rect)
+    private void RenderLogs(Canvas canvas, DashboardSnapshot snapshot, Rect rect, int selectedTaskIndex)
     {
         canvas.DrawBox(rect, "TASK LOG", Theme.Cyan);
         var inner = rect.Inset();
-        var task = SelectedTask(snapshot);
+        var task = SelectedTask(snapshot, selectedTaskIndex);
         if (task is null)
         {
             canvas.DrawText(inner.X, inner.Y, "No task selected.", Theme.Muted, maxWidth: inner.Width);
@@ -444,7 +502,24 @@ internal sealed class DashboardApp
             return;
         }
 
-        var lines = File.ReadLines(path).TakeLast(Math.Max(0, inner.Height - 2)).ToArray();
+        string[] lines;
+        try
+        {
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            lines = ReadTail(reader, Math.Max(0, inner.Height - 2));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            canvas.DrawText(inner.X, inner.Y + 2, Text.Truncate("Log unavailable: " + exception.Message, inner.Width),
+                Theme.Amber, maxWidth: inner.Width);
+            return;
+        }
+
         var row = inner.Y + 1;
         foreach (var line in lines)
         {
@@ -452,14 +527,35 @@ internal sealed class DashboardApp
         }
     }
 
-    private void RenderFooter(Canvas canvas, Rect rect)
+    private static string[] ReadTail(TextReader reader, int count)
+    {
+        if (count <= 0)
+        {
+            return [];
+        }
+
+        var tail = new Queue<string>(count);
+        while (reader.ReadLine() is { } line)
+        {
+            if (tail.Count == count)
+            {
+                tail.Dequeue();
+            }
+
+            tail.Enqueue(line);
+        }
+
+        return tail.ToArray();
+    }
+
+    private static void RenderFooter(Canvas canvas, Rect rect, DashboardView view, string toast)
     {
         canvas.DrawText(rect.X, rect.Y,
             Text.Truncate("[↑↓] Select  [Enter] Run  [N] New  [C] Cancel  [G] Land  [M] Message  [L] Logs  [U] Usage  [Tab] View  [Q] Quit", rect.Width),
             Theme.Blue,
             bold: true,
             maxWidth: rect.Width);
-        canvas.DrawText(rect.X, rect.Y + 1, Text.Truncate($"{_view} | {_toast}", rect.Width), Theme.Muted,
+        canvas.DrawText(rect.X, rect.Y + 1, Text.Truncate($"{view} | {toast}", rect.Width), Theme.Muted,
             maxWidth: rect.Width);
     }
 
@@ -473,9 +569,11 @@ internal sealed class DashboardApp
                 break;
             case ConsoleKey.UpArrow:
                 _selectedTask = Math.Max(0, _selectedTask - 1);
+                RememberSelection(snapshot);
                 break;
             case ConsoleKey.DownArrow:
                 _selectedTask = Math.Min(Math.Max(0, snapshot.Tasks.Count - 1), _selectedTask + 1);
+                RememberSelection(snapshot);
                 break;
             case ConsoleKey.Enter:
                 StartSelected(snapshot);
@@ -601,6 +699,7 @@ internal sealed class DashboardApp
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             _selectedTask = 0;
+            _selectedTaskId = task.Id;
             _toast = $"Created {task.Id}";
         }
         catch (Exception exception)
@@ -648,11 +747,39 @@ internal sealed class DashboardApp
         return value.Trim();
     }
 
-    private WorkflowTask? SelectedTask(DashboardSnapshot snapshot) =>
-        snapshot.Tasks.Count == 0 ? null : snapshot.Tasks[Math.Clamp(_selectedTask, 0, snapshot.Tasks.Count - 1)];
+    private WorkflowTask? SelectedTask(DashboardSnapshot snapshot) => SelectedTask(snapshot, _selectedTask);
 
-    private void ClampSelection(DashboardSnapshot snapshot) =>
-        _selectedTask = snapshot.Tasks.Count == 0 ? 0 : Math.Clamp(_selectedTask, 0, snapshot.Tasks.Count - 1);
+    private static WorkflowTask? SelectedTask(DashboardSnapshot snapshot, int selectedTaskIndex) =>
+        snapshot.Tasks.Count == 0
+            ? null
+            : snapshot.Tasks[Math.Clamp(selectedTaskIndex, 0, snapshot.Tasks.Count - 1)];
+
+    private void ClampSelection(DashboardSnapshot snapshot)
+    {
+        if (snapshot.Tasks.Count == 0)
+        {
+            _selectedTask = 0;
+            _selectedTaskId = null;
+            return;
+        }
+
+        if (_selectedTaskId is not null)
+        {
+            var remembered = snapshot.Tasks
+                .Select((task, index) => (task, index))
+                .FirstOrDefault(item => item.task.Id.Equals(_selectedTaskId, StringComparison.OrdinalIgnoreCase));
+            if (remembered.task is not null)
+            {
+                _selectedTask = remembered.index;
+            }
+        }
+
+        _selectedTask = Math.Clamp(_selectedTask, 0, snapshot.Tasks.Count - 1);
+        _selectedTaskId = snapshot.Tasks[_selectedTask].Id;
+    }
+
+    private void RememberSelection(DashboardSnapshot snapshot) =>
+        _selectedTaskId = SelectedTask(snapshot)?.Id;
 
     private void RemoveCompletedRuns()
     {
