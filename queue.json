@@ -138,6 +138,26 @@
         "backup_ref": "refs/pairing/backups/1/20260914-234145",
         "at": "2026-09-15T03:41:45+00:00"
       }
+    },
+    {
+      "id": 2,
+      "title": "Workflow correctness: verdict, base refs, git paths",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0002-workflow-correctness-verdict-base-refs-g.cvm",
+      "seat": null,
+      "created": "2026-09-15T03:42:05+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-15T03:42:05+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

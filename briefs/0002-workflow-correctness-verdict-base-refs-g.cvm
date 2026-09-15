@@ -1,0 +1,44 @@
+CVM1|B
+G|Make the FKNRTD.CLI task workflow correct end to end: the audit verdict cannot be faked by prompt echo, base refs resolve to real branches, git path handling is correct for non-ASCII and quoted paths, and landing/cleanup leaves no orphaned branches or worktrees.
+S|Orchestrator audit verdict extraction
+S|Base ref resolution and landing preconditions
+S|GitService porcelain and path parsing
+S|WorktreeService landing, removal and pruning
+S|Commit preconditions in EnsureCommittedAsync
+C|Zero new NuGet dependencies. BCL only.
+C|TreatWarningsAsErrors is on; the build must be warning-free.
+C|Do not touch Dashboard/Canvas.cs, DashboardApp.cs or StatusLineRenderer.cs in this brief.
+C|Do not change ProcessRunner/StateStore/ExclusiveFileLease internals; a prior brief owns those.
+C|Landing must remain explicit and must never merge automatically without the caller's confirmation.
+A|The audit verdict is read only from the agent's own final message, not from any echo of the prompt: Orchestrator must count verdict markers over the extracted final text with the prompt's own marker lines excluded, so an agent CLI that echoes its prompt (which contains both FKNRTD_VERDICT: PASS and FKNRTD_VERDICT: FAIL) cannot produce a false PASS or a false FAIL.
+A|Verdict matching tolerates surrounding markdown: a marker line inside a fenced code block, or with trailing punctuation or bold markers, is still recognised, while a marker mentioned mid-sentence is not.
+A|A self-test proves that output echoing the full audit prompt plus a single trailing 'FKNRTD_VERDICT: PASS' is treated as PASS, and that output containing both markers as the agent's own verdict is treated as FAIL (ambiguous verdict is never a pass).
+A|FknrtdConfig.DefaultBaseRef no longer defaults to the literal 'HEAD': task creation resolves the current branch name, and a task whose BaseRef is 'HEAD' or empty is repaired at run time by resolving the real branch before the worktree is created.
+A|WorktreeService.LandAsync compares the primary worktree branch against a resolved branch name and reports the actual mismatch; landing a task created before this fix no longer fails with a confusing 'not HEAD' message.
+A|GitService passes -c core.quotePath=false and parses porcelain output with NUL termination (-z) where a path list is required, so paths containing spaces, quotes or non-ASCII characters round-trip exactly.
+A|A self-test creates a file with a non-ASCII name and a name containing a space in a temporary repository and asserts GetChangedPathsAsync returns both paths verbatim.
+A|EnsureCommittedAsync fails with an actionable message naming user.name/user.email when the repository has no committer identity configured, instead of surfacing raw git stderr.
+A|Task cleanup removes the worktree, prunes stale worktree administrative state, and deletes the task branch when it has been landed; a self-test asserts that after land + cleanup neither the worktree directory nor the task branch remains.
+A|dotnet build FKNRTD.CLI.sln -c Release succeeds with 0 warnings and 0 errors.
+A|The self-test binary prints N/N self-tests passed and exits 0.
+F|src/FKNRTD.Core/Services/Orchestrator.cs:RunAuditStageAsync
+F|src/FKNRTD.Core/Services/Orchestrator.cs:CountVerdictLines
+F|src/FKNRTD.Core/Services/Orchestrator.cs:ExtractFinalText
+F|src/FKNRTD.Core/Services/Orchestrator.cs:EnsureCommittedAsync
+F|src/FKNRTD.Core/Services/GitService.cs:GetChangedPathsAsync
+F|src/FKNRTD.Core/Services/GitService.cs:GetDiffPathsAsync
+F|src/FKNRTD.Core/Services/GitService.cs:ParseStatusPath
+F|src/FKNRTD.Core/Services/GitService.cs:GitAsync
+F|src/FKNRTD.Core/Services/WorktreeService.cs:LandAsync
+F|src/FKNRTD.Core/Services/WorktreeService.cs:RemoveAsync
+F|src/FKNRTD.Core/Services/TaskService.cs:CreateAsync
+F|src/FKNRTD.Core/Domain/Configuration.cs:FknrtdConfig
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:TaskCleanupAsync
+F|tests/FKNRTD.SelfTest/Program.cs
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+X|Terminal rendering, Canvas width math, dashboard layout
+X|ProcessRunner timeouts and lease mechanics
+X|Adding a test framework such as xunit
+X|Changing the agent prompt wording beyond what the verdict fix requires
+U|Whether git on the target machine supports --porcelain=v1 -z with -uall in one invocation; if not, fall back to a parser that handles quoted C-style paths and say so in the report.
