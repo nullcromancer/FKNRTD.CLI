@@ -7,7 +7,7 @@ report to: it isolates their work, runs the checks itself, makes a second machin
 first, keeps the paperwork, and refuses to merge anything until you personally say the word.
 
 `net10.0` &middot; **zero dependencies** &middot; command `fknrtd` &middot; 8 stages &middot;
-19/19 self-tests &middot; MIT
+22/22 self-tests &middot; MIT
 
 > A styled single-page version of this manual, with the same screenshots, is in
 > [`fknrtd-cli.html`](fknrtd-cli.html). Open it locally.
@@ -19,89 +19,80 @@ implemented by Codex, verified, audited and landed. Nothing here is a mock-up.*
 
 ---
 
-## Business Analyst Summary
+## The Rundown
 
-- FKNRTD.CLI coordinates several AI coding assistants (Claude Code, OpenAI Codex CLI, and any
-  other command-line coding tool you register) against a single project folder. That folder is
-  usually a Git repository, but it does not have to be.
-- The core workflow is a supervised delivery pipeline. A task moves through eight stages: Brief,
-  Worktree, Plan, Implement, Verify, Audit, ReadyToLand, Land.
-- Three roles are assigned per task: a **Lead** plans, an **Implementer** writes the change, and a
-  separate **Auditor** reviews it. Implementation and audit are deliberately never the same seat.
-- Nothing merges automatically. A finished task stops at `ReadyToLand` and waits for a human to
-  type a confirmation token.
-- Each task runs inside its own Git branch and worktree, so concurrent agents cannot overwrite
-  each other's files.
-- Evidence is retained rather than summarised away: the brief, the plan, per-round audit reports,
-  verification output and per-stage logs are all files on disk.
-- A conflict sentinel warns when two agents touch overlapping paths, and a claim system lets them
-  reserve paths for read or write.
-- Remaining model capacity is surfaced continuously: context left, five-hour and seven-day
-  allowances per assistant.
-- Operational impact is local only. It runs on a developer machine against a local checkout; it is
-  not a hosted service and exposes no network endpoint.
-- Who uses it: a developer or small team running multiple coding assistants who need one place to
-  see repository state, agent activity, verification evidence and merge readiness.
+FKNRTD.CLI coordinates several AI coding assistants (Claude Code, OpenAI Codex CLI, and any other
+command-line coding tool you register) against a single project folder, usually a Git repository
+but not necessarily one.
 
-## Technical Summary
+The core workflow is a supervised delivery pipeline. A task moves through eight stages: Brief,
+Worktree, Plan, Implement, Verify, Audit, ReadyToLand, Land. Three roles are assigned per task: a
+**Lead** plans, an **Implementer** writes the change, and a separate **Auditor** reviews it.
+Implementation and audit are deliberately never the same seat, so a model never marks its own
+homework. Nothing merges automatically: a finished task stops at `ReadyToLand` and waits for a
+human to type a confirmation token. Each task runs inside its own Git branch and worktree, so
+concurrent agents cannot overwrite each other's files, and a conflict sentinel plus a claim system
+let agents reserve paths for read or write ahead of time. Remaining model capacity (context left,
+five-hour and seven-day allowances per assistant) is surfaced continuously in the dashboard.
 
-- Three .NET projects: a core library, a CLI executable, and a self-test harness (`FKNRTD.CLI.sln`).
-- Target framework `net10.0` throughout, `LangVersion` latest, nullable reference types enabled,
-  `TreatWarningsAsErrors` on (`Directory.Build.props`).
-- **Zero third-party NuGet dependencies.** No `PackageReference` exists in any project. The whole
-  product is the base class library, which is why it installs as one tool with no transitive
-  supply chain.
-- Ships as a .NET global tool: `PackageId` `FKNRTD.CLI`, assembly and command both `fknrtd`.
-- No database, no ORM. All state is JSON and JSON Lines written atomically by temp-file-plus-rename
-  under `<repo>/.fknrtd/` (`src/FKNRTD.Core/Services/StateStore.cs`).
-- Concurrency control is file-based: exclusive leases guard per-task and per-agent work, bounded by
-  both attempt count and wall clock.
-- Every external process launch goes through one runner that enforces a timeout, kills the process
-  tree on expiry, bounds output drain, and reports launch failure as a result rather than an
-  exception (`src/FKNRTD.Core/Services/ProcessRunner.cs`).
-- Git is driven by invoking the `git` executable, not a library.
-- The dashboard renders to an in-memory character grid and emits ANSI, with three responsive
-  breakpoints (`src/FKNRTD.Cli/Dashboard/Canvas.cs`).
-- Authentication is delegated entirely. FKNRTD.CLI holds no credentials; each assistant
-  authenticates itself.
-- Testing is a hand-rolled, dependency-free harness, not a framework
-  (`tests/FKNRTD.SelfTest/Program.cs`).
-- **Where to start:** `src/FKNRTD.Cli/Program.cs` for startup,
-  `src/FKNRTD.Cli/Commands/CommandDispatcher.cs` for the command surface,
-  `src/FKNRTD.Core/Services/Orchestrator.cs` for the workflow state machine.
+Under the hood this is three .NET projects sharing one solution (`FKNRTD.CLI.sln`): a core
+library, a CLI executable, and a self-test harness, all targeting `net10.0` with nullable
+reference types enabled and `TreatWarningsAsErrors` on. **There are zero third-party NuGet
+dependencies** (no `PackageReference` exists anywhere in the tree), so the whole product is the
+base class library and installs as one .NET global tool with no transitive supply chain. There is
+no database and no ORM; all state is JSON and JSON Lines written atomically by
+temp-file-plus-rename under `<repo>/.fknrtd/` (`src/FKNRTD.Core/Services/StateStore.cs`).
+Concurrency is controlled with file-based exclusive leases, bounded by both attempt count and wall
+clock. Every external process launch, whether an agent CLI or a verification command, goes through
+one runner that enforces a timeout, kills the process tree on expiry, bounds output drain, and
+reports launch failure as a result rather than throwing (`src/FKNRTD.Core/Services/ProcessRunner.cs`).
+Git is driven by invoking the `git` executable, never a library. The dashboard renders to an
+in-memory character grid and emits ANSI at three responsive breakpoints
+(`src/FKNRTD.Cli/Dashboard/Canvas.cs`). FKNRTD.CLI holds no credentials of its own; each assistant
+authenticates itself. Testing is a hand-rolled, dependency-free harness, not a framework
+(`tests/FKNRTD.SelfTest/Program.cs`), currently 22 checks, all passing on this checkout.
+
+There is no HTTP surface, no hosted service, and no CI/CD pipeline in this repository; it runs on
+a developer machine against a local checkout and exposes no network endpoint. It is aimed at a
+developer or small team running multiple coding assistants who need one place to see repository
+state, agent activity, verification evidence and merge readiness.
+
+**Where to start reading the code:** `src/FKNRTD.Cli/Program.cs` for startup,
+`src/FKNRTD.Cli/Commands/CommandDispatcher.cs` for the command surface, and
+`src/FKNRTD.Core/Services/Orchestrator.cs` for the workflow state machine.
 
 ## Last Updated
 
 | Field | Value |
 | --- | --- |
 | Last Updated | 2026-09-15 |
-| Last Commit Date | 2026-09-15T13:25:26-04:00 |
-| Head Branch | `main` |
+| Last Commit Date | 2026-09-15T16:26:03-04:00 |
+| Head Branch | `feature/standalone-workspaces-and-tool-management` |
 
 ## Table of Contents
 
-- [Business Analyst Summary](#business-analyst-summary)
-- [Technical Summary](#technical-summary)
+- [The Rundown](#the-rundown)
 - [Why This Exists](#why-this-exists)
 - [Repository Overview](#repository-overview)
 - [Screens](#screens)
+- [Components](#components)
 - [Architecture Overview](#architecture-overview)
 - [The Three Seats](#the-three-seats)
-- [Components](#components)
 - [Tech Stack and Dependencies](#tech-stack-and-dependencies)
 - [Project Layout](#project-layout)
-- [Getting Started](#getting-started)
-- [Running the System](#running-the-system)
+- [Getting Started](#getting-started-local-development)
 - [Configuration](#configuration)
-- [Effective Use](#effective-use)
-- [Data and Integrations](#data-and-integrations)
+- [Running the System](#running-the-system)
+- [Deployment and CI/CD](#deployment-and-cicd)
 - [Deep Code Reference](#deep-code-reference)
+- [Data and Integrations](#data-and-integrations)
 - [Security Notes](#security-notes)
 - [Observability and Monitoring](#observability-and-monitoring)
 - [Common Tasks and Troubleshooting](#common-tasks-and-troubleshooting)
-- [Deployment and CI/CD](#deployment-and-cicd)
+- [Effective Use](#effective-use)
 - [Limits](#limits)
-- [Contributing](#contributing)
+- [Change Log](#change-log)
+- [Contributing and Coding Standards](#contributing-and-coding-standards)
 - [License](#license)
 
 ## Why This Exists
@@ -126,7 +117,7 @@ displays. When it disagrees with Git, Git is right.
 
 ## Repository Overview
 
-A multi-component .NET solution of 30 first-party C# files totalling roughly 8,200 lines, plus
+A multi-component .NET solution of 30 first-party C# files totalling roughly 8,600 lines, plus
 documentation, example configuration, two install scripts and a single-page operator manual.
 
 ## Screens
@@ -159,6 +150,16 @@ The statusline inside Claude Code, with no remote call while rendering:
 > `fknrtd dashboard -once -color -width W -height H`. The `-color` flag forces ANSI through a
 > redirect, which is what makes capture possible; `-width` and `-height` make the result
 > deterministic regardless of your terminal.
+
+## Components
+
+| Component | Type | Language / Framework | Runtime / Target | Path | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| FKNRTD.Core | Library | C# / BCL only | net10.0 | `src/FKNRTD.Core` | Domain model, atomic state, process and Git runners, worktree isolation, orchestration, claims, messages, conflict detection, usage telemetry |
+| FKNRTD.Cli | CLI executable (.NET tool) | C# / BCL only | net10.0 | `src/FKNRTD.Cli` | Argument parsing, command dispatch, dashboard, statusline, Claude Code integration |
+| FKNRTD.SelfTest | Test harness | C# / BCL only | net10.0 | `tests/FKNRTD.SelfTest` | Dependency-free component and end-to-end validation |
+
+`FKNRTD.Core` must not reference `FKNRTD.Cli`; the dependency runs one way (`AGENTS.md`).
 
 ## Architecture Overview
 
@@ -235,16 +236,6 @@ may deliver the prompt as an argument or on standard input.
 > other. It is **not** a security boundary. Only the agent's own CLI can constrain what it touches;
 > use its read-only or plan mode for the Plan and Audit seats.
 
-## Components
-
-| Component | Type | Language | Target | Path | Purpose |
-| --- | --- | --- | --- | --- | --- |
-| FKNRTD.Core | Library | C# / BCL only | net10.0 | `src/FKNRTD.Core` | Domain model, atomic state, process and Git runners, worktree isolation, orchestration, claims, messages, conflict detection, usage telemetry |
-| FKNRTD.Cli | CLI executable (.NET tool) | C# / BCL only | net10.0 | `src/FKNRTD.Cli` | Argument parsing, command dispatch, dashboard, statusline, Claude Code integration |
-| FKNRTD.SelfTest | Test harness | C# / BCL only | net10.0 | `tests/FKNRTD.SelfTest` | Dependency-free component and end-to-end validation |
-
-`FKNRTD.Core` must not reference `FKNRTD.Cli`; the dependency runs one way.
-
 ## Tech Stack and Dependencies
 
 | Layer | Choice |
@@ -301,7 +292,7 @@ FKNRTD.CLI/
       - Program.cs                 all self-tests
 ```
 
-## Getting Started
+## Getting Started (Local Development)
 
 Build and run the suite:
 
@@ -311,7 +302,7 @@ dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --n
 ```
 
 The harness prints one line per check and a final `N/N self-tests passed` count, exiting 0 only
-when every check passes.
+when every check passes. Verified on this checkout: `22/22 self-tests passed`.
 
 Install as a global tool. One management script per platform covers the whole lifecycle:
 
@@ -329,8 +320,8 @@ scripts\manage.cmd install       # Windows
 | `help` | Show the usage text |
 
 `install` refuses when the tool is already present and points you at `update`. `update` installs
-when nothing is there yet, and reinstalls in place when the version number has not moved — which
-is what makes it work as an update route from a working checkout, since `dotnet tool update` is a
+when nothing is there yet, and reinstalls in place when the version number has not moved, which is
+what makes it work as an update route from a working checkout, since `dotnet tool update` is a
 no-op against an unchanged version. Both accept `-verify` to build and run the local self-test
 suite before installing, and `-no-pack` to install from `artifacts/` without packing again.
 
@@ -361,13 +352,13 @@ With no arguments, `fknrtd` opens the dashboard using the default loading parame
 workspace first if there is not one yet. It looks for an existing workspace in the current folder
 and above it, so running from a subdirectory finds the project you are already in. When there is
 none anywhere, it creates one at the Git repository root if you are inside a repository, and in
-the current folder if you are not — a subdirectory is never the right project root when a
+the current folder if you are not: a subdirectory is never the right project root when a
 repository encloses it. Run `fknrtd .` to pin it to the current folder regardless.
 
 ### Projects that will never be on GitHub
 
-A Git repository is not a prerequisite. If the folder is not a repository — or Git is not
-installed at all — `init` provisions a **standalone** workspace, and `-standalone` forces one even
+A Git repository is not a prerequisite. If the folder is not a repository, or Git is not
+installed at all, `init` provisions a **standalone** workspace, and `-standalone` forces one even
 inside a repository. Pass `-git` when you want the opposite: a hard failure rather than a silent
 fallback.
 
@@ -405,6 +396,36 @@ fknrtd task land FKN-20260915-163416-cf12aec4 -confirm LAND
 base branch, verification passed, the audit returned a single PASS, and you typed `-confirm LAND`.
 Any one missing and the merge is refused with the reason.
 
+## Configuration
+
+Configuration lives at `<repo>/.fknrtd/config.json`.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `mode` | `git` | Workspace mode: `git` (isolated worktrees) or `standalone` (no Git isolation) |
+| `defaultBaseRef` | current branch | Base new task branches fork from |
+| `maxParallelAgents` | 4 | Concurrent dashboard task cap |
+| `defaultMaxRepairRounds` | 1 | Repair attempts before a task fails |
+| `agentTimeoutSeconds` | 3600 | Per-agent process timeout |
+| `verificationTimeoutSeconds` | 600 | Per-verification-command timeout |
+| `agentStaleAfterSeconds` | 120 | Age at which agent state is stale |
+| `claimStaleAfterSeconds` | 300 | Age at which a file claim is stale |
+| `dashboardRefreshMilliseconds` | 1000 | Refresh interval |
+| `requireCleanTreeForLanding` | true | Block landing on a dirty primary worktree |
+| `autoCommitAgentChanges` | true | Commit verified changes automatically |
+| `defaultVerificationCommands` | detected | Commands applied to new tasks |
+| `agents` | claude, codex | Registered agent definitions |
+
+(`src/FKNRTD.Core/Domain/Configuration.cs`)
+
+> **Treat this file as code.** Verification commands are executed through `cmd.exe` on Windows or
+> `/bin/sh` elsewhere. A careless edit to `config.json` is arbitrary code execution on your
+> machine. Review changes to it as you would a build script, and commit it so the change is
+> visible.
+
+No environment variables configure behaviour. The process reads `PATH`, `PATHEXT` and `COMSPEC`
+only, to find executables and pick a shell. It stores no credentials.
+
 ## Running the System
 
 | Command | Effect |
@@ -436,32 +457,113 @@ Any one missing and the merge is refused with the reason.
 Breakpoints: narrow below 84 columns, medium to 119, wide at 120 and above. Redirect the output and
 it renders a single frame instead of taking the terminal.
 
-## Configuration
+## Deployment and CI/CD
 
-Configuration lives at `<repo>/.fknrtd/config.json`.
+There is **no CI/CD pipeline in this repository.** No `.github/workflows`, no `azure-pipelines.yml`,
+no `Jenkinsfile`, no GitLab CI configuration, no `Dockerfile` and no infrastructure-as-code.
 
-| Key | Default | Meaning |
+Deployment is local tool installation only. A self-contained single-file executable can also be
+produced:
+
+```sh
+dotnet publish src\FKNRTD.Cli\FKNRTD.Cli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish\win-x64
+```
+
+Verification is the local suite. Per `AGENTS.md`, that suite is the only accepted evidence of
+correctness; GitHub Actions results, where a workflow exists at all, are never used for reporting
+or gating.
+
+## Deep Code Reference
+
+### Cross-Reference Index
+
+| Module / Class | File | Notes |
 | --- | --- | --- |
-| `defaultBaseRef` | current branch | Base new task branches fork from |
-| `maxParallelAgents` | 4 | Concurrent dashboard task cap |
-| `defaultMaxRepairRounds` | 1 | Repair attempts before a task fails |
-| `agentTimeoutSeconds` | 3600 | Per-agent process timeout |
-| `verificationTimeoutSeconds` | 600 | Per-verification-command timeout |
-| `agentStaleAfterSeconds` | 120 | Age at which agent state is stale |
-| `claimStaleAfterSeconds` | 300 | Age at which a file claim is stale |
-| `dashboardRefreshMilliseconds` | 1000 | Refresh interval |
-| `requireCleanTreeForLanding` | true | Block landing on a dirty primary worktree |
-| `autoCommitAgentChanges` | true | Commit verified changes automatically |
-| `defaultVerificationCommands` | detected | Commands applied to new tasks |
-| `agents` | claude, codex | Registered agent definitions |
+| `Program` | `src/FKNRTD.Cli/Program.cs` | UTF-8 encoding, ANSI enablement on Windows, exit 130 on cancellation |
+| `CliArguments` | `src/FKNRTD.Cli/Commands/CliArguments.cs` | Single-dash options, `-name=value`, `--` terminator; numeric values not mistaken for flags |
+| `CommandDispatcher` | `src/FKNRTD.Cli/Commands/CommandDispatcher.cs` | Central command switch and help text |
+| `FknrtdRuntime` | `src/FKNRTD.Cli/Commands/FknrtdRuntime.cs` | Composition root |
+| `StatusLineRenderer` | `src/FKNRTD.Cli/Commands/StatusLineRenderer.cs` | Degrades when the project is uninitialised |
+| `DashboardApp` | `src/FKNRTD.Cli/Dashboard/DashboardApp.cs` | `Render` is a pure function and the renderer test seam |
+| `Canvas` | `src/FKNRTD.Cli/Dashboard/Canvas.cs` | Character-cell grid, display-width aware; ANSI only when colour is on |
+| `Orchestrator` | `src/FKNRTD.Core/Services/Orchestrator.cs` | Stage machine, repair loop, verdict evaluation |
+| `StateStore` | `src/FKNRTD.Core/Services/StateStore.cs` | Atomic writes, JSONL tail reads, rotation, leases |
+| `ExclusiveFileLease` | `src/FKNRTD.Core/Services/StateStore.cs` | Bounded by attempts and wall clock; reports the holding PID |
+| `ProcessRunner` | `src/FKNRTD.Core/Services/ProcessRunner.cs` | Timeout, tree kill, bounded drain, launch-failure results |
+| `ExecutableLocator` | `src/FKNRTD.Core/Services/ProcessRunner.cs` | PATH and PATHEXT resolution |
+| `GitService` | `src/FKNRTD.Core/Services/GitService.cs` | Shells out to `git`; NUL-terminated path lists |
+| `WorktreeService` | `src/FKNRTD.Core/Services/WorktreeService.cs` | Branch and worktree lifecycle; aborts a failed merge |
+| `AgentRunner` | `src/FKNRTD.Core/Services/AgentRunner.cs` | Resolves a profile, expands placeholders, holds the agent lease |
+| `ClaimService` | `src/FKNRTD.Core/Services/ClaimService.cs` | Path claims and collision classification |
+| `TaskService` | `src/FKNRTD.Core/Services/TaskService.cs` | Task identity (`FKN-` prefix) and lifecycle |
+| `DoctorService` | `src/FKNRTD.Core/Services/DoctorService.cs` | Diagnostics that report rather than throw |
+| `WorkspaceLocator` | `src/FKNRTD.Core/Services/WorkspaceLocator.cs` | Walks up to find `.fknrtd`; resolves the primary worktree |
+| `UsageService` | `src/FKNRTD.Core/Telemetry/UsageService.cs` | Claude statusline payload and Codex rate-limit parsing |
 
-> **Treat this file as code.** Verification commands are executed through `cmd.exe` on Windows or
-> `/bin/sh` elsewhere. A careless edit to `config.json` is arbitrary code execution on your
-> machine. Review changes to it as you would a build script, and commit it so the change is
-> visible.
+The repository exposes no HTTP routes, controllers or network endpoints. The only external
+interface is the command line, so there is no API Surface section to fill in.
 
-No environment variables configure behaviour. The process reads `PATH`, `PATHEXT` and `COMSPEC`
-only, to find executables and pick a shell. It stores no credentials.
+## Data and Integrations
+
+There is no database. All persistence is files under `<repo>/.fknrtd/`.
+
+| Path | Contents | Committed |
+| --- | --- | --- |
+| `.fknrtd/config.json` | Project configuration | yes |
+| `.fknrtd/tasks/` | One JSON document per task | no |
+| `.fknrtd/artifacts/<task>/` | brief.md, plan.md, audit-N.md | no |
+| `.fknrtd/logs/<task>/` | Per-stage process logs, written live | no |
+| `.fknrtd/runtime/events.jsonl` | Append-only event history, rotated | no |
+| `.fknrtd/runtime/messages.jsonl` | Append-only message bus | no |
+| `.fknrtd/runtime/claims/` | Active file claims | no |
+| `.fknrtd/runtime/locks/` | Exclusive leases, PID recorded | no |
+| `.fknrtd/worktrees/` | Isolated per-task Git worktrees | no |
+
+Writes are atomic: temporary file, then rename. History is JSON Lines, read from the tail and
+rotated past a size cap, so a long-lived project does not make the dashboard slower every day.
+
+Integrations are all local process invocations: `git`, and each configured coding CLI. Claude Code
+integration additionally reads the statusline JSON payload Claude Code supplies on standard input.
+
+## Security Notes
+
+- **No credentials are stored or handled.** Each assistant authenticates itself.
+- Verification commands from `config.json` execute through the system shell. That file is
+  effectively executable project policy; review and commit it.
+- Agent arguments are passed as an argument array rather than a shell string, avoiding shell
+  injection at the agent-launch boundary.
+- Worktree isolation is collision avoidance, not a security sandbox. An agent process can still
+  reach the wider filesystem; only the assistant's own sandbox constrains that.
+- Landing is gated: clean primary worktree by default, matching base branch, passing verification,
+  passing audit, and an explicit `-confirm LAND`.
+- The Claude integration writes a timestamped backup before modifying an existing settings file.
+
+## Observability and Monitoring
+
+- Per-task, per-stage process logs under `.fknrtd/logs/`, written live.
+- Append-only event and message history as JSON Lines, tail-read and rotated.
+- Verification evidence per command: exit code, duration, output tail.
+- Dashboard panels for agent activity, pipeline progress, quality signals, messages, conflicts and
+  events.
+- `fknrtd status -json` emits a complete machine-readable snapshot.
+- There is no metrics endpoint, no log shipping and no distributed tracing.
+
+## Common Tasks and Troubleshooting
+
+| Symptom | What it means |
+| --- | --- |
+| Landing blocked: uncommitted changes | The primary worktree is dirty. Commonly the `.fknrtd/` directory never committed after `init`. |
+| Landing blocked: wrong branch | You are not on the task's base branch. |
+| Agent shows Offline | Its executable did not resolve on `PATH`. Run `doctor`. |
+| Task is busy / lease held | Another process owns it. The message names the holding process id. |
+| Audit failed with a sound-looking report | The verdict marker was missing, duplicated, or both appeared. Read `audit-N.md`. |
+| Commit refused, no identity | `user.name` and `user.email` are unset in that repository. |
+| Agent ran forever | It did not. It was killed at `agentTimeoutSeconds` and partial output was kept. |
+| `fknrtd` not found after install | Restart the terminal so `PATH` is refreshed. |
+| Reinstall did not pick up a rebuild | `dotnet tool update` is a no-op at the same version. Bump the version or uninstall first. |
+
+Cancellation is a file marker: `fknrtd task cancel <id>` requests it and running stages observe it
+within half a second. A cancelled task can be resumed with `task retry`.
 
 ## Effective Use
 
@@ -509,111 +611,6 @@ bug with a failing test attached.
 expressed as a command, changes spanning many modules at once, anything where you cannot describe
 "done" in a sentence.
 
-## Data and Integrations
-
-There is no database. All persistence is files under `<repo>/.fknrtd/`.
-
-| Path | Contents | Committed |
-| --- | --- | --- |
-| `.fknrtd/config.json` | Project configuration | yes |
-| `.fknrtd/tasks/` | One JSON document per task | no |
-| `.fknrtd/artifacts/<task>/` | brief.md, plan.md, audit-N.md | no |
-| `.fknrtd/logs/<task>/` | Per-stage process logs, written live | no |
-| `.fknrtd/runtime/events.jsonl` | Append-only event history, rotated | no |
-| `.fknrtd/runtime/messages.jsonl` | Append-only message bus | no |
-| `.fknrtd/runtime/claims/` | Active file claims | no |
-| `.fknrtd/runtime/locks/` | Exclusive leases, PID recorded | no |
-| `.fknrtd/worktrees/` | Isolated per-task Git worktrees | no |
-
-Writes are atomic: temporary file, then rename. History is JSON Lines, read from the tail and
-rotated past a size cap, so a long-lived project does not make the dashboard slower every day.
-
-Integrations are all local process invocations: `git`, and each configured coding CLI. Claude Code
-integration additionally reads the statusline JSON payload Claude Code supplies on standard input.
-
-## Deep Code Reference
-
-| Module/Class | File | Notes |
-| --- | --- | --- |
-| `Program` | `src/FKNRTD.Cli/Program.cs` | UTF-8 encoding, ANSI enablement on Windows, exit 130 on cancellation |
-| `CliArguments` | `src/FKNRTD.Cli/Commands/CliArguments.cs` | Single-dash options, `-name=value`, `--` terminator; numeric values not mistaken for flags |
-| `CommandDispatcher` | `src/FKNRTD.Cli/Commands/CommandDispatcher.cs` | Central command switch and help text |
-| `FknrtdRuntime` | `src/FKNRTD.Cli/Commands/FknrtdRuntime.cs` | Composition root |
-| `StatusLineRenderer` | `src/FKNRTD.Cli/Commands/StatusLineRenderer.cs` | Degrades when the project is uninitialised |
-| `DashboardApp` | `src/FKNRTD.Cli/Dashboard/DashboardApp.cs` | `Render` is a pure function and the renderer test seam |
-| `Canvas` | `src/FKNRTD.Cli/Dashboard/Canvas.cs` | Character-cell grid, display-width aware; ANSI only when colour is on |
-| `Orchestrator` | `src/FKNRTD.Core/Services/Orchestrator.cs` | Stage machine, repair loop, verdict evaluation |
-| `StateStore` | `src/FKNRTD.Core/Services/StateStore.cs` | Atomic writes, JSONL tail reads, rotation, leases |
-| `ExclusiveFileLease` | `src/FKNRTD.Core/Services/StateStore.cs` | Bounded by attempts and wall clock; reports the holding PID |
-| `ProcessRunner` | `src/FKNRTD.Core/Services/ProcessRunner.cs` | Timeout, tree kill, bounded drain, launch-failure results |
-| `ExecutableLocator` | `src/FKNRTD.Core/Services/ProcessRunner.cs` | PATH and PATHEXT resolution |
-| `GitService` | `src/FKNRTD.Core/Services/GitService.cs` | Shells out to `git`; NUL-terminated path lists |
-| `WorktreeService` | `src/FKNRTD.Core/Services/WorktreeService.cs` | Branch and worktree lifecycle; aborts a failed merge |
-| `AgentRunner` | `src/FKNRTD.Core/Services/AgentRunner.cs` | Resolves a profile, expands placeholders, holds the agent lease |
-| `ClaimService` | `src/FKNRTD.Core/Services/ClaimService.cs` | Path claims and collision classification |
-| `TaskService` | `src/FKNRTD.Core/Services/TaskService.cs` | Task identity (`FKN-` prefix) and lifecycle |
-| `DoctorService` | `src/FKNRTD.Core/Services/DoctorService.cs` | Diagnostics that report rather than throw |
-| `WorkspaceLocator` | `src/FKNRTD.Core/Services/WorkspaceLocator.cs` | Walks up to find `.fknrtd`; resolves the primary worktree |
-| `UsageService` | `src/FKNRTD.Core/Telemetry/UsageService.cs` | Claude statusline payload and Codex rate-limit parsing |
-
-The repository exposes no HTTP routes, controllers or network endpoints. The only external
-interface is the command line.
-
-## Security Notes
-
-- **No credentials are stored or handled.** Each assistant authenticates itself.
-- Verification commands from `config.json` execute through the system shell. That file is
-  effectively executable project policy; review and commit it.
-- Agent arguments are passed as an argument array rather than a shell string, avoiding shell
-  injection at the agent-launch boundary.
-- Worktree isolation is collision avoidance, not a security sandbox. An agent process can still
-  reach the wider filesystem; only the assistant's own sandbox constrains that.
-- Landing is gated: clean primary worktree by default, matching base branch, passing verification,
-  passing audit, and an explicit `-confirm LAND`.
-- The Claude integration writes a timestamped backup before modifying an existing settings file.
-
-## Observability and Monitoring
-
-- Per-task, per-stage process logs under `.fknrtd/logs/`, written live.
-- Append-only event and message history as JSON Lines, tail-read and rotated.
-- Verification evidence per command: exit code, duration, output tail.
-- Dashboard panels for agent activity, pipeline progress, quality signals, messages, conflicts and
-  events.
-- `fknrtd status -json` emits a complete machine-readable snapshot.
-- There is no metrics endpoint, no log shipping and no distributed tracing.
-
-## Common Tasks and Troubleshooting
-
-| Symptom | What it means |
-| --- | --- |
-| Landing blocked: uncommitted changes | The primary worktree is dirty. Commonly the `.fknrtd/` directory never committed after `init`. |
-| Landing blocked: wrong branch | You are not on the task's base branch. |
-| Agent shows Offline | Its executable did not resolve on `PATH`. Run `doctor`. |
-| Task is busy / lease held | Another process owns it. The message names the holding process id. |
-| Audit failed with a sound-looking report | The verdict marker was missing, duplicated, or both appeared. Read `audit-N.md`. |
-| Commit refused, no identity | `user.name` and `user.email` are unset in that repository. |
-| Agent ran forever | It did not. It was killed at `agentTimeoutSeconds` and partial output was kept. |
-| `fknrtd` not found after install | Restart the terminal so `PATH` is refreshed. |
-| Reinstall did not pick up a rebuild | `dotnet tool update` is a no-op at the same version. Bump the version or uninstall first. |
-
-Cancellation is a file marker: `fknrtd task cancel <id>` requests it and running stages observe it
-within half a second. A cancelled task can be resumed with `task retry`.
-
-## Deployment and CI/CD
-
-There is **no CI/CD pipeline in this repository.** No `.github/workflows`, no `azure-pipelines.yml`,
-no `Jenkinsfile`, no GitLab CI configuration, no `Dockerfile` and no infrastructure-as-code.
-
-Deployment is local tool installation only. A self-contained single-file executable can also be
-produced:
-
-```sh
-dotnet publish src\FKNRTD.Cli\FKNRTD.Cli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish\win-x64
-```
-
-Verification is the local suite. Per `AGENTS.md`, that suite is the only accepted evidence of
-correctness.
-
 ## Limits
 
 - **It is not a sandbox.** Worktrees stop agents colliding. They do not stop an agent reaching the
@@ -635,7 +632,64 @@ Every figure in this document was produced by running the command on a real mach
 commit. Where something was not measured, it is not claimed. See
 [`VALIDATION.md`](VALIDATION.md) for the record and its stated limits.
 
-## Contributing
+## Change Log
+
+Tracked in full in [`CHANGELOG.md`](CHANGELOG.md). Summary below; see that file for exact wording.
+
+### Unreleased
+
+**Added**
+
+- Standalone workspaces: `fknrtd init` no longer requires a Git repository. A non-repository
+  folder, or a machine with no Git at all, is provisioned in standalone mode, where agents work
+  directly in the project folder, nothing is committed or merged, and landing records that the
+  verified work is already in place. `-standalone` forces the mode; `-git` demands a repository
+  and fails without one. Recorded as `mode` in `.fknrtd/config.json`, defaulting to `git`.
+- Bare invocation (`fknrtd` with no arguments) opens the dashboard against the current folder,
+  provisioning a workspace first if none exists, searching upward from the current folder, and
+  rooting at the enclosing Git repository when one is present. `fknrtd .` pins it to the current
+  folder regardless.
+- `fknrtd doctor` reports workspace mode and treats Git checks as informational, not failing, in a
+  standalone workspace.
+- `scripts/manage.cmd` and `scripts/manage.sh` replace the old `scripts/install.*` scripts, adding
+  `update`, `uninstall` and `doctor` alongside `install`, plus `-verify` and `-no-pack` flags.
+
+**Fixed**
+
+- The colour-forcing self-test read `NO_COLOR` from the invoking terminal and failed on any
+  machine that sets it; it now pins the variable for the duration of the test.
+
+### 1.0.0 - 2026-09-15
+
+First shippable revision, renamed from its working title (`Synergia`) to FKNRTD.CLI throughout.
+
+**Fixed**
+
+- Unbounded file-lease retries, unhandled launch-failure exceptions, wrong PATHEXT resolution
+  order, missing process timeouts, unbounded post-exit output drain, unbounded in-memory event
+  history, and concurrent log read/write faults.
+- Audit-verdict corruption from an agent echoing its own prompt; base refs resolving to the
+  literal `HEAD` instead of a branch; mangled Git paths containing spaces or non-ASCII characters;
+  commit failures with no Git identity surfacing raw stderr; orphaned worktree state after cleanup.
+- Terminal rendering assumed one character equalled one display column, shearing borders on CJK or
+  emoji content; truncation could split a surrogate pair; adjacent panels drew doubled seams; the
+  pipeline viewport could scroll the selected task out of view.
+
+**Added**
+
+- `AgentTimeoutSeconds` and `VerificationTimeoutSeconds` configuration keys.
+- `OutputTruncated` on command results.
+- `-width` and `-height` on `dashboard -once` and `status` for deterministic capture; `-color` to
+  force ANSI through a redirect.
+- Self-test coverage grew from 5 checks to 19.
+- `AGENTS.md` recording the project invariants.
+
+**Documentation**
+
+- Added `fknrtd-cli.html`, the single-page operator manual. Rewrote `README.md` and `VALIDATION.md`
+  as evidence-based documents in which every substantive claim cites the file it came from.
+
+## Contributing and Coding Standards
 
 Project invariants are recorded in [`AGENTS.md`](AGENTS.md) and are binding for both human and AI
 contributors:
