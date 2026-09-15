@@ -1,0 +1,15 @@
+CVM1|R|P
+D|bounded ProcessRunner execution with tree kill, pump drain, partial capture, start-failure results, and PATHEXT-first Windows lookup
+D|bounded file leases with owner PID reporting and lock-file cleanup
+D|bounded concurrent JSONL tail reads plus capped events/messages rotation
+D|rendered DoctorService failures and config-driven agent/verification timeouts
+D|added reliability self-tests
+M|b2866f616645acea4ac0af6ff1406fc7dfdb31da
+T|dotnet build FKNRTD.CLI.sln -c Release => 0; 0 warnings; 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 0; 13/13 self-tests passed
+E|src/FKNRTD.Core/Services/ProcessRunner.cs:ProcessRunner.RunAsync
+E|src/FKNRTD.Core/Services/ProcessRunner.cs:ExecutableLocator.Find
+E|src/FKNRTD.Core/Services/StateStore.cs:ReadJsonLineTailAsync
+E|src/FKNRTD.Core/Services/StateStore.cs:ExclusiveFileLease.AcquireAsync
+E|src/FKNRTD.Core/Services/DoctorService.cs:RunAsync
+E|tests/FKNRTD.SelfTest/Program.cs
