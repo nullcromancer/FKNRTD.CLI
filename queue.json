@@ -142,8 +142,8 @@
     {
       "id": 2,
       "title": "Workflow correctness: verdict, base refs, git paths",
-      "state": "audit-passed",
-      "phase": "audit-passed",
+      "state": "landed",
+      "phase": "landed",
       "path": "briefs/0002-workflow-correctness-verdict-base-refs-g.cvm",
       "seat": "codex",
       "created": "2026-09-15T03:42:05+00:00",
@@ -198,6 +198,13 @@
           "seat": "claude",
           "verdict": "pass",
           "wire": "CVM1|A|P\nE|Read the full working-tree diff before committing it (8 modified files plus one new AssemblyInfo.cs). Scope matches the brief's file list.\nE|Audit verdict: RunAuditStageAsync now calls IsPassingAuditVerdict(report, prompt, success, failure), which first removes the prompt echo via RemovePromptEcho and only then counts markers. A CLI that repeats its prompt can no longer contribute the prompt's own PASS and FAIL lines to the count.\nE|Checked the failure direction deliberately: if only part of the prompt is echoed, removal does not match, both markers survive, and IsPassingAuditVerdict returns false. Ambiguity therefore fails closed, which is the brief's requirement that an ambiguous verdict is never a pass.\nE|Marker matching is now a regex allowing blockquote, list-bullet, emphasis and trailing-punctuation wrapping while still anchoring the marker to its own line, so a marker mentioned mid-sentence is not counted.\nE|Base refs: RepairTaskBaseRefAsync runs at both RunAsync and LandAsync entry, replacing an empty or literal 'HEAD' BaseRef with a resolved local branch and persisting it. ResolveBaseBranchAsync now throws an explicit detached-HEAD error rather than silently returning 'HEAD'.\nE|Git paths: GitAsync prepends -c core.quotePath=false to every invocation, and status/diff path listings use -z with NUL-terminated parsing. Both halves of the requirement are met; -z alone already suppresses quoting, so the two are belt and braces rather than redundant.\nE|The now-unnecessary backslash-to-forward-slash rewrite was removed from GetDiffPathsAsync, which is correct because -z output already uses forward slashes.\nE|EnsureCommittedAsync queries user.name and user.email and throws a message naming both before attempting the commit.\nE|Worktree cleanup removes the worktree, runs git worktree prune, and deletes the landed branch.\nE|Scope note, accepted: src/FKNRTD.Core/Properties/AssemblyInfo.cs adds InternalsVisibleTo(\"FKNRTD.SelfTest\"). That line was listed under a later brief, but it is required here for the self-tests to reach the internal IsPassingAuditVerdict, so it is justified in place rather than scope creep.\nT|dotnet build FKNRTD.CLI.sln -c Release => Build succeeded, 0 Warning(s), 0 Error(s). Run by the auditor in the implementation worktree.\nT|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 16/16 self-tests passed, exit 0. Run by the auditor, not taken from the report.\nT|Two new named tests observed passing: 'Audit verdict ignores echoed prompt' and 'Git paths round trip verbatim'.\nT|All 14 previously landed tests still pass, so the reliability work from brief #1 did not regress.\nQ|RemovePromptEcho removes only an exact normalized substring match of the whole prompt. A partial or reformatted echo is not removed. This cannot cause a false PASS (the surviving FAIL marker forces failure) but can cause a false FAIL on an otherwise passing audit. Acceptable for revision 1 because it errs toward refusing to land.\nQ|The implementing seat could not commit its own work: Codex's workspace-write sandbox denies writes to the linked worktree's Git metadata under the main repository's .git/worktrees/. The auditing seat committed the working tree unchanged and recorded why in the commit message. The ghostrider runtime has since been fixed to pass --add-dir for the main .git directory, so later rounds should self-commit.\n"
+        },
+        {
+          "type": "land",
+          "at": "2026-09-15T03:55:51+00:00",
+          "seat": "claude",
+          "commit": "0287708a9f17af80ef36f8aa172c88568a0da9bf",
+          "backup_ref": "refs/pairing/backups/2/20260914-235551"
         }
       ],
       "round": 1,
@@ -214,6 +221,12 @@
         "pid": 26892,
         "host": "Tenebris",
         "dispatch_id": "3c18b5f1-ca9b-42ae-93c0-0531f45f66cb"
+      },
+      "closed": "2026-09-15T03:55:51+00:00",
+      "merge": {
+        "commit": "0287708a9f17af80ef36f8aa172c88568a0da9bf",
+        "backup_ref": "refs/pairing/backups/2/20260914-235551",
+        "at": "2026-09-15T03:55:51+00:00"
       }
     }
   ]
