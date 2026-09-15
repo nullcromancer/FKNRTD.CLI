@@ -189,7 +189,10 @@ public sealed record CommandResult
     public string StandardOutput { get; init; } = string.Empty;
     public string StandardError { get; init; } = string.Empty;
     public TimeSpan Duration { get; init; }
-    public bool Success => ExitCode == 0;
+    public bool TimedOut { get; init; }
+    public bool StartFailed { get; init; }
+    public bool OutputTruncated { get; init; }
+    public bool Success => ExitCode == 0 && !TimedOut && !StartFailed;
 }
 
 public sealed record AgentRunResult

@@ -66,7 +66,7 @@ public sealed class Orchestrator
             while (true)
             {
                 await RunImplementationStageAsync(config, task, workflowToken).ConfigureAwait(false);
-                var verified = await RunVerificationStageAsync(task, workflowToken).ConfigureAwait(false);
+                var verified = await RunVerificationStageAsync(config, task, workflowToken).ConfigureAwait(false);
                 if (!verified)
                 {
                     if (await PrepareRepairAsync(task, "Verification failed.", workflowToken).ConfigureAwait(false))
@@ -336,7 +336,10 @@ public sealed class Orchestrator
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<bool> RunVerificationStageAsync(WorkflowTask task, CancellationToken cancellationToken)
+    private async Task<bool> RunVerificationStageAsync(
+        FknrtdConfig config,
+        WorkflowTask task,
+        CancellationToken cancellationToken)
     {
         if (IsComplete(task, WorkflowStage.Verify))
         {
@@ -368,7 +371,8 @@ public sealed class Orchestrator
                     command,
                     task.WorktreePath,
                     logPath,
-                    cancellationToken: cancellationToken)
+                    cancellationToken: cancellationToken,
+                    timeout: TimeoutFromSeconds(config.VerificationTimeoutSeconds))
                 .ConfigureAwait(false);
             task.Quality.Commands.Add(new VerificationResult
             {
@@ -536,7 +540,8 @@ public sealed class Orchestrator
             task.WorktreePath,
             stage,
             attempt,
-            cancellationToken);
+            cancellationToken,
+            TimeoutFromSeconds(config.AgentTimeoutSeconds));
     }
 
     private async Task UpdateTouchedPathsAsync(
@@ -771,6 +776,8 @@ public sealed class Orchestrator
 
     private static string Tail(string value, int maxCharacters) =>
         value.Length <= maxCharacters ? value.Trim() : value[^maxCharacters..].Trim();
+
+    private static TimeSpan TimeoutFromSeconds(int seconds) => TimeSpan.FromSeconds(Math.Max(1, seconds));
 
     private static bool TryGetString(JsonElement element, string name, out string result)
     {
