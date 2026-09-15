@@ -6,7 +6,7 @@
       "id": 1,
       "title": "Reliability core: process, locking, state IO",
       "state": "landed",
-      "phase": "landed",
+      "phase": "cleaned",
       "path": "briefs/0001-reliability-core-process-locking-state-i.cvm",
       "seat": "codex",
       "created": "2026-09-15T03:09:06+00:00",
@@ -110,12 +110,17 @@
           "seat": "claude",
           "commit": "eee139a85be6457e86c63e08b6598f6ce9d7bd51",
           "backup_ref": "refs/pairing/backups/1/20260914-234145"
+        },
+        {
+          "type": "cleanup",
+          "at": "2026-09-15T03:41:45+00:00",
+          "seat": "runtime"
         }
       ],
       "round": 2,
       "protocol": "caveman-v1",
       "implementer": "codex",
-      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0001-reliability-core-process-locking-state-i",
+      "worktree": null,
       "branch": "codex/pair-1-reliability-core-process-locking-state-i",
       "base_branch": "main",
       "base_oid": "97edbda916aa7fe125de5ba34fe26fc446ee5280",
