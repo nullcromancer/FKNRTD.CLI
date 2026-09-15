@@ -5,8 +5,8 @@
     {
       "id": 1,
       "title": "Reliability core: process, locking, state IO",
-      "state": "audit-passed",
-      "phase": "audit-passed",
+      "state": "landed",
+      "phase": "landed",
       "path": "briefs/0001-reliability-core-process-locking-state-i.cvm",
       "seat": "codex",
       "created": "2026-09-15T03:09:06+00:00",
@@ -103,6 +103,13 @@
           "seat": "claude",
           "verdict": "pass",
           "wire": "CVM1|A|P\nE|Read commit c724a96 diff in full. Scope limited to ProcessRunner.cs, Models.cs and the self-test, as the repair required.\nE|The R1 finding is fixed at the right place: the post-exit 'await Task.WhenAll(stdoutTask, stderrTask)' now runs inside the try block under .WaitAsync(waitCancellation), so it shares the run's timeout budget instead of being unbounded.\nE|A processExited flag distinguishes a hung child from a hung drain: when the child already exited, CancelAndDrainPumpsAsync cancels the pumps and bounds the wait by KillDrainTimeout instead of pointlessly waiting on an already-dead process, and the error text says 'output drain timed out' rather than the misleading 'process timed out'.\nE|CancelAndDrainPumpsAsync is itself bounded: it cancels pumpCancellation first, then awaits WhenAll under .WaitAsync(KillDrainTimeout), swallowing only OperationCanceledException/TimeoutException. No path through it can wait forever.\nE|CommandResult.OutputTruncated was added so a caller can distinguish a complete capture from a truncated one. As a side benefit the pre-existing silent truncation at CaptureLimitCharacters is now reported too: OutputCapture.Truncated is set both when a line is clipped and when the cap is already reached.\nE|The regression test is a real reproduction, not a stub: fake-agent 'spawn-pipe-holder' starts a grandchild ('hold-pipes') that inherits the stdout/stderr handles and then exits, which is precisely the inherited-pipe scenario from the R1 finding.\nE|The test asserts the bound holds (Duration < 2s against a 300ms timeout), that TimedOut and OutputTruncated are both set, that Success is false, and that partial output captured before the parent exited is still returned.\nT|dotnet build FKNRTD.CLI.sln -c Release => Build succeeded, 0 Warning(s), 0 Error(s). Run by the auditor in the implementation worktree.\nT|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 14/14 self-tests passed, exit 0. Run by the auditor, not taken from the report.\nT|New test 'Post-exit output drain is bounded' observed passing; it is the one that would hang before this commit.\nQ|Accepted trade-off: the drain shares the single per-run timeout budget rather than getting its own, so a process that exits just before the deadline gets very little drain time and reports TimedOut with a truncated tail instead of its real exit code. This is defensible as a total wall-clock budget and is now observable via OutputTruncated, but if trailing output loss shows up in practice the drain should get its own smaller independent deadline.\nQ|The R1 minor note about ExitCode -1 being shared between the timeout and start-failure paths was not addressed. It is not blocking: TimedOut and StartFailed disambiguate in code, and both paths now carry explanatory text in StandardError.\n"
+        },
+        {
+          "type": "land",
+          "at": "2026-09-15T03:41:45+00:00",
+          "seat": "claude",
+          "commit": "eee139a85be6457e86c63e08b6598f6ce9d7bd51",
+          "backup_ref": "refs/pairing/backups/1/20260914-234145"
         }
       ],
       "round": 2,
@@ -119,6 +126,12 @@
         "pid": 28104,
         "host": "Tenebris",
         "dispatch_id": "63f454da-bd18-4aaf-8745-42368c0ec146"
+      },
+      "closed": "2026-09-15T03:41:45+00:00",
+      "merge": {
+        "commit": "eee139a85be6457e86c63e08b6598f6ce9d7bd51",
+        "backup_ref": "refs/pairing/backups/1/20260914-234145",
+        "at": "2026-09-15T03:41:45+00:00"
       }
     }
   ]
