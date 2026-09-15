@@ -50,11 +50,23 @@ public sealed class DoctorService
             Detail = configDetail
         });
 
+        // A standalone workspace deliberately runs without Git, so the two Git checks below stay
+        // informational there instead of failing the diagnostic.
+        var mode = config?.Mode ?? WorkspaceMode.Git;
+        var gitRequired = mode == WorkspaceMode.Git;
+        checks.Add(new DoctorCheck
+        {
+            Name = "Workspace mode",
+            Passed = true,
+            Detail = gitRequired ? "Git-backed" : "Standalone (no Git required)"
+        });
+
         var gitExecutable = FindExecutable("git");
         checks.Add(new DoctorCheck
         {
             Name = "Git executable",
             Passed = gitExecutable is not null,
+            Required = gitRequired,
             Detail = gitExecutable ?? "Not found"
         });
         var isRepository = false;
@@ -71,8 +83,13 @@ public sealed class DoctorService
         checks.Add(new DoctorCheck
         {
             Name = "Git repository",
-            Passed = isRepository,
-            Detail = _store.Paths.Root
+            Passed = isRepository || !gitRequired,
+            Required = gitRequired,
+            Detail = isRepository
+                ? _store.Paths.Root
+                : gitRequired
+                    ? $"{_store.Paths.Root} is not a Git repository"
+                    : "Not required in a standalone workspace"
         });
 
         foreach (var agent in config?.Agents ?? [])

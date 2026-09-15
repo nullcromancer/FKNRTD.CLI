@@ -39,20 +39,15 @@ internal static class CommandDispatcher
             return await IntegrationCommandAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
-        if (arguments.Command.Length == 0)
+        // A bare 'fknrtd' (or an explicit '.' / '.fknrtd') opens the current folder with the
+        // default loading parameters rather than printing help.
+        if (arguments.Command.Length == 0 || arguments.Command is "." or ".fknrtd")
         {
-            FknrtdRuntime defaultRuntime;
-            try
-            {
-                defaultRuntime = CreateRuntime(arguments);
-            }
-            catch (InvalidOperationException)
-            {
-                PrintHelp();
-                return 0;
-            }
-
-            return await RunDashboardAsync(defaultRuntime, arguments, cancellationToken).ConfigureAwait(false);
+            return await OpenHereAsync(
+                    arguments,
+                    currentFolderOnly: arguments.Command.Length != 0,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var runtime = CreateRuntime(arguments);
@@ -83,6 +78,63 @@ internal static class CommandDispatcher
         return new FknrtdRuntime(WorkspaceLocator.Find(root));
     }
 
+    /// <summary>
+    /// Opens the dashboard for the folder the terminal is in, provisioning a workspace with the
+    /// default loading parameters when none exists yet.
+    /// </summary>
+    /// <param name="currentFolderOnly">
+    /// When <see langword="true"/> the current folder is used verbatim; otherwise an enclosing
+    /// workspace is preferred so that running from a subdirectory still finds the project.
+    /// </param>
+    private static async Task<int> OpenHereAsync(
+        CliArguments arguments,
+        bool currentFolderOnly,
+        CancellationToken cancellationToken)
+    {
+        var requestedRoot = arguments.Get("root");
+        FknrtdPaths paths;
+        if (requestedRoot is not null)
+        {
+            paths = WorkspaceLocator.ForRoot(requestedRoot);
+        }
+        else if (currentFolderOnly)
+        {
+            paths = WorkspaceLocator.ForRoot(Environment.CurrentDirectory);
+        }
+        else
+        {
+            paths = WorkspaceLocator.TryFind()
+                ?? WorkspaceLocator.ForRoot(
+                    await DefaultRootAsync(Environment.CurrentDirectory, cancellationToken)
+                        .ConfigureAwait(false));
+        }
+
+        if (!File.Exists(paths.Config))
+        {
+            var config = await ProvisionAsync(paths, RequestedMode(arguments), cancellationToken)
+                .ConfigureAwait(false);
+            Console.WriteLine(
+                $"✓ Prepared a {DescribeMode(config.Mode)} FKNRTD.CLI workspace at {paths.Root}");
+        }
+
+        return await RunDashboardAsync(new FknrtdRuntime(paths), arguments, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Where a brand new workspace belongs when nothing was found above the current folder.
+    /// Inside a Git repository that is the repository root, because worktrees, base refs and
+    /// changed paths are all resolved against it; a subdirectory would be the wrong project root.
+    /// Outside one it is the folder itself.
+    /// </summary>
+    private static async Task<string> DefaultRootAsync(string start, CancellationToken cancellationToken)
+    {
+        var snapshot = await new GitService(new ProcessRunner())
+            .GetSnapshotAsync(start, cancellationToken)
+            .ConfigureAwait(false);
+        return snapshot.IsRepository ? snapshot.RepositoryRoot : start;
+    }
+
     private static async Task<int> InitializeAsync(CliArguments arguments, CancellationToken cancellationToken)
     {
         var root = Path.GetFullPath(arguments.Get("root") ?? arguments.Positional(1) ?? Environment.CurrentDirectory);
@@ -104,27 +156,60 @@ internal static class CommandDispatcher
             File.Copy(paths.Config, backup, overwrite: false);
         }
 
-        if (ExecutableLocator.Find("git") is null)
+        var config = await ProvisionAsync(paths, RequestedMode(arguments), cancellationToken).ConfigureAwait(false);
+        Console.WriteLine($"✓ FKNRTD.CLI initialized for {config.ProjectName} ({DescribeMode(config.Mode)})");
+        Console.WriteLine($"  Config: {paths.Config}");
+        if (backup is not null)
         {
-            throw new InvalidOperationException("Git is required but was not found on PATH.");
+            Console.WriteLine($"  Previous config backup: {backup}");
         }
 
-        var process = new ProcessRunner();
-        var git = new GitService(process);
-        if (!await git.IsRepositoryAsync(root, cancellationToken).ConfigureAwait(false))
+        Console.WriteLine(config.Mode == WorkspaceMode.Git
+            ? $"  Base branch: {config.DefaultBaseRef}"
+            : "  Base branch: none. Agents work directly in the workspace.");
+        Console.WriteLine($"  Verification: {(config.DefaultVerificationCommands.Count == 0
+            ? "not configured"
+            : string.Join("; ", config.DefaultVerificationCommands))}");
+        Console.WriteLine("  Next: fknrtd doctor");
+        return 0;
+    }
+
+    /// <summary>
+    /// Writes a workspace at <paramref name="paths"/> using the default loading parameters. The
+    /// mode is detected when <paramref name="requestedMode"/> is <see langword="null"/>, so a folder
+    /// that is not a Git repository is provisioned standalone instead of being rejected.
+    /// </summary>
+    private static async Task<FknrtdConfig> ProvisionAsync(
+        FknrtdPaths paths,
+        WorkspaceMode? requestedMode,
+        CancellationToken cancellationToken)
+    {
+        var root = paths.Root;
+        var git = new GitService(new ProcessRunner());
+        var isRepository = requestedMode != WorkspaceMode.Standalone &&
+                           await git.IsRepositoryAsync(root, cancellationToken).ConfigureAwait(false);
+        if (requestedMode == WorkspaceMode.Git && !isRepository)
         {
-            throw new InvalidOperationException("FKNRTD.CLI must be initialized inside a Git repository.");
+            throw new InvalidOperationException(GitService.IsInstalled()
+                ? $"{root} is not a Git repository. Drop -git to initialize a standalone workspace."
+                : "Git was not found on PATH. Drop -git to initialize a standalone workspace.");
         }
 
-        var snapshot = await git.GetSnapshotAsync(root, cancellationToken).ConfigureAwait(false);
-        var verification = DetectVerificationCommands(root);
+        var mode = isRepository ? WorkspaceMode.Git : WorkspaceMode.Standalone;
+        var snapshot = isRepository
+            ? await git.GetSnapshotAsync(root, cancellationToken).ConfigureAwait(false)
+            : null;
         var config = new FknrtdConfig
         {
-            ProjectName = snapshot.RepositoryName,
-            DefaultBaseRef = string.IsNullOrWhiteSpace(snapshot.Branch) || snapshot.Branch == "detached"
+            ProjectName = snapshot?.RepositoryName ?? new DirectoryInfo(root).Name,
+            Mode = mode,
+            DefaultBaseRef = snapshot is null || string.IsNullOrWhiteSpace(snapshot.Branch) ||
+                             snapshot.Branch == "detached"
                 ? string.Empty
                 : snapshot.Branch,
-            DefaultVerificationCommands = verification,
+            // Nothing can be committed or merged without a repository behind the workspace.
+            AutoCommitAgentChanges = mode == WorkspaceMode.Git,
+            DefaultVerificationCommands = DetectVerificationCommands(root),
             Agents = BuiltInAgents.CreateDefaults().ToList()
         };
         var store = new StateStore(paths);
@@ -133,20 +218,19 @@ internal static class CommandDispatcher
         {
             Severity = EventSeverity.Success,
             Type = "project.initialized",
-            Message = $"Initialized FKNRTD.CLI for {snapshot.RepositoryName}."
+            Message = $"Initialized a {DescribeMode(mode)} FKNRTD.CLI workspace for {config.ProjectName}."
         }, cancellationToken).ConfigureAwait(false);
-
-        Console.WriteLine($"✓ FKNRTD.CLI initialized for {snapshot.RepositoryName}");
-        Console.WriteLine($"  Config: {paths.Config}");
-        if (backup is not null)
-        {
-            Console.WriteLine($"  Previous config backup: {backup}");
-        }
-        Console.WriteLine($"  Base branch: {config.DefaultBaseRef}");
-        Console.WriteLine($"  Verification: {(verification.Count == 0 ? "not configured" : string.Join("; ", verification))}");
-        Console.WriteLine("  Next: fknrtd doctor");
-        return 0;
+        return config;
     }
+
+    private static WorkspaceMode? RequestedMode(CliArguments arguments) => arguments.Has("standalone")
+        ? WorkspaceMode.Standalone
+        : arguments.Has("git")
+            ? WorkspaceMode.Git
+            : null;
+
+    private static string DescribeMode(WorkspaceMode mode) =>
+        mode == WorkspaceMode.Git ? "Git-backed" : "standalone";
 
     private static List<string> DetectVerificationCommands(string root)
     {
@@ -425,7 +509,16 @@ internal static class CommandDispatcher
             throw new InvalidOperationException("Worktree cleanup requires the explicit option -confirm REMOVE.");
         }
 
-        await runtime.Worktrees.RemoveAsync(task, arguments.Has("force"), cancellationToken).ConfigureAwait(false);
+        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+        if (config.Mode == WorkspaceMode.Standalone)
+        {
+            Console.WriteLine($"✓ Nothing to remove for {id}. A standalone workspace has no worktree or branch.");
+            return 0;
+        }
+
+        await runtime.Worktrees
+            .RemoveAsync(task, arguments.Has("force"), config.Mode, cancellationToken)
+            .ConfigureAwait(false);
         Console.WriteLine(task.Status == WorkflowStatus.Landed
             ? $"✓ Removed the worktree and landed task branch for {id}. The task record was retained."
             : $"✓ Removed the worktree for {id}. The task record and Git branch were retained.");
@@ -994,7 +1087,8 @@ internal static class CommandDispatcher
             Coordinate Claude, Codex, and any command-line coding agent from one C# console.
 
             Start
-              fknrtd init [path]
+              fknrtd                        Open the current folder, initializing it if needed
+              fknrtd init [path] [-standalone] [-git]
               fknrtd doctor
               fknrtd dashboard [-once] [-width <cols>] [-height <rows>]
               fknrtd status [-json] [-width <cols>] [-height <rows>]
@@ -1025,7 +1119,9 @@ internal static class CommandDispatcher
               fknrtd integration install-claude-statusline [-project] [-force]
 
             Common options
-              -root <path>    Select an FKNRTD.CLI repository
+              -root <path>    Select an FKNRTD.CLI workspace
+              -standalone     Initialize without Git, for projects that will never be versioned
+              -git            Require a Git repository and fail if there is none
               -json           Emit machine-readable JSON where supported
               -no-color       Disable ANSI color
               -color          Force ANSI color even when output is redirected
@@ -1034,7 +1130,11 @@ internal static class CommandDispatcher
               brief → isolated worktree → lead plan → implementation → deterministic verification
               → independent read-only audit → explicit landing
 
-            Configuration lives at <repo>/.fknrtd/config.json. Agent arguments are arrays, so
+            In a Git repository each task runs in its own worktree and lands by merge. In a
+            standalone workspace there is no worktree, branch or merge: agents work directly in the
+            folder, and landing simply records that the verified work is already in place.
+
+            Configuration lives at <root>/.fknrtd/config.json. Agent arguments are arrays, so
             prompts and paths are passed without shell interpolation. Verification commands are trusted
             project configuration and intentionally run through the platform shell.
             """);

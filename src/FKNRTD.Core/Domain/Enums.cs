@@ -1,5 +1,11 @@
 namespace FKNRTD.Domain;
 
+public enum WorkspaceMode
+{
+    Git,
+    Standalone
+}
+
 public enum AgentActivityState
 {
     Unknown,

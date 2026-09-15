@@ -464,20 +464,45 @@
 <!-- ============================================================ -->
 <section id="install">
   <h2>Install <span class="slash">//</span> One tool, no supply chain</h2>
-  <p class="lede">Requires .NET 10 SDK and Git 2.28 or newer</p>
+  <p class="lede">Requires the .NET 10 SDK; Git 2.28 or newer only for Git-backed workspaces</p>
 
   <div class="term">
     <div class="term-bar"><span class="dot"></span> windows</div>
-<pre><span class="p">scripts\install.cmd</span></pre>
+<pre><span class="p">scripts\manage.cmd</span> install</pre>
   </div>
   <div class="term">
     <div class="term-bar"><span class="dot"></span> posix</div>
-<pre><span class="p">./scripts/install.sh</span></pre>
+<pre><span class="p">./scripts/manage.sh</span> install</pre>
   </div>
 
-  <p>Both pack <code>src/FKNRTD.Cli</code> into <code>artifacts/</code> and install or update the
-    global tool. Restart the terminal if <code>fknrtd</code> is not immediately on
-    <code>PATH</code>. Confirm with:</p>
+  <p>One management script per platform covers the whole lifecycle.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Action</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td><code>install</code></td><td>Pack <code>src/FKNRTD.Cli</code> into <code>artifacts/</code> and install the global tool</td></tr>
+      <tr><td><code>update</code></td><td>Pack and move the installed tool to this checkout</td></tr>
+      <tr><td><code>uninstall</code></td><td>Remove the global tool; project <code>.fknrtd/</code> state is kept</td></tr>
+      <tr><td><code>doctor</code></td><td>Diagnose the installation and say what to do next</td></tr>
+      <tr><td><code>help</code></td><td>Show the usage text</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p><code>install</code> refuses when the tool is already present and points you at
+    <code>update</code>. <code>update</code> installs when nothing is there yet, and reinstalls in
+    place when the version number has not moved &mdash; which is what makes it work as an update
+    route from a working checkout, since <code>dotnet tool update</code> is a no-op against an
+    unchanged version. Both accept <code>-verify</code> to build and run the local self-test suite
+    before installing, and <code>-no-pack</code> to install from <code>artifacts/</code> without
+    packing again.</p>
+
+  <p><code>scripts/manage.* doctor</code> diagnoses the <strong>installation</strong>: the SDK, the
+    version this checkout builds, the version installed, whether <code>fknrtd</code> resolves on
+    <code>PATH</code> and actually runs. <code>fknrtd doctor</code> is the different, inner command
+    that diagnoses a <strong>workspace</strong>. Restart the terminal if <code>fknrtd</code> is not
+    immediately on <code>PATH</code>. Confirm with:</p>
 
   <div class="term">
     <div class="term-bar"><span class="dot"></span> verification</div>
@@ -514,9 +539,42 @@
 <span class="p">git</span> commit <span class="o">-m</span> <span class="c">"Configure FKNRTD.CLI"</span>
 <span class="p">fknrtd</span> doctor</pre>
   </div>
-  <p><code>init</code> requires an existing Git repository and detects your verification commands
-    where it can. Commit the config: it is reviewable project policy, and an uncommitted state
-    directory will block landing later.</p>
+  <p><code>init</code> detects your verification commands where it can. Commit the config: it is
+    reviewable project policy, and an uncommitted state directory will block landing later.</p>
+
+  <p>Or just open the folder you are standing in. With no arguments, <code>fknrtd</code> opens the
+    dashboard using the default loading parameters, creating the workspace first if there is not
+    one yet. It looks for an existing workspace in the current folder and above it, so running from
+    a subdirectory finds the project you are already in. When there is none anywhere, it creates one
+    at the Git repository root if you are inside a repository, and in the current folder if you are
+    not &mdash; a subdirectory is never the right project root when a repository encloses it. Run
+    <code>fknrtd .</code> to pin it to the current folder regardless.</p>
+
+  <h3>Projects that will never be on GitHub</h3>
+  <p>A Git repository is not a prerequisite. If the folder is not a repository &mdash; or Git is not
+    installed at all &mdash; <code>init</code> provisions a <strong>standalone</strong> workspace,
+    and <code>-standalone</code> forces one even inside a repository. Pass <code>-git</code> when
+    you want the opposite: a hard failure rather than a silent fallback.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Git-backed</th><th>Standalone</th></tr></thead>
+    <tbody>
+      <tr><td>Each task gets its own branch and worktree</td><td>Agents work directly in the project folder</td></tr>
+      <tr><td>Verified changes are auto-committed</td><td>Nothing is committed; the files are the deliverable</td></tr>
+      <tr><td>Landing merges the task branch</td><td>Landing records that the verified work is already in place</td></tr>
+      <tr><td><code>task cleanup</code> removes the worktree and branch</td><td>Nothing to remove</td></tr>
+      <tr><td>Changed paths come from <code>git diff</code></td><td>Changed paths are not tracked</td></tr>
+      <tr><td><code>doctor</code> requires Git</td><td><code>doctor</code> reports Git as optional</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Everything else is unchanged: the same briefs, the same lead/implementer/auditor split, the
+    same deterministic verification, the same independent audit, and the same refusal to land
+    anything that did not pass both. You lose isolation between concurrent tasks and the ability to
+    roll a task back by discarding a branch, so keep to one task at a time unless the folder is
+    under version control.</p>
 
   <div class="term">
     <div class="term-bar"><span class="dot"></span> 02 // commission the work</div>
@@ -562,7 +620,10 @@
   <table>
     <thead><tr><th>Command</th><th>Effect</th></tr></thead>
     <tbody>
-      <tr><td><code>fknrtd init [path]</code></td><td>Create configuration in an existing Git repository</td></tr>
+      <tr><td><code>scripts/manage.*</code> install | update | uninstall | doctor</td><td>Manage the global tool installation</td></tr>
+      <tr><td><code>fknrtd</code></td><td>Open the current folder, initializing it if needed</td></tr>
+      <tr><td><code>fknrtd init [path]</code></td><td>Create configuration, Git-backed or standalone</td></tr>
+      <tr><td><code>fknrtd init -standalone</code></td><td>Force a workspace with no Git isolation</td></tr>
       <tr><td><code>fknrtd doctor</code></td><td>Check runtime, Git, config, writable state, agent executables</td></tr>
       <tr><td><code>fknrtd dashboard</code></td><td>Open the interactive command center</td></tr>
       <tr><td><code>fknrtd dashboard -once</code></td><td>Render one frame and exit</td></tr>
@@ -777,7 +838,7 @@
       fullwidth plus emoji presentation. A terminal with different ambiguous-width rules will
       disagree.</li>
     <li><strong>POSIX paths are unverified.</strong> Development and validation ran on Windows.
-      The <code>/bin/sh</code> execution path and <code>install.sh</code> have not been exercised
+      The <code>/bin/sh</code> execution path and <code>scripts/manage.sh</code> have not been exercised
       on Linux or macOS.</li>
     <li><strong>No telemetry leaves your machine.</strong> There is no server, no endpoint, no
       metrics exporter. Capacity figures come from the agent CLIs you already run.</li>

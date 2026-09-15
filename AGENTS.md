@@ -19,7 +19,7 @@ OpenAI Codex CLI, and any other coding CLI registered in `.fknrtd/config.json`.
 The product is **FKNRTD.CLI**. The shipped binary and tool command are `fknrtd`.
 Namespaces are `FKNRTD.*` (`FKNRTD.Domain`, `FKNRTD.Services`, `FKNRTD.Commands`,
 `FKNRTD.Dashboard`, `FKNRTD.Telemetry`). Types use `Fknrtd*` (`FknrtdConfig`,
-`FknrtdEvent`, `FknrtdPaths`, `FknrtdRuntime`). On-disk state lives in `<repo>/.fknrtd/`.
+`FknrtdEvent`, `FknrtdPaths`, `FknrtdRuntime`). On-disk state lives in `<root>/.fknrtd/`.
 Task ids are `FKN-<utc>-<rand>`. Audit verdict markers are `FKNRTD_VERDICT: PASS|FAIL`.
 The statusline badge is `FKN`. There must be no reference anywhere to the former name
 "Synergia", nor to "McK"/"McKenneys".
@@ -50,6 +50,9 @@ framework — follow its existing `Check(...)` style.
   inputs. Keep it pure — it is the renderer's test seam.
 - The command center is never the source of truth: Git and the agent CLIs are. Do not cache
   derived state that could go stale silently.
+- A workspace is **not** guaranteed to be a Git repository. `FknrtdConfig.Mode` selects between
+  `Git` and `Standalone`; every Git-dependent path must either be mode-gated or degrade without
+  throwing. Never reintroduce a hard requirement on `git` outside `WorkspaceMode.Git`.
 
 ## Terminal rendering
 

@@ -210,11 +210,17 @@ internal sealed class DashboardApp
                 : "△ " + risk.Kind.ToString().ToUpperInvariant();
         var riskColor = risk is null ? Theme.Green : risk.Kind == ConflictKind.Collision ? Theme.Red : Theme.Amber;
 
+        // A standalone workspace has no branch, cleanliness or divergence to report.
+        var located = snapshot.Git.IsRepository
+            ? $"⎇ {snapshot.Git.Branch}"
+            : "○ standalone";
         canvas.DrawText(inner.X, inner.Y,
-            $"▣ {snapshot.Git.RepositoryName}  ⎇ {snapshot.Git.Branch}", Theme.Blue, bold: true,
+            $"▣ {snapshot.Git.RepositoryName}  {located}", Theme.Blue, bold: true,
             maxWidth: Math.Max(10, inner.Width - 32));
         var gitText = snapshot.Git.IsClean ? "✓ clean" : $"△ {snapshot.Git.ChangedFiles} changed";
-        var right = $"{gitText}  ↑{snapshot.Git.Ahead}↓{snapshot.Git.Behind}  {riskText}";
+        var right = snapshot.Git.IsRepository
+            ? $"{gitText}  ↑{snapshot.Git.Ahead}↓{snapshot.Git.Behind}  {riskText}"
+            : riskText;
         var rightWidth = Math.Min(inner.Width, Text.DisplayWidth(right));
         canvas.DrawText(Math.Max(inner.X, rect.Right - rightWidth - 2), inner.Y, right, riskColor,
             bold: risk is not null, maxWidth: rightWidth);

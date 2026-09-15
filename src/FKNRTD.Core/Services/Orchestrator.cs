@@ -48,7 +48,7 @@ public sealed class Orchestrator
             throw new InvalidOperationException($"Task {task.Id} is cancelled. Use 'fknrtd task retry {task.Id}' to resume it.");
         }
 
-        await RepairTaskBaseRefAsync(task, cancellationToken).ConfigureAwait(false);
+        await RepairTaskBaseRefAsync(task, config.Mode, cancellationToken).ConfigureAwait(false);
         task.Status = WorkflowStatus.Running;
         task.LastError = null;
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
@@ -61,7 +61,7 @@ public sealed class Orchestrator
         try
         {
             await RunBriefStageAsync(task, workflowToken).ConfigureAwait(false);
-            await RunWorktreeStageAsync(task, workflowToken).ConfigureAwait(false);
+            await RunWorktreeStageAsync(task, config.Mode, workflowToken).ConfigureAwait(false);
             await RunPlanStageAsync(config, task, workflowToken).ConfigureAwait(false);
 
             while (true)
@@ -148,7 +148,7 @@ public sealed class Orchestrator
         await using var lease = await _store.AcquireTaskLeaseAsync(taskId, cancellationToken).ConfigureAwait(false);
         var config = await _store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
         var task = await _store.LoadTaskAsync(taskId, cancellationToken).ConfigureAwait(false);
-        await RepairTaskBaseRefAsync(task, cancellationToken).ConfigureAwait(false);
+        await RepairTaskBaseRefAsync(task, config.Mode, cancellationToken).ConfigureAwait(false);
         if (task.Status != WorkflowStatus.ReadyToLand)
         {
             throw new InvalidOperationException(
@@ -157,7 +157,8 @@ public sealed class Orchestrator
 
         var stage = BeginStage(task, WorkflowStage.Land, null);
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-        var result = await _worktrees.LandAsync(task, config.RequireCleanTreeForLanding, cancellationToken)
+        var result = await _worktrees
+            .LandAsync(task, config.RequireCleanTreeForLanding, config.Mode, cancellationToken)
             .ConfigureAwait(false);
         if (!result.Success)
         {
@@ -166,7 +167,13 @@ public sealed class Orchestrator
                 .ConfigureAwait(false);
         }
 
-        CompleteStage(stage, StageState.Passed, "Branch merged into the primary worktree.", result.ExitCode);
+        CompleteStage(
+            stage,
+            StageState.Passed,
+            config.Mode == WorkspaceMode.Standalone
+                ? "Standalone workspace: the verified changes are already in place."
+                : "Branch merged into the primary worktree.",
+            result.ExitCode);
         task.Status = WorkflowStatus.Landed;
         task.CompletedAt = DateTimeOffset.UtcNow;
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
@@ -196,7 +203,10 @@ public sealed class Orchestrator
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task RunWorktreeStageAsync(WorkflowTask task, CancellationToken cancellationToken)
+    private async Task RunWorktreeStageAsync(
+        WorkflowTask task,
+        WorkspaceMode mode,
+        CancellationToken cancellationToken)
     {
         if (IsComplete(task, WorkflowStage.Worktree) && Directory.Exists(task.WorktreePath))
         {
@@ -207,10 +217,15 @@ public sealed class Orchestrator
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
         try
         {
-            var worktree = await _worktrees.CreateAsync(task, cancellationToken).ConfigureAwait(false);
+            var worktree = await _worktrees.CreateAsync(task, mode, cancellationToken).ConfigureAwait(false);
             task.WorktreePath = worktree.Path;
             task.BranchName = worktree.Branch;
-            CompleteStage(stage, StageState.Passed, $"{worktree.Branch} at {worktree.Path}");
+            CompleteStage(
+                stage,
+                mode == WorkspaceMode.Standalone ? StageState.Skipped : StageState.Passed,
+                mode == WorkspaceMode.Standalone
+                    ? $"Standalone workspace: agents work in place at {worktree.Path}."
+                    : $"{worktree.Branch} at {worktree.Path}");
             await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
@@ -292,9 +307,13 @@ public sealed class Orchestrator
               This is repair round {task.RepairRound}. Correct the failures recorded here:
               {BuildRepairContext(task)}
               """;
+        var isolation = config.Mode == WorkspaceMode.Standalone
+            ? $"You are working directly in the FKNRTD.CLI workspace at {task.WorktreePath}. " +
+              "There is no Git isolation, so change only what the brief requires."
+            : $"You are already inside an isolated Git worktree on branch {task.BranchName}.";
         var prompt = $"""
             You are the implementing developer for FKNRTD.CLI task {task.Id}.
-            You are already inside an isolated Git worktree on branch {task.BranchName}.
+            {isolation}
 
             Brief:
             {task.Brief}
@@ -303,8 +322,8 @@ public sealed class Orchestrator
             {await File.ReadAllTextAsync(planPath, cancellationToken).ConfigureAwait(false)}
             {repairContext}
 
-            Implement the requested change completely in this worktree. Keep unrelated files untouched.
-            You may run focused checks. Do not merge this branch and do not edit outside this worktree.
+            Implement the requested change completely in this workspace. Keep unrelated files untouched.
+            You may run focused checks. Do not merge anything and do not edit outside this workspace.
             Report the changed files and the checks you ran when finished.
             """;
         var result = await RunAgentAsync(
@@ -318,8 +337,9 @@ public sealed class Orchestrator
                 task.RepairRound,
                 cancellationToken)
             .ConfigureAwait(false);
-        var changedPaths = await _git.GetDiffPathsAsync(task.WorktreePath, task.BaseRef, cancellationToken)
-            .ConfigureAwait(false);
+        IReadOnlyList<string> changedPaths = config.Mode == WorkspaceMode.Standalone
+            ? []
+            : await _git.GetDiffPathsAsync(task.WorktreePath, task.BaseRef, cancellationToken).ConfigureAwait(false);
         await UpdateTouchedPathsAsync(task.ImplementerAgentId, changedPaths, cancellationToken).ConfigureAwait(false);
 
         if (!result.Success)
@@ -332,8 +352,11 @@ public sealed class Orchestrator
         CompleteStage(
             stage,
             StageState.Passed,
-            changedPaths.Count == 0 ? "Agent completed with no uncommitted paths." :
-                $"Changed {changedPaths.Count} path(s).",
+            config.Mode == WorkspaceMode.Standalone
+                ? "Agent completed. Changed paths are not tracked without Git."
+                : changedPaths.Count == 0
+                    ? "Agent completed with no uncommitted paths."
+                    : $"Changed {changedPaths.Count} path(s).",
             result.ExitCode);
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
     }
@@ -410,16 +433,19 @@ public sealed class Orchestrator
 
         var stage = BeginStage(task, WorkflowStage.Audit, task.AuditorAgentId);
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
+        var against = config.Mode == WorkspaceMode.Standalone
+            ? "Review the implementation in this workspace against this brief:"
+            : $"Review the implementation in this worktree against base ref {task.BaseRef} and this brief:";
         var prompt = $"""
             You are the independent auditor for FKNRTD.CLI task {task.Id}.
-            Review the implementation in this worktree against base ref {task.BaseRef} and this brief:
+            {against}
 
             {task.Brief}
 
             Verification results:
             {BuildVerificationSummary(task)}
 
-            Inspect the actual diff and evidence. Do not edit any file.
+            Inspect the actual changes and evidence. Do not edit any file.
             Finish with exactly one verdict marker on its own line:
             FKNRTD_VERDICT: PASS
             or
@@ -496,6 +522,12 @@ public sealed class Orchestrator
         WorkflowTask task,
         CancellationToken cancellationToken)
     {
+        if (config.Mode == WorkspaceMode.Standalone)
+        {
+            // There is no repository to commit into; the files on disk are the deliverable.
+            return;
+        }
+
         var changed = await _git.GetChangedPathsAsync(task.WorktreePath, cancellationToken).ConfigureAwait(false);
         if (changed.Count == 0)
         {
@@ -584,8 +616,17 @@ public sealed class Orchestrator
         await _store.SaveAgentRuntimeAsync(state, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task RepairTaskBaseRefAsync(WorkflowTask task, CancellationToken cancellationToken)
+    private async Task RepairTaskBaseRefAsync(
+        WorkflowTask task,
+        WorkspaceMode mode,
+        CancellationToken cancellationToken)
     {
+        if (mode == WorkspaceMode.Standalone)
+        {
+            // A standalone workspace has no branches, so there is no base ref to repair.
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(task.BaseRef) &&
             !task.BaseRef.Equals("HEAD", StringComparison.OrdinalIgnoreCase))
         {

@@ -15,11 +15,21 @@ public sealed class WorktreeService
 
     public async Task<(string Path, string Branch)> CreateAsync(
         WorkflowTask task,
+        WorkspaceMode mode,
         CancellationToken cancellationToken = default)
     {
+        if (mode == WorkspaceMode.Standalone)
+        {
+            // A standalone workspace has no Git isolation to offer: agents work in the root itself.
+            task.BaseRef = string.Empty;
+            return (_store.Paths.Root, string.Empty);
+        }
+
         if (!await _git.IsRepositoryAsync(_store.Paths.Root, cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException("FKNRTD.CLI worktree isolation requires a Git repository.");
+            throw new InvalidOperationException(
+                "FKNRTD.CLI worktree isolation requires a Git repository. " +
+                "Re-run 'fknrtd init -force -standalone' to work without Git.");
         }
 
         task.BaseRef = await _git.ResolveBaseBranchAsync(
@@ -59,8 +69,15 @@ public sealed class WorktreeService
     public async Task<CommandResult> LandAsync(
         WorkflowTask task,
         bool requireCleanTree,
+        WorkspaceMode mode,
         CancellationToken cancellationToken = default)
     {
+        if (mode == WorkspaceMode.Standalone)
+        {
+            // Nothing was ever branched off, so the verified work is already in place.
+            return new CommandResult { ExitCode = 0 };
+        }
+
         var snapshot = await _git.GetSnapshotAsync(_store.Paths.Root, cancellationToken).ConfigureAwait(false);
         var baseBranch = await _git.ResolveBaseBranchAsync(
                 _store.Paths.Root,
@@ -92,8 +109,18 @@ public sealed class WorktreeService
         return result;
     }
 
-    public async Task RemoveAsync(WorkflowTask task, bool force, CancellationToken cancellationToken = default)
+    public async Task RemoveAsync(
+        WorkflowTask task,
+        bool force,
+        WorkspaceMode mode,
+        CancellationToken cancellationToken = default)
     {
+        if (mode == WorkspaceMode.Standalone)
+        {
+            // There is no worktree and no task branch to reclaim.
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(task.WorktreePath) && Directory.Exists(task.WorktreePath))
         {
             var arguments = force
