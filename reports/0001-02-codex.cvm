@@ -1,0 +1,11 @@
+CVM1|R|P
+D|bounded normal-exit output drain by per-run timeout and cancel pumps when inherited handles prevent EOF
+D|added OutputTruncated marker for incomplete drain or capture-cap truncation
+D|added inherited-pipe regression self-test
+M|c724a96f3b4fae8f92315bdf12af5c07c37c35e2
+T|dotnet build FKNRTD.CLI.sln -c Release => 0; 0 warnings; 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 0; 14/14 self-tests passed
+E|src/FKNRTD.Core/Services/ProcessRunner.cs:ProcessRunner.RunAsync
+E|src/FKNRTD.Core/Services/ProcessRunner.cs:CancelAndDrainPumpsAsync
+E|src/FKNRTD.Core/Domain/Models.cs:CommandResult.OutputTruncated
+E|tests/FKNRTD.SelfTest/Program.cs:TestPostExitOutputDrainAsync
