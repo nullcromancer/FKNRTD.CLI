@@ -36,7 +36,7 @@ public sealed class GitService
             .ConfigureAwait(false);
         var remoteResult = await GitAsync(root, ["remote", "get-url", "origin"], cancellationToken)
             .ConfigureAwait(false);
-        var statusResult = await GitAsync(root, ["status", "--porcelain=v1"], cancellationToken)
+        var statusResult = await GitAsync(root, ["status", "--porcelain=v1", "-z"], cancellationToken)
             .ConfigureAwait(false);
         var divergenceResult = await GitAsync(
                 root,
@@ -53,9 +53,7 @@ public sealed class GitService
             RepositoryRoot = root,
             Branch = branchResult.Success ? branchResult.StandardOutput.Trim() : "detached",
             Remote = remote,
-            ChangedFiles = statusResult.Success
-                ? statusResult.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length
-                : 0,
+            ChangedFiles = statusResult.Success ? ParseStatusPaths(statusResult.StandardOutput).Count : 0,
             Ahead = ahead,
             Behind = behind
         };
@@ -65,17 +63,14 @@ public sealed class GitService
         string directory,
         CancellationToken cancellationToken = default)
     {
-        var result = await GitAsync(directory, ["status", "--porcelain=v1", "-uall"], cancellationToken)
+        var result = await GitAsync(directory, ["status", "--porcelain=v1", "-z", "-uall"], cancellationToken)
             .ConfigureAwait(false);
         if (!result.Success)
         {
             return [];
         }
 
-        return result.StandardOutput
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(ParseStatusPath)
-            .Where(path => !string.IsNullOrWhiteSpace(path))
+        return ParseStatusPaths(result.StandardOutput)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -88,15 +83,12 @@ public sealed class GitService
     {
         var committed = await GitAsync(
                 directory,
-                ["diff", "--name-only", $"{baseRef}...HEAD"],
+                ["diff", "--name-only", "-z", $"{baseRef}...HEAD"],
                 cancellationToken)
             .ConfigureAwait(false);
         var uncommitted = await GetChangedPathsAsync(directory, cancellationToken).ConfigureAwait(false);
-        var paths = committed.Success
-            ? committed.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            : Array.Empty<string>();
+        var paths = committed.Success ? ParseNullTerminated(committed.StandardOutput) : [];
         return paths.Concat(uncommitted)
-            .Select(path => path.Replace('\\', '/'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -113,11 +105,36 @@ public sealed class GitService
         return result.StandardOutput.Trim();
     }
 
-    public async Task<string> ResolveBaseBranchAsync(string directory, CancellationToken cancellationToken = default)
+    public async Task<string> ResolveBaseBranchAsync(
+        string directory,
+        string? baseRef = null,
+        CancellationToken cancellationToken = default)
     {
-        var result = await GitAsync(directory, ["branch", "--show-current"], cancellationToken).ConfigureAwait(false);
-        var branch = result.StandardOutput.Trim();
-        return result.Success && branch.Length > 0 ? branch : "HEAD";
+        var requested = baseRef?.Trim();
+        if (string.IsNullOrWhiteSpace(requested) || requested.Equals("HEAD", StringComparison.OrdinalIgnoreCase))
+        {
+            var current = await GitAsync(directory, ["branch", "--show-current"], cancellationToken)
+                .ConfigureAwait(false);
+            var branch = current.StandardOutput.Trim();
+            if (!current.Success || branch.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "Unable to resolve a base branch because the primary worktree has a detached HEAD.");
+            }
+
+            return branch;
+        }
+
+        const string localPrefix = "refs/heads/";
+        var branchName = requested.StartsWith(localPrefix, StringComparison.Ordinal)
+            ? requested[localPrefix.Length..]
+            : requested;
+        if (!await BranchExistsAsync(directory, branchName, cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException($"Base ref '{requested}' does not name a local Git branch.");
+        }
+
+        return branchName;
     }
 
     public async Task<bool> BranchExistsAsync(
@@ -137,7 +154,11 @@ public sealed class GitService
         string directory,
         IEnumerable<string> arguments,
         CancellationToken cancellationToken = default) =>
-        _processRunner.RunAsync("git", arguments, directory, cancellationToken: cancellationToken);
+        _processRunner.RunAsync(
+            "git",
+            new[] { "-c", "core.quotePath=false" }.Concat(arguments),
+            directory,
+            cancellationToken: cancellationToken);
 
     private static (int Ahead, int Behind) ParseDivergence(string output)
     {
@@ -176,20 +197,38 @@ public sealed class GitService
         return segments.Length >= 2 ? string.Join('/', segments.TakeLast(2)) : segments.LastOrDefault() ?? cleaned;
     }
 
-    private static string ParseStatusPath(string line)
+    private static IReadOnlyList<string> ParseStatusPaths(string output)
     {
-        if (line.Length <= 3)
+        var records = ParseNullTerminated(output);
+        var paths = new List<string>(records.Count);
+        for (var index = 0; index < records.Count; index++)
         {
-            return line;
+            var record = records[index];
+            if (record.Length < 3)
+            {
+                continue;
+            }
+
+            var statusX = record[0];
+            var statusY = record[1];
+            paths.Add(record[3..]);
+            if ((statusX is 'R' or 'C' || statusY is 'R' or 'C') && index + 1 < records.Count)
+            {
+                index++;
+            }
         }
 
-        var path = line[3..].Trim();
-        var rename = path.LastIndexOf(" -> ", StringComparison.Ordinal);
-        if (rename >= 0)
+        return paths;
+    }
+
+    private static IReadOnlyList<string> ParseNullTerminated(string output)
+    {
+        var lastNull = output.LastIndexOf('\0');
+        if (lastNull >= 0 && output[(lastNull + 1)..].All(character => character is '\r' or '\n'))
         {
-            path = path[(rename + 4)..];
+            output = output[..(lastNull + 1)];
         }
 
-        return path.Trim('"').Replace('\\', '/');
+        return output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
     }
 }

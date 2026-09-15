@@ -39,11 +39,12 @@ public sealed class TaskService
         ValidateAgent(config, implementerAgentId, "implementer", "implement", requireVerdict: false);
         ValidateAgent(config, auditorAgentId, "auditor", "audit", requireVerdict: true);
 
-        var resolvedBase = string.IsNullOrWhiteSpace(baseRef)
-            ? config.DefaultBaseRef.Equals("HEAD", StringComparison.OrdinalIgnoreCase)
-                ? await _git.ResolveBaseBranchAsync(_store.Paths.Root, cancellationToken).ConfigureAwait(false)
-                : config.DefaultBaseRef
-            : baseRef;
+        var requestedBase = string.IsNullOrWhiteSpace(baseRef) ? config.DefaultBaseRef : baseRef;
+        var resolvedBase = await _git.ResolveBaseBranchAsync(
+                _store.Paths.Root,
+                requestedBase,
+                cancellationToken)
+            .ConfigureAwait(false);
         var id = $"FKN-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"[..28];
         var task = new WorkflowTask
         {

@@ -4,7 +4,7 @@ public sealed record FknrtdConfig
 {
     public int SchemaVersion { get; init; } = 1;
     public string ProjectName { get; init; } = string.Empty;
-    public string DefaultBaseRef { get; init; } = "HEAD";
+    public string DefaultBaseRef { get; init; } = string.Empty;
     public int MaxParallelAgents { get; init; } = 4;
     public int DefaultMaxRepairRounds { get; init; } = 1;
     public int AgentStaleAfterSeconds { get; init; } = 120;
