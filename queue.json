@@ -142,12 +142,20 @@
     {
       "id": 2,
       "title": "Workflow correctness: verdict, base refs, git paths",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "reported",
+      "phase": "reported",
       "path": "briefs/0002-workflow-correctness-verdict-base-refs-g.cvm",
       "seat": "codex",
       "created": "2026-09-15T03:42:05+00:00",
-      "reports": [],
+      "reports": [
+        {
+          "path": "reports/0002-01-codex.cvm",
+          "seat": "codex",
+          "verdict": "pass",
+          "at": "2026-09-15T03:55:02+00:00",
+          "round": 1
+        }
+      ],
       "events": [
         {
           "type": "brief",
@@ -176,6 +184,13 @@
           "seat": "codex",
           "pid": 26892,
           "dispatch_id": "3c18b5f1-ca9b-42ae-93c0-0531f45f66cb"
+        },
+        {
+          "type": "report",
+          "at": "2026-09-15T03:55:02+00:00",
+          "seat": "codex",
+          "verdict": "pass",
+          "round": 1
         }
       ],
       "round": 1,

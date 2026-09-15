@@ -1,0 +1,14 @@
+CVM1|R|P
+D|isolated audit verdict extraction from echoed prompts and accepted markdown-wrapped marker lines
+D|resolved task base refs to local branch names at creation and runtime
+D|made Git path lists NUL-terminated with core.quotePath=false
+D|added committer identity precondition and landed worktree/branch cleanup
+D|added regression self-tests for workflow correctness
+M|39e9ed0d404f5ee919ea8d9ca2d814326adbe630
+T|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 16/16 self-tests passed
+Q|Codex could not commit: its workspace-write sandbox denies writes to the linked worktree's Git metadata under the main repository's .git/worktrees/. The auditing seat committed the unchanged working tree on its behalf.
+E|src/FKNRTD.Core/Services/Orchestrator.cs:IsPassingAuditVerdict
+E|src/FKNRTD.Core/Services/GitService.cs:GetChangedPathsAsync
+E|src/FKNRTD.Core/Services/WorktreeService.cs:RemoveAsync
+E|tests/FKNRTD.SelfTest/Program.cs:TestWorkflowAsync
