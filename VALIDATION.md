@@ -14,7 +14,7 @@ Environment: .NET SDK 10.0.302, .NET runtime 10.0.10, Git 2.55.0, Windows 11 (10
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 18/18 self-tests passed, exit code 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 19/19 self-tests passed, exit code 0. |
 | `fknrtd init` in a fresh Git repository | Created `.fknrtd/` state and configuration, exit 0. |
 | `fknrtd doctor` | All checks passed, exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd task create` | Task created with an `FKN-` identifier. |
@@ -24,7 +24,7 @@ Environment: .NET SDK 10.0.302, .NET runtime 10.0.10, Git 2.55.0, Windows 11 (10
 
 ## Self-test coverage
 
-The suite in `tests/FKNRTD.SelfTest/Program.cs` performs 18 checks:
+The suite in `tests/FKNRTD.SelfTest/Program.cs` performs 19 checks:
 
 1. Atomic snapshot and compact JSON Lines event storage
 2. Process timeout kills the process tree and reports the timeout
@@ -43,7 +43,8 @@ The suite in `tests/FKNRTD.SelfTest/Program.cs` performs 18 checks:
 15. Git path lists round-trip verbatim, including non-ASCII and spaces
 16. Dashboard frames preserve display width and border topology
 17. Dashboard command-line dimension overrides take precedence over detection
-18. A complete fake-agent workflow: worktree, lead plan, implementation, deterministic
+18. Colour forcing beats redirection but not explicit suppression
+19. A complete fake-agent workflow: worktree, lead plan, implementation, deterministic
     verification, exact audit verdict, commit, primary-state resolution from the linked
     worktree, explicit landing, and cleanup
 
@@ -64,6 +65,14 @@ Frames were produced from the built binary with
   width at 84, 120 and 160.
 - A rendered 120-column frame contains no doubled corner seams; adjacent panels share
   joined border junctions.
+
+## Documentation frames
+
+The screenshots in `fknrtd-cli.html` are the program's own output, not mock-ups. Frames were
+captured with `fknrtd dashboard -once -color -width W -height H` against the live test
+repository after a real task had been planned, implemented, verified, audited and landed by
+Claude and Codex. The captured ANSI was converted to HTML without alteration and photographed
+with headless Chromium via Playwright.
 
 ## Limits of this record
 

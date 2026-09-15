@@ -32,6 +32,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Git paths round trip verbatim", TestGitPathRoundTripAsync),
     ("Dashboard frames preserve display width and topology", TestDashboardRendererAsync),
     ("Dashboard CLI dimensions override detection", TestDashboardDimensionsAsync),
+    ("Colour forcing beats redirection but not suppression", TestColourForcingAsync),
     ("End-to-end isolated workflow", TestWorkflowAsync)
 };
 
@@ -241,6 +242,24 @@ static Task TestDashboardRendererAsync()
         }
     }
 
+    return Task.CompletedTask;
+}
+
+static Task TestColourForcingAsync()
+{
+    // Redirected output is colourless by default so piped text stays clean.
+    True(!CommandDispatcher.UseColor(new CliArguments(["status"]), outputRedirected: true),
+        "Redirected output defaults to no colour");
+    True(CommandDispatcher.UseColor(new CliArguments(["status"]), outputRedirected: false),
+        "A real console defaults to colour");
+
+    // -color forces colour through redirection, which is what makes a captured frame possible.
+    True(CommandDispatcher.UseColor(new CliArguments(["status", "-color"]), outputRedirected: true),
+        "-color forces colour through redirection");
+
+    // Explicit suppression still wins over forcing.
+    True(!CommandDispatcher.UseColor(new CliArguments(["status", "-color", "-no-color"]), outputRedirected: false),
+        "-no-color overrides -color");
     return Task.CompletedTask;
 }
 

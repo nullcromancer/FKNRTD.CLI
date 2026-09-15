@@ -70,7 +70,10 @@ hardened until it builds clean and runs reliably.
   one.
 - `-width` and `-height` on `dashboard -once` and `status`, so a frame can be rendered
   deterministically in a script or a test.
-- Self-test coverage grew from 5 checks to 18, including process timeout and drain bounds,
+- `-color` to force ANSI output through a redirect. Colour is still suppressed for piped
+  output by default, and `-no-color` and `NO_COLOR` still override the flag; without it a
+  coloured frame could not be captured for documentation or a pager at all.
+- Self-test coverage grew from 5 checks to 19, including process timeout and drain bounds,
   lease bounds, PATHEXT resolution, verdict spoofing, verbatim Git paths, and renderer
   frame geometry across a width sweep.
 - `AGENTS.md` recording the project invariants that both human and AI contributors must
@@ -78,6 +81,8 @@ hardened until it builds clean and runs reliably.
 
 ### Documentation
 
+- Added `fknrtd-cli.html`, a self-contained single-page operator manual carrying
+  screenshots of the program's own output.
 - Rewrote `README.md` as an evidence-based reference in which every substantive claim
   cites the file it came from.
 - Rewrote `VALIDATION.md`. The previous record claimed checks that had not been run,

@@ -76,9 +76,9 @@ A dependency-free C# terminal command center for coordinating multiple coding CL
 
 | Field | Value |
 | --- | --- |
-| Last Updated | 2026-09-14 |
-| Last Commit Date | 2026-09-14T23:41:45-04:00 |
-| Head Revision | `eee139a85be6457e86c63e08b6598f6ce9d7bd51` |
+| Last Updated | 2026-09-15 |
+| Last Commit Date | 2026-09-15T13:25:26-04:00 |
+| Head Revision | `8692e64f65b71c5cf3608ebcabcaf722f6cc1f81` |
 | Head Branch | `main` |
 
 ## Table of Contents
@@ -114,8 +114,9 @@ The design rule stated in `docs/ARCHITECTURE.md` is that the command center neve
 the source of truth by accident. Git and the assistants themselves hold the truth; this
 tool collects, correlates and displays it.
 
-Repository shape: a multi-component .NET solution of 28 first-party C# files totalling
-roughly 7,400 lines, plus documentation, example configuration and two install scripts.
+Repository shape: a multi-component .NET solution of 30 first-party C# files totalling
+roughly 8,200 lines, plus documentation, example configuration, two install scripts and a
+single-page operator manual (`fknrtd-cli.html`).
 
 ## Components
 
@@ -307,6 +308,7 @@ Command surface, from `src/FKNRTD.Cli/Commands/CommandDispatcher.cs` and
 | `fknrtd dashboard -once` | Render a single frame and exit |
 | `fknrtd status` | Render one frame; exit code 3 signals a live collision |
 | `fknrtd status -json` | Emit a complete normalised snapshot |
+| `fknrtd dashboard -once -color -width W -height H` | Render a deterministic coloured frame for capture |
 | `fknrtd config show \| path \| validate` | Inspect and validate configuration |
 | `fknrtd task create "Title" -brief "..." -verify "..."` | Create a task |
 | `fknrtd task list \| show \| run \| retry \| cancel` | Task lifecycle |

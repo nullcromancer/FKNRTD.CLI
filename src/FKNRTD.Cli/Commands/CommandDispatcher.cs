@@ -950,9 +950,16 @@ internal static class CommandDispatcher
         ? value
         : throw new ArgumentException($"A {label} is required.");
 
-    private static bool UseColor(CliArguments arguments) => !arguments.Has("no-color") &&
-                                                             !Console.IsOutputRedirected &&
-                                                             string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR"));
+    private static bool UseColor(CliArguments arguments) =>
+        UseColor(arguments, Console.IsOutputRedirected);
+
+    // Colour is suppressed for redirected output so piped text stays clean, but capturing a
+    // coloured frame for documentation or a pager then becomes impossible. -color forces it on.
+    // Explicit suppression still wins: -no-color and NO_COLOR override -color.
+    internal static bool UseColor(CliArguments arguments, bool outputRedirected) =>
+        !arguments.Has("no-color") &&
+        string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR")) &&
+        (arguments.Has("color") || !outputRedirected);
 
     private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? "N/A" : value;
 
@@ -1021,6 +1028,7 @@ internal static class CommandDispatcher
               -root <path>    Select an FKNRTD.CLI repository
               -json           Emit machine-readable JSON where supported
               -no-color       Disable ANSI color
+              -color          Force ANSI color even when output is redirected
 
             Workflow
               brief → isolated worktree → lead plan → implementation → deterministic verification
