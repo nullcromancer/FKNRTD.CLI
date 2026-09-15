@@ -84,8 +84,8 @@ with headless Chromium via Playwright.
   proves the orchestration, worktree, verification, verdict and landing logic. It does not
   prove behaviour against any particular assistant's real output.
 - Measured code coverage was not collected and is therefore not claimed.
-- Only Windows was exercised. The POSIX paths in `ProcessRunner.RunShellAsync` and
-  `scripts/install.sh` are unverified on Linux and macOS.
+- Only Windows was exercised. The POSIX paths in `ProcessRunner.RunShellAsync` are unverified on
+  Linux and macOS; `scripts/manage.sh` was exercised under Git Bash on Windows only.
 
 ## Reproducing this record
 

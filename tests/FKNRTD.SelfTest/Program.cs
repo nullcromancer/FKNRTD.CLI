@@ -33,7 +33,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Dashboard frames preserve display width and topology", TestDashboardRendererAsync),
     ("Dashboard CLI dimensions override detection", TestDashboardDimensionsAsync),
     ("Colour forcing beats redirection but not suppression", TestColourForcingAsync),
-    ("End-to-end isolated workflow", TestWorkflowAsync)
+    ("End-to-end isolated workflow", TestWorkflowAsync),
+    ("Standalone workflow runs without Git", TestStandaloneWorkflowAsync),
+    ("Bare invocation opens the current folder", TestDefaultInvocationAsync),
+    ("Bare invocation in a repository roots at the top level", TestDefaultInvocationInRepositoryAsync)
 };
 
 var failures = new List<string>();
@@ -247,19 +250,37 @@ static Task TestDashboardRendererAsync()
 
 static Task TestColourForcingAsync()
 {
-    // Redirected output is colourless by default so piped text stays clean.
-    True(!CommandDispatcher.UseColor(new CliArguments(["status"]), outputRedirected: true),
-        "Redirected output defaults to no colour");
-    True(CommandDispatcher.UseColor(new CliArguments(["status"]), outputRedirected: false),
-        "A real console defaults to colour");
+    // UseColor reads NO_COLOR from the ambient environment, so pin it rather than inherit
+    // whatever the invoking terminal happens to set.
+    var originalNoColor = Environment.GetEnvironmentVariable("NO_COLOR");
+    try
+    {
+        Environment.SetEnvironmentVariable("NO_COLOR", null);
 
-    // -color forces colour through redirection, which is what makes a captured frame possible.
-    True(CommandDispatcher.UseColor(new CliArguments(["status", "-color"]), outputRedirected: true),
-        "-color forces colour through redirection");
+        // Redirected output is colourless by default so piped text stays clean.
+        True(!CommandDispatcher.UseColor(new CliArguments(["status"]), outputRedirected: true),
+            "Redirected output defaults to no colour");
+        True(CommandDispatcher.UseColor(new CliArguments(["status"]), outputRedirected: false),
+            "A real console defaults to colour");
 
-    // Explicit suppression still wins over forcing.
-    True(!CommandDispatcher.UseColor(new CliArguments(["status", "-color", "-no-color"]), outputRedirected: false),
-        "-no-color overrides -color");
+        // -color forces colour through redirection, which is what makes a captured frame possible.
+        True(CommandDispatcher.UseColor(new CliArguments(["status", "-color"]), outputRedirected: true),
+            "-color forces colour through redirection");
+
+        // Explicit suppression still wins over forcing.
+        True(!CommandDispatcher.UseColor(new CliArguments(["status", "-color", "-no-color"]), outputRedirected: false),
+            "-no-color overrides -color");
+
+        // NO_COLOR is honoured even against an explicit -color.
+        Environment.SetEnvironmentVariable("NO_COLOR", "1");
+        True(!CommandDispatcher.UseColor(new CliArguments(["status", "-color"]), outputRedirected: false),
+            "NO_COLOR overrides -color");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("NO_COLOR", originalNoColor);
+    }
+
     return Task.CompletedTask;
 }
 
@@ -693,34 +714,10 @@ static async Task TestWorkflowAsync()
 
         var paths = WorkspaceLocator.ForRoot(root);
         var store = new StateStore(paths);
-        var executable = Environment.ProcessPath
-            ?? throw new InvalidOperationException("The self-test process path is unavailable.");
-        var profilePrefix = Path.GetFileNameWithoutExtension(executable)
-            .Equals("dotnet", StringComparison.OrdinalIgnoreCase)
-            ? new[] { Assembly.GetEntryAssembly()?.Location ?? throw new InvalidOperationException("Assembly path missing.") }
-            : Array.Empty<string>();
-        AgentCommandProfile Profile(string role, bool audit = false) => new()
-        {
-            Arguments = profilePrefix.Concat(["fake-agent", role, "{prompt}"]).ToList(),
-            SuccessMarker = audit ? "FKNRTD_VERDICT: PASS" : null,
-            FailureMarker = audit ? "FKNRTD_VERDICT: FAIL" : null
-        };
-        var fake = new AgentDefinition
-        {
-            Id = "fake",
-            DisplayName = "Fake Agent",
-            Executable = executable,
-            Profiles = new Dictionary<string, AgentCommandProfile>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["plan"] = Profile("plan"),
-                ["implement"] = Profile("implement"),
-                ["audit"] = Profile("audit", audit: true)
-            }
-        };
         await store.InitializeAsync(new FknrtdConfig
         {
             ProjectName = "workflow-test",
-            Agents = [fake]
+            Agents = [CreateFakeAgent()]
         }).ConfigureAwait(false);
         Equal(string.Empty, new FknrtdConfig().DefaultBaseRef, "Default config base ref");
         MustSucceed(await git.GitAsync(root, ["add", "README.md", ".fknrtd/config.json", ".fknrtd/.gitignore"])
@@ -800,7 +797,7 @@ static async Task TestWorkflowAsync()
         True(File.Exists(Path.Combine(root, "feature.txt")), "Landed feature file");
         var taskWorktree = task.WorktreePath;
         var taskBranch = task.BranchName;
-        await worktrees.RemoveAsync(task, force: false).ConfigureAwait(false);
+        await worktrees.RemoveAsync(task, force: false, WorkspaceMode.Git).ConfigureAwait(false);
         True(!Directory.Exists(taskWorktree), "Landed worktree directory removed");
         True(!await git.BranchExistsAsync(root, taskBranch).ConfigureAwait(false), "Landed task branch removed");
         var worktreeList = await git.GitAsync(root, ["worktree", "list", "--porcelain"]).ConfigureAwait(false);
@@ -852,6 +849,192 @@ static void True(bool value, string label)
     if (!value)
     {
         throw new InvalidOperationException(label + " was false.");
+    }
+}
+
+static AgentDefinition CreateFakeAgent()
+{
+    var executable = Environment.ProcessPath
+        ?? throw new InvalidOperationException("The self-test process path is unavailable.");
+    var profilePrefix = Path.GetFileNameWithoutExtension(executable)
+        .Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+        ? new[] { Assembly.GetEntryAssembly()?.Location ?? throw new InvalidOperationException("Assembly path missing.") }
+        : Array.Empty<string>();
+    AgentCommandProfile Profile(string role, bool audit = false) => new()
+    {
+        Arguments = profilePrefix.Concat(["fake-agent", role, "{prompt}"]).ToList(),
+        SuccessMarker = audit ? "FKNRTD_VERDICT: PASS" : null,
+        FailureMarker = audit ? "FKNRTD_VERDICT: FAIL" : null
+    };
+    return new AgentDefinition
+    {
+        Id = "fake",
+        DisplayName = "Fake Agent",
+        Executable = executable,
+        Profiles = new Dictionary<string, AgentCommandProfile>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["plan"] = Profile("plan"),
+            ["implement"] = Profile("implement"),
+            ["audit"] = Profile("audit", audit: true)
+        }
+    };
+}
+
+static async Task TestStandaloneWorkflowAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        var store = new StateStore(paths);
+        Equal(0, await QuietlyAsync(["init", "-root", root]).ConfigureAwait(false), "Standalone init exit code");
+
+        var config = await store.LoadConfigAsync().ConfigureAwait(false);
+        Equal(WorkspaceMode.Standalone, config.Mode, "Standalone init mode outside a repository");
+        Equal(string.Empty, config.DefaultBaseRef, "Standalone init base ref");
+        Equal(false, config.AutoCommitAgentChanges, "Standalone init disables auto-commit");
+        await store.SaveConfigAsync(config with { Agents = [CreateFakeAgent()] }).ConfigureAwait(false);
+
+        var process = new ProcessRunner();
+        var git = new GitService(process);
+        var worktrees = new WorktreeService(git, store);
+        var tasks = new TaskService(store, git);
+        var orchestrator = new Orchestrator(store, git, worktrees, new AgentRunner(store, process), process);
+        var verification = OperatingSystem.IsWindows()
+            ? "if exist feature.txt (exit /b 0) else (exit /b 1)"
+            : "test -f feature.txt";
+        var task = await tasks.CreateAsync(
+                "Create a feature marker",
+                "Create feature.txt with a short marker.",
+                "fake",
+                "fake",
+                "fake",
+                [verification])
+            .ConfigureAwait(false);
+        Equal(string.Empty, task.BaseRef, "Standalone task base ref");
+
+        task = await orchestrator.RunAsync(task.Id).ConfigureAwait(false);
+        Equal(WorkflowStatus.ReadyToLand, task.Status, "Standalone ready state");
+        Equal(StageState.Skipped, task.Stage(WorkflowStage.Worktree).State, "Standalone worktree stage");
+        Equal(Path.GetFullPath(root), task.WorktreePath, "Standalone work directory");
+        Equal(string.Empty, task.BranchName, "Standalone branch name");
+        Equal(StageState.Passed, task.Stage(WorkflowStage.Verify).State, "Standalone verification state");
+        Equal(StageState.Passed, task.Stage(WorkflowStage.Audit).State, "Standalone audit state");
+        True(File.Exists(Path.Combine(root, "feature.txt")), "Standalone feature file");
+        True(!Directory.EnumerateFileSystemEntries(paths.Worktrees).Any(), "Standalone run creates no worktree");
+
+        task = await orchestrator.LandAsync(task.Id).ConfigureAwait(false);
+        Equal(WorkflowStatus.Landed, task.Status, "Standalone landed state");
+
+        // Cleanup must be a no-op rather than a Git failure.
+        await worktrees.RemoveAsync(task, force: false, WorkspaceMode.Standalone).ConfigureAwait(false);
+
+        // Doctor must not fail a standalone workspace over the Git checks it cannot satisfy.
+        var checks = await new DoctorService(store, git, process).RunAsync().ConfigureAwait(false);
+        foreach (var name in new[] { "Git executable", "Git repository" })
+        {
+            True(!checks.Single(check => check.Name == name).Required, $"Standalone doctor relaxes: {name}");
+        }
+
+        True(checks.Single(check => check.Name == "Git repository").Passed, "Standalone doctor passes Git repository");
+        True(checks.Single(check => check.Name == "Workspace mode").Detail
+            .Contains("Standalone", StringComparison.Ordinal), "Standalone doctor reports the mode");
+    }).ConfigureAwait(false);
+}
+
+static async Task TestDefaultInvocationAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var project = Path.Combine(root, "project");
+        var nested = Path.Combine(project, "src");
+        Directory.CreateDirectory(nested);
+        var paths = WorkspaceLocator.ForRoot(project);
+        var originalDirectory = Environment.CurrentDirectory;
+        string firstFrame;
+        try
+        {
+            // An explicit '.' opens the current folder itself.
+            Environment.CurrentDirectory = project;
+            var output = new StringWriter();
+            Equal(0, await QuietlyAsync([".", "-once", "-no-color", "-width", "96", "-height", "24"], output)
+                .ConfigureAwait(false), "Current-folder invocation exit code");
+            firstFrame = output.ToString();
+
+            // A bare invocation from a subdirectory reuses that workspace instead of nesting a new one.
+            Environment.CurrentDirectory = nested;
+            Equal(0, await QuietlyAsync(["-once", "-no-color", "-width", "96", "-height", "24"])
+                .ConfigureAwait(false), "Bare invocation exit code");
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+        }
+
+        True(File.Exists(paths.Config), "Current-folder invocation provisions the folder");
+        True(!Directory.Exists(Path.Combine(nested, ".fknrtd")), "Bare invocation reuses the enclosing workspace");
+
+        var config = await new StateStore(paths).LoadConfigAsync().ConfigureAwait(false);
+        Equal(WorkspaceMode.Standalone, config.Mode, "Default loading mode outside a repository");
+        Equal("project", config.ProjectName, "Default loading project name");
+        True(firstFrame.Contains("FKNRTD COMMAND CENTER", StringComparison.Ordinal),
+            "Default loading renders the dashboard");
+        True(firstFrame.Contains("standalone", StringComparison.Ordinal),
+            "Default loading header reports the standalone workspace");
+    }).ConfigureAwait(false);
+}
+
+static async Task TestDefaultInvocationInRepositoryAsync()
+{
+    if (ExecutableLocator.Find("git") is null)
+    {
+        throw new InvalidOperationException("Git is required for the repository rooting self-test.");
+    }
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var git = new GitService(new ProcessRunner());
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]).ConfigureAwait(false), "git init");
+        var nested = Path.Combine(root, "scripts");
+        Directory.CreateDirectory(nested);
+
+        var originalDirectory = Environment.CurrentDirectory;
+        try
+        {
+            // A bare invocation from a subdirectory of an uninitialized repository must provision
+            // the repository root, not the subdirectory it happened to be run from.
+            Environment.CurrentDirectory = nested;
+            Equal(0, await QuietlyAsync(["-once", "-no-color", "-width", "96", "-height", "24"])
+                .ConfigureAwait(false), "Repository rooting exit code");
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+        }
+
+        var paths = WorkspaceLocator.ForRoot(root);
+        True(File.Exists(paths.Config), "Repository rooting provisions the repository root");
+        True(!Directory.Exists(Path.Combine(nested, ".fknrtd")), "Repository rooting skips the subdirectory");
+
+        var config = await new StateStore(paths).LoadConfigAsync().ConfigureAwait(false);
+        Equal(WorkspaceMode.Git, config.Mode, "Repository rooting mode");
+        Equal("main", config.DefaultBaseRef, "Repository rooting base ref");
+    }).ConfigureAwait(false);
+}
+
+/// <summary>Runs a dispatcher command with console output captured so the suite stays readable.</summary>
+static async Task<int> QuietlyAsync(string[] arguments, StringWriter? output = null)
+{
+    var originalOutput = Console.Out;
+    output ??= new StringWriter();
+    try
+    {
+        Console.SetOut(output);
+        return await CommandDispatcher.ExecuteAsync(new CliArguments(arguments), CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+    finally
+    {
+        Console.SetOut(originalOutput);
     }
 }
 

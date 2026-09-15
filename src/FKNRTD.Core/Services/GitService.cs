@@ -11,8 +11,27 @@ public sealed class GitService
         _processRunner = processRunner;
     }
 
+    /// <summary>Reports whether a usable <c>git</c> executable is on PATH.</summary>
+    public static bool IsInstalled()
+    {
+        try
+        {
+            return ExecutableLocator.Find("git") is not null;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> IsRepositoryAsync(string directory, CancellationToken cancellationToken = default)
     {
+        if (!IsInstalled())
+        {
+            return false;
+        }
+
         var result = await GitAsync(directory, ["rev-parse", "--is-inside-work-tree"], cancellationToken)
             .ConfigureAwait(false);
         return result.Success && result.StandardOutput.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
@@ -20,9 +39,10 @@ public sealed class GitService
 
     public async Task<GitSnapshot> GetSnapshotAsync(string directory, CancellationToken cancellationToken = default)
     {
-        var rootResult = await GitAsync(directory, ["rev-parse", "--show-toplevel"], cancellationToken)
-            .ConfigureAwait(false);
-        if (!rootResult.Success)
+        var rootResult = IsInstalled()
+            ? await GitAsync(directory, ["rev-parse", "--show-toplevel"], cancellationToken).ConfigureAwait(false)
+            : null;
+        if (rootResult is null || !rootResult.Success)
         {
             return new GitSnapshot
             {
@@ -51,6 +71,7 @@ public sealed class GitService
         {
             RepositoryName = ParseRepositoryName(remote, root),
             RepositoryRoot = root,
+            IsRepository = true,
             Branch = branchResult.Success ? branchResult.StandardOutput.Trim() : "detached",
             Remote = remote,
             ChangedFiles = statusResult.Success ? ParseStatusPaths(statusResult.StandardOutput).Count : 0,

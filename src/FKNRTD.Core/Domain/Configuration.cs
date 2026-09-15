@@ -4,6 +4,7 @@ public sealed record FknrtdConfig
 {
     public int SchemaVersion { get; init; } = 1;
     public string ProjectName { get; init; } = string.Empty;
+    public WorkspaceMode Mode { get; init; } = WorkspaceMode.Git;
     public string DefaultBaseRef { get; init; } = string.Empty;
     public int MaxParallelAgents { get; init; } = 4;
     public int DefaultMaxRepairRounds { get; init; } = 1;

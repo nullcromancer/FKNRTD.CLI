@@ -156,6 +156,7 @@ public sealed record GitSnapshot
 {
     public string RepositoryName { get; init; } = string.Empty;
     public string RepositoryRoot { get; init; } = string.Empty;
+    public bool IsRepository { get; init; }
     public string Branch { get; init; } = string.Empty;
     public string Remote { get; init; } = string.Empty;
     public int ChangedFiles { get; init; }

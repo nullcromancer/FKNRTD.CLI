@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Standalone workspaces.** `fknrtd init` no longer requires a Git repository. A folder that is
+  not a repository — or a machine with no Git at all — is provisioned in standalone mode, where
+  agents work directly in the project folder instead of an isolated worktree, nothing is committed
+  or merged, and landing records that the verified work is already in place. `-standalone` forces
+  the mode inside a repository; `-git` demands a repository and fails without one. The mode is
+  recorded as `mode` in `.fknrtd/config.json` and defaults to `git`, so existing configurations
+  are unaffected.
+- **Bare invocation opens the current folder.** Running `fknrtd` with no arguments opens the
+  dashboard with the default loading parameters, provisioning the workspace first when there is
+  none, instead of printing help. It searches the current folder and above, so running from a
+  subdirectory finds the enclosing project. When no workspace exists anywhere it provisions the
+  Git repository root if one encloses the folder, and the folder itself otherwise; `fknrtd .` pins
+  it to the current folder regardless.
+- `fknrtd doctor` reports the workspace mode and treats the Git checks as informational in a
+  standalone workspace rather than failing the diagnostic.
+- **An update and uninstall route.** `scripts/install.cmd` and `scripts/install.sh` are replaced
+  by `scripts/manage.cmd` and `scripts/manage.sh`, one management script per platform covering
+  `install`, `update`, `uninstall`, `doctor` and `help`. `update` reinstalls in place when the
+  version number has not moved, which `dotnet tool update` alone will not do, so a rebuilt
+  checkout actually reaches the installed tool. `install` refuses to clobber an existing
+  installation and points at `update`; `uninstall` leaves project `.fknrtd/` state alone. Both
+  accept `-verify` to gate on the local self-test suite and `-no-pack` to skip packing.
+- `scripts/manage.* doctor` diagnoses the installation itself: SDK, the version this checkout
+  builds against the version installed, `PATH` resolution and whether the command runs.
+
+### Fixed
+
+- The colour-forcing self-test read `NO_COLOR` from the invoking terminal, so it failed on any
+  machine that sets it. It now pins the variable for the duration and additionally covers
+  `NO_COLOR` overriding an explicit `-color`.
+
 ## 1.0.0 - 2026-09-15
 
 First shippable revision. The command center was renamed from its working title and then

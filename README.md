@@ -22,7 +22,8 @@ implemented by Codex, verified, audited and landed. Nothing here is a mock-up.*
 ## Business Analyst Summary
 
 - FKNRTD.CLI coordinates several AI coding assistants (Claude Code, OpenAI Codex CLI, and any
-  other command-line coding tool you register) against a single Git repository.
+  other command-line coding tool you register) against a single project folder. That folder is
+  usually a Git repository, but it does not have to be.
 - The core workflow is a supervised delivery pipeline. A task moves through eight stages: Brief,
   Worktree, Plan, Implement, Verify, Audit, ReadyToLand, Land.
 - Three roles are assigned per task: a **Lead** plans, an **Implementer** writes the change, and a
@@ -260,7 +261,7 @@ may deliver the prompt as an argument or on standard input.
 External runtime requirements, invoked as executables rather than linked:
 
 - .NET 10 SDK
-- Git 2.28 or newer, required for worktree isolation
+- Git 2.28 or newer, for worktree isolation. Optional: a standalone workspace needs no Git.
 - At least one configured coding CLI. Built-in defaults are `claude` and `codex`.
 
 ## Project Layout
@@ -284,8 +285,8 @@ FKNRTD.CLI/
     - claude-statusline-input.json
     - generic-agent.json
   - scripts/
-    - install.cmd                  Windows pack and install
-    - install.sh                   POSIX pack and install
+    - manage.cmd                   Windows install, update, uninstall, doctor
+    - manage.sh                    POSIX install, update, uninstall, doctor
   - src/
     - FKNRTD.Cli/
       - Program.cs                 entrypoint, terminal setup, error handling
@@ -312,15 +313,31 @@ dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --n
 The harness prints one line per check and a final `N/N self-tests passed` count, exiting 0 only
 when every check passes.
 
-Install as a global tool:
+Install as a global tool. One management script per platform covers the whole lifecycle:
 
 ```sh
-scripts\install.cmd     # Windows
-./scripts/install.sh    # POSIX
+scripts\manage.cmd install       # Windows
+./scripts/manage.sh install      # POSIX
 ```
 
-Both pack `src/FKNRTD.Cli` into `artifacts/` and install or update the global tool. Restart the
-terminal if `fknrtd` is not immediately on `PATH`.
+| Action | Effect |
+| --- | --- |
+| `install` | Pack `src/FKNRTD.Cli` into `artifacts/` and install the global tool |
+| `update` | Pack and move the installed tool to this checkout |
+| `uninstall` | Remove the global tool; project `.fknrtd/` state is kept |
+| `doctor` | Diagnose the installation and say what to do next |
+| `help` | Show the usage text |
+
+`install` refuses when the tool is already present and points you at `update`. `update` installs
+when nothing is there yet, and reinstalls in place when the version number has not moved — which
+is what makes it work as an update route from a working checkout, since `dotnet tool update` is a
+no-op against an unchanged version. Both accept `-verify` to build and run the local self-test
+suite before installing, and `-no-pack` to install from `artifacts/` without packing again.
+
+`scripts/manage.* doctor` diagnoses the **installation**: the SDK, the version this checkout
+builds, the version installed, whether `fknrtd` resolves on `PATH` and actually runs. It exits
+non-zero when something needs attention. `fknrtd doctor` is the different, inner command that
+diagnoses a **workspace**. Restart the terminal if `fknrtd` is not immediately on `PATH`.
 
 Initialise a repository:
 
@@ -331,9 +348,44 @@ git commit -m "Configure FKNRTD.CLI"
 fknrtd doctor
 ```
 
-`init` requires an existing Git repository and detects your verification commands where it can.
-Commit the config: it is reviewable project policy, and an uncommitted state directory will block
-landing later.
+`init` detects your verification commands where it can. Commit the config: it is reviewable
+project policy, and an uncommitted state directory will block landing later.
+
+Or just open the folder you are standing in:
+
+```sh
+fknrtd
+```
+
+With no arguments, `fknrtd` opens the dashboard using the default loading parameters, creating the
+workspace first if there is not one yet. It looks for an existing workspace in the current folder
+and above it, so running from a subdirectory finds the project you are already in. When there is
+none anywhere, it creates one at the Git repository root if you are inside a repository, and in
+the current folder if you are not — a subdirectory is never the right project root when a
+repository encloses it. Run `fknrtd .` to pin it to the current folder regardless.
+
+### Projects that will never be on GitHub
+
+A Git repository is not a prerequisite. If the folder is not a repository — or Git is not
+installed at all — `init` provisions a **standalone** workspace, and `-standalone` forces one even
+inside a repository. Pass `-git` when you want the opposite: a hard failure rather than a silent
+fallback.
+
+What changes in a standalone workspace:
+
+| Git-backed | Standalone |
+| --- | --- |
+| Each task gets its own branch and worktree | Agents work directly in the project folder |
+| Verified changes are auto-committed | Nothing is committed; the files are the deliverable |
+| Landing merges the task branch | Landing records that the verified work is already in place |
+| `task cleanup` removes the worktree and branch | Nothing to remove |
+| Changed paths come from `git diff` | Changed paths are not tracked |
+| `doctor` requires Git | `doctor` reports Git as optional |
+
+Everything else is unchanged: the same briefs, the same lead/implementer/auditor split, the same
+deterministic verification, the same independent audit, and the same refusal to land anything that
+did not pass both. You lose isolation between concurrent tasks and the ability to roll a task back
+by discarding a branch, so keep to one task at a time unless the folder is under version control.
 
 Commission and run a task:
 
@@ -357,7 +409,10 @@ Any one missing and the merge is refused with the reason.
 
 | Command | Effect |
 | --- | --- |
-| `fknrtd init [path]` | Create configuration in an existing Git repository |
+| `scripts/manage.* install \| update \| uninstall \| doctor` | Manage the global tool installation |
+| `fknrtd` | Open the current folder, initializing it if needed |
+| `fknrtd init [path]` | Create configuration, Git-backed or standalone |
+| `fknrtd init -standalone` | Force a workspace with no Git isolation |
 | `fknrtd doctor` | Check runtime, Git, config, writable state, agent executables |
 | `fknrtd dashboard` | Open the interactive command center |
 | `fknrtd dashboard -once` | Render one frame and exit |
@@ -572,7 +627,8 @@ correctness.
 - **Display width is terminal-dependent.** Layout follows East Asian wide and fullwidth plus emoji
   presentation. A terminal with different ambiguous-width rules will disagree.
 - **POSIX paths are unverified.** Development and validation ran on Windows. The `/bin/sh`
-  execution path and `install.sh` have not been exercised on Linux or macOS.
+  execution path has not been exercised on Linux or macOS; `scripts/manage.sh` was run under Git
+  Bash on Windows only.
 - **No telemetry leaves your machine.** No server, no endpoint, no metrics exporter.
 
 Every figure in this document was produced by running the command on a real machine against a real

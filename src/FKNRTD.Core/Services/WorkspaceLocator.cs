@@ -20,7 +20,16 @@ public sealed record FknrtdPaths(string Root)
 
 public static class WorkspaceLocator
 {
-    public static FknrtdPaths Find(string? start = null)
+    public static FknrtdPaths Find(string? start = null) =>
+        TryFind(start) ?? throw new InvalidOperationException(
+            "No FKNRTD.CLI workspace was found. Run 'fknrtd init' from the project root, " +
+            "or run 'fknrtd' with no arguments to open the current folder.");
+
+    /// <summary>
+    /// Walks up from <paramref name="start"/> looking for an initialized workspace, returning
+    /// <see langword="null"/> instead of throwing when none exists.
+    /// </summary>
+    public static FknrtdPaths? TryFind(string? start = null)
     {
         var current = new DirectoryInfo(Path.GetFullPath(start ?? Environment.CurrentDirectory));
         while (current is not null)
@@ -34,8 +43,7 @@ public static class WorkspaceLocator
             current = current.Parent;
         }
 
-        throw new InvalidOperationException(
-            "No FKNRTD.CLI project was found. Run 'fknrtd init' from the repository root.");
+        return null;
     }
 
     public static FknrtdPaths ForRoot(string root) => new(Path.GetFullPath(root));
