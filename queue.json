@@ -5,10 +5,10 @@
     {
       "id": 1,
       "title": "Reliability core: process, locking, state IO",
-      "state": "ready",
-      "phase": "repair-ready",
+      "state": "claimed",
+      "phase": "implementing",
       "path": "briefs/0001-reliability-core-process-locking-state-i.cvm",
-      "seat": null,
+      "seat": "codex",
       "created": "2026-09-15T03:09:06+00:00",
       "reports": [
         {
@@ -61,15 +61,30 @@
           "seat": "claude",
           "verdict": "fail",
           "wire": "CVM1|A|F\nE|Read commit b2866f6 diff in full across all 8 changed files; no scope creep beyond the brief's file list.\nE|ProcessRunner.RunAsync: Process.Start wrapped; Win32Exception and Start()==false both return CommandResult{ExitCode=-1,StartFailed=true} instead of throwing. Verified.\nE|ProcessRunner timeout: linked CTS with CancelAfter, timeout distinguished from caller cancellation via timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested. Kill + bounded DrainAfterKillAsync. Verified.\nE|ExecutableLocator.Find: on Windows the extensionless 'exact' probe is now gated behind Path.HasExtension and retried only after the PATHEXT loop, so codex.CMD wins over an extensionless codex shim. Verified by reading the reordered loop.\nE|ExclusiveFileLease.AcquireAsync: the original always-true retry filter is gone; bounded by both maximumAttempts and a wall-clock timeout, throwing InvalidOperationException carrying busyMessage and the owner PID. Verified.\nE|ExclusiveFileLease exclusivity preserved: share mode moved from None to Read\\pDelete, but every acquirer opens FileAccess.ReadWrite, which Read does not permit, so two holders still cannot coexist.\nE|StateStore.ReadJsonLineTailAsync opens FileShare.ReadWrite\\pFileShare.Delete and seeks the tail rather than File.ReadAllLinesAsync; rotation archive is consulted when the active file is short. Verified.\nE|CommandResult.Success redefined as ExitCode == 0 && !TimedOut && !StartFailed, so a timed-out or unlaunchable process cannot be mistaken for success.\nE|FknrtdConfig gains AgentTimeoutSeconds=3600 and VerificationTimeoutSeconds=600 as init properties, so a pre-existing config.json without the keys still deserializes and receives defaults.\nT|dotnet build FKNRTD.CLI.sln -c Release => Build succeeded, 0 Warning(s), 0 Error(s). Run by the auditor in the implementation worktree.\nT|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 13/13 self-tests passed, exit 0. Run by the auditor, not taken from the report.\nT|Self-tests observed to cover the brief's named cases: process timeout, bad executable, bounded lease, concurrent-append tail read, rotation, PATHEXT precedence, legacy config defaults, unlaunchable agent in doctor.\nB|UNBOUNDED DRAIN ON NORMAL EXIT PATH (src/FKNRTD.Core/Services/ProcessRunner.cs, RunAsync): after WaitForExitAsync returns normally, 'await Task.WhenAll(stdoutTask, stderrTask)' has no bound and the pumps run on pumpCancellation, which is never cancelled on this path. If the launched CLI spawns a grandchild that inherits the stdout/stderr pipe handles (agent CLIs that start a background daemon or MCP server do exactly this), the pipes never reach EOF and RunAsync hangs forever even though the direct child exited and the configured timeout has elapsed. The timeout only guards WaitForExitAsync, not the drain. This defeats the brief's central acceptance criterion, 'no unbounded hang'. Fix: bound the post-exit drain the same way DrainAfterKillAsync already does, cancelling pumpCancellation and returning what was captured, and mark the result so the caller can tell a truncated capture from a complete one.\nB|MINOR (same file): the timeout path returns ExitCode -1, which is indistinguishable from the StartFailed result's -1 in logs. The TimedOut/StartFailed flags disambiguate in code, but any surface that prints only the exit code cannot. Consider distinct sentinels or always printing the flag.\nQ|DrainAfterKillAsync's 5s KillDrainTimeout is not configurable; acceptable for now, but if a verification command legitimately produces a large trailing burst the tail may be truncated. Not blocking.\n"
+        },
+        {
+          "type": "claim",
+          "at": "2026-09-15T03:31:11+00:00",
+          "seat": "codex",
+          "round": 2,
+          "lease_expires": "2026-09-15T04:16:11+00:00"
         }
       ],
-      "round": 1,
+      "round": 2,
       "protocol": "caveman-v1",
       "implementer": "codex",
       "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0001-reliability-core-process-locking-state-i",
       "branch": "codex/pair-1-reliability-core-process-locking-state-i",
       "base_branch": "main",
-      "base_oid": "97edbda916aa7fe125de5ba34fe26fc446ee5280"
+      "base_oid": "97edbda916aa7fe125de5ba34fe26fc446ee5280",
+      "claim": {
+        "seat": "codex",
+        "at": "2026-09-15T03:31:11+00:00",
+        "lease_expires": "2026-09-15T04:16:11+00:00",
+        "pid": null,
+        "host": "Tenebris",
+        "dispatch_id": "63f454da-bd18-4aaf-8745-42368c0ec146"
+      }
     }
   ]
 }
