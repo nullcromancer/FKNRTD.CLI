@@ -1,0 +1,17 @@
+CVM1|A|P
+E|Read the full working-tree diff before committing it: Canvas.cs, DashboardApp.cs, CommandDispatcher.cs, the self-test project file and Program.cs, plus a new src/FKNRTD.Cli/Properties/AssemblyInfo.cs. Scope matches the brief.
+E|Canvas.Text.DisplayWidth measures by grapheme cluster via StringInfo.GetTextElementEnumerator, taking the max rune width per cluster and treating a cluster carrying U+FE0F or U+20E3 as at least two columns. That is the correct shape: combining marks contribute zero and do not split, and emoji presentation is not undercounted.
+E|InternalsVisibleTo was added to the Cli assembly in its own Properties/AssemblyInfo.cs, matching the pattern brief #2 established for Core. Dashboard internals were not made public.
+E|INDEPENDENT RENDER VERIFICATION, not a re-run of the implementer's tests: rendered real frames from the built binary with 'dashboard -once -no-color' at widths 60, 72, 84, 100, 119, 120, 140 and 200, and measured every line with a separate Unicode width implementation (Python unicodedata east_asian_width plus combining). Every line matched the requested width exactly at every width; zero lines off.
+E|Zero ESC (U+001B) characters appeared in any -no-color frame, confirming the colour-free contract from the outside rather than from the renderer's own code path.
+E|CJK and emoji regression checked against the real binary: created tasks titled with Japanese text and an emoji, confirmed wide characters are actually present in the rendered frames, and confirmed every line still measured exactly the requested width at 84, 120 and 160. This is the original defect and it is fixed.
+E|Joined borders confirmed by inspection of a rendered 120-column frame: junctions use the correct characters and a grep for doubled corner seams returns zero occurrences.
+E|CJK task titles truncate with an ellipsis at the panel boundary without shifting the frame.
+E|The -width and -height overrides work on the real binary and are what made the independent measurement possible.
+T|dotnet build FKNRTD.CLI.sln -c Release => Build succeeded, 0 Warning(s), 0 Error(s). Run by the auditor in the implementation worktree.
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 18/18 self-tests passed, exit 0. Run by the auditor.
+T|Two new named tests observed passing: 'Dashboard frames preserve display width and topology' and 'Dashboard CLI dimensions override detection'.
+T|All 16 previously landed tests still pass, so briefs #1 and #2 did not regress.
+T|External frame measurement across 8 widths plus 3 CJK widths, described above, performed by the auditor with an independent width implementation.
+Q|Display width is inherently terminal-dependent. The implementation follows East Asian Wide/Fullwidth plus emoji presentation, which matches Windows Terminal and most modern emulators, but a terminal that renders ambiguous-width characters as double will still disagree. That is a property of the problem, not a defect in this change.
+Q|The implementing seat could not commit: its sandbox sets an explicit Write deny on the Git common-dir, so index.lock could not be created in the linked worktree. On Windows an explicit deny overrides the --add-dir allow added to ghostrider earlier, so that mitigation is insufficient for codex specifically. Codex reported the blocker honestly rather than leaving the work unexplained. The auditing seat committed the working tree unchanged.
