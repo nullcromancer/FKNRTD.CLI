@@ -142,10 +142,10 @@
     {
       "id": 2,
       "title": "Workflow correctness: verdict, base refs, git paths",
-      "state": "ready",
-      "phase": "worktree-ready",
+      "state": "claimed",
+      "phase": "implementing",
       "path": "briefs/0002-workflow-correctness-verdict-base-refs-g.cvm",
-      "seat": null,
+      "seat": "codex",
       "created": "2026-09-15T03:42:05+00:00",
       "reports": [],
       "events": [
@@ -162,15 +162,30 @@
           "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0002-workflow-correctness-verdict-base-refs-g",
           "branch": "codex/pair-2-workflow-correctness-verdict-base-refs-g",
           "base": "eee139a85be6457e86c63e08b6598f6ce9d7bd51"
+        },
+        {
+          "type": "claim",
+          "at": "2026-09-15T03:42:06+00:00",
+          "seat": "codex",
+          "round": 1,
+          "lease_expires": "2026-09-15T04:27:06+00:00"
         }
       ],
-      "round": 0,
+      "round": 1,
       "protocol": "caveman-v1",
       "implementer": "codex",
       "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0002-workflow-correctness-verdict-base-refs-g",
       "branch": "codex/pair-2-workflow-correctness-verdict-base-refs-g",
       "base_branch": "main",
-      "base_oid": "eee139a85be6457e86c63e08b6598f6ce9d7bd51"
+      "base_oid": "eee139a85be6457e86c63e08b6598f6ce9d7bd51",
+      "claim": {
+        "seat": "codex",
+        "at": "2026-09-15T03:42:06+00:00",
+        "lease_expires": "2026-09-15T04:27:06+00:00",
+        "pid": null,
+        "host": "Tenebris",
+        "dispatch_id": "3c18b5f1-ca9b-42ae-93c0-0531f45f66cb"
+      }
     }
   ]
 }
