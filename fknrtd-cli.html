@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="theme-color" content="#010201">
+<meta name="description" content="FKNRTD.CLI // Operator manual. A dependency-free C# terminal command center that supervises multiple coding CLIs and refuses to merge anything it cannot prove.">
+<title>FKNRTD.CLI // OPERATOR MANUAL</title>
+<style>
+  :root{
+    --void:#010201;
+    --void-2:#040804;
+    --panel:#050b06;
+    --phosphor:#21ff38;
+    --phos-dim:#5ed56d;
+    --text:#caffd0;
+    --text-2:#9effaa;
+    --muted:#8dbb95;
+    --rule:#123a18;
+    --rule-2:#1d5c27;
+    --amber:#ffc046;
+    --red:#ff5f56;
+    --mono:"Courier New",Consolas,"DejaVu Sans Mono",monospace;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:4.5rem}
+  body{
+    margin:0;
+    padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);
+    background:var(--void);
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:15px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* CRT ambience -------------------------------------------------- */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.28) 2px 4px);
+    mix-blend-mode:multiply;opacity:.55;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:9998;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 40%,rgba(33,255,56,.05),transparent 62%);
+  }
+  @media (prefers-reduced-motion:no-preference){
+    @keyframes flick{0%,100%{opacity:.55}47%{opacity:.5}48%{opacity:.62}49%{opacity:.52}}
+    body::before{animation:flick 7s infinite steps(1,end)}
+  }
+  a{color:var(--phosphor);text-decoration:none;border-bottom:1px dotted var(--rule-2)}
+  a:hover,a:focus-visible{color:#8aff98;border-bottom-color:var(--phosphor);outline:none}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+
+  .wrap{max-width:1080px;margin:0 auto;padding-inline:20px}
+
+  /* Masthead ------------------------------------------------------ */
+  header.mast{border-bottom:1px solid var(--rule);background:
+    linear-gradient(180deg,rgba(33,255,56,.05),transparent);}
+  .mast-in{padding-block:38px 30px}
+  .stamp{
+    display:inline-block;border:1px solid var(--rule-2);color:var(--phos-dim);
+    font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    padding:3px 10px;margin-bottom:18px;
+  }
+  h1{
+    margin:0;font-size:clamp(28px,7vw,54px);line-height:1.05;letter-spacing:.06em;
+    color:var(--phosphor);text-shadow:0 0 14px rgba(33,255,56,.42);
+  }
+  .sub{margin:12px 0 0;color:var(--text-2);font-size:clamp(13px,2.4vw,16px);letter-spacing:.04em}
+  .tag{margin:20px 0 0;color:var(--muted);font-size:13px;max-width:62ch}
+  .facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;padding:0;list-style:none}
+  .facts li{
+    border:1px solid var(--rule);background:var(--panel);
+    padding:5px 11px;font-size:11.5px;letter-spacing:.1em;color:var(--text-2);
+    text-transform:uppercase;
+  }
+  .facts b{color:var(--phosphor);font-weight:400}
+
+  /* Nav ----------------------------------------------------------- */
+  nav.toc{
+    position:sticky;top:0;z-index:50;
+    top:env(safe-area-inset-top,0px);
+    background:rgba(1,2,1,.94);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--rule);
+  }
+  .toc-in{display:flex;gap:2px;overflow-x:auto;padding:0;scrollbar-width:thin}
+  .toc-in a{
+    flex:0 0 auto;border:0;padding:11px 13px;font-size:11.5px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent;
+  }
+  .toc-in a:hover{color:var(--phosphor);border-bottom-color:var(--rule-2);background:rgba(33,255,56,.05)}
+
+  /* Sections ------------------------------------------------------ */
+  section{padding-block:46px;border-bottom:1px solid var(--rule)}
+  h2{
+    margin:0 0 6px;font-size:clamp(17px,3.4vw,23px);letter-spacing:.09em;
+    color:var(--phosphor);text-transform:uppercase;
+  }
+  h2 .slash{color:var(--rule-2)}
+  .lede{margin:0 0 26px;color:var(--muted);font-size:13px;letter-spacing:.05em;text-transform:uppercase}
+  h3{margin:30px 0 10px;font-size:15px;letter-spacing:.05em;color:var(--text-2);text-transform:uppercase}
+  p{margin:0 0 15px;max-width:76ch}
+  ul,ol{margin:0 0 15px;padding-left:20px;max-width:76ch}
+  li{margin-bottom:7px}
+  li::marker{color:var(--phos-dim)}
+  strong{color:var(--phosphor);font-weight:700}
+  code{color:var(--text-2);background:rgba(33,255,56,.08);border:1px solid var(--rule);padding:.5px 5px;font-size:.92em}
+
+  /* Terminal blocks ----------------------------------------------- */
+  .term{border:1px solid var(--rule-2);background:var(--void-2);margin:0 0 18px;overflow:hidden}
+  .term-bar{
+    display:flex;align-items:center;gap:8px;padding:6px 11px;
+    background:linear-gradient(180deg,rgba(33,255,56,.1),transparent);
+    border-bottom:1px solid var(--rule);
+    font-size:10.5px;letter-spacing:.17em;color:var(--phos-dim);text-transform:uppercase;
+  }
+  .dot{width:8px;height:8px;border:1px solid var(--rule-2);display:inline-block}
+  .term pre{margin:0;padding:14px;overflow-x:auto;font-size:13px;line-height:1.6;color:var(--text)}
+  .term pre .c{color:var(--muted)}
+  .term pre .p{color:var(--phosphor)}
+  .term pre .o{color:var(--amber)}
+
+  /* Tables -------------------------------------------------------- */
+  .scroll{overflow-x:auto;margin:0 0 18px;border:1px solid var(--rule)}
+  table{border-collapse:collapse;width:100%;font-size:12.8px;min-width:520px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{
+    background:rgba(33,255,56,.06);color:var(--phosphor);font-weight:400;
+    text-transform:uppercase;letter-spacing:.11em;font-size:11px;white-space:nowrap;
+  }
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:rgba(33,255,56,.035)}
+  td code{background:none;border:0;padding:0;color:var(--text-2)}
+
+  /* Callouts ------------------------------------------------------ */
+  .note{border-left:2px solid var(--phos-dim);background:var(--panel);padding:13px 16px;margin:0 0 18px}
+  .note.warn{border-left-color:var(--amber)}
+  .note.stop{border-left-color:var(--red)}
+  .note .lbl{
+    display:block;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--phos-dim);margin-bottom:5px;
+  }
+  .note.warn .lbl{color:var(--amber)}
+  .note.stop .lbl{color:var(--red)}
+  .note p:last-child{margin-bottom:0}
+
+  /* Grids --------------------------------------------------------- */
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));margin:0 0 18px}
+  .card{border:1px solid var(--rule);background:var(--panel);padding:15px 16px}
+  .card h4{
+    margin:0 0 7px;font-size:12px;letter-spacing:.13em;color:var(--phosphor);text-transform:uppercase;
+  }
+  .card p{margin:0;font-size:13px;color:var(--text)}
+  .card .num{font-size:11px;color:var(--rule-2);letter-spacing:.2em;display:block;margin-bottom:6px}
+
+  /* Pipeline diagram ---------------------------------------------- */
+  figure{margin:0 0 18px}
+  figure svg{width:100%;height:auto;display:block;border:1px solid var(--rule);background:var(--void-2)}
+  figcaption{margin-top:8px;font-size:11.5px;color:var(--muted);letter-spacing:.06em}
+
+  details{border:1px solid var(--rule);background:var(--panel);margin:0 0 10px}
+  summary{padding:10px 14px;cursor:pointer;color:var(--text-2);font-size:12.5px;letter-spacing:.06em}
+  summary::marker{color:var(--phos-dim)}
+  details[open] summary{border-bottom:1px solid var(--rule);color:var(--phosphor)}
+  .det-body{padding:14px}
+  .det-body p:last-child,.det-body ul:last-child{margin-bottom:0}
+
+  footer{padding-block:34px 50px;color:var(--muted);font-size:12px}
+  footer .sig{color:var(--phos-dim);letter-spacing:.16em;text-transform:uppercase}
+
+  @media (max-width:600px){
+    body{font-size:14.5px}
+    section{padding-block:34px}
+    .term pre{font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap mast-in">
+    <span class="stamp">Nullcromancer // Instrument 001</span>
+    <h1>FKNRTD.CLI</h1>
+    <p class="sub">A terminal command center for coding agents that are not trusted on their word.</p>
+    <p class="tag">Several machines write code for you. None of them can be believed. This is the
+      desk they all report to: it isolates their work, runs the checks itself, makes a second
+      machine review the first, keeps the paperwork, and refuses to merge anything until you
+      personally say the word.</p>
+    <ul class="facts">
+      <li>Runtime <b>net10.0</b></li>
+      <li>Dependencies <b>zero</b></li>
+      <li>Command <b>fknrtd</b></li>
+      <li>Stages <b>8</b></li>
+      <li>Self-tests <b>18/18</b></li>
+      <li>Licence <b>MIT</b></li>
+    </ul>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <div class="wrap toc-in">
+    <a href="#premise">Premise</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#seats">Seats</a>
+    <a href="#install">Install</a>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#commands">Commands</a>
+    <a href="#config">Config</a>
+    <a href="#effective">Effective Use</a>
+    <a href="#state">Evidence</a>
+    <a href="#trouble">Faults</a>
+    <a href="#limits">Limits</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ============================================================ -->
+<section id="premise">
+  <h2>Premise <span class="slash">//</span> Why this exists</h2>
+  <p class="lede">The report is not the work</p>
+
+  <p>An agent that says <em>"done, all tests pass"</em> has told you nothing. It has produced a
+    sentence. FKNRTD.CLI is built on the assumption that the sentence is worthless and only
+    evidence counts.</p>
+
+  <p>So the tool never asks an agent whether the work is good. It runs the verification commands
+    <strong>itself</strong>, in a worktree it created, and then hands the diff to a
+    <strong>different</strong> agent for review. Implementation and audit are never the same seat.
+    When both pass, the task stops and waits for a human.</p>
+
+  <div class="grid">
+    <div class="card">
+      <span class="num">01</span>
+      <h4>Isolation</h4>
+      <p>Every task gets its own Git branch and worktree. Two agents working at once cannot
+        overwrite each other, because they are not in the same directory.</p>
+    </div>
+    <div class="card">
+      <span class="num">02</span>
+      <h4>Deterministic proof</h4>
+      <p>Your verification commands are executed by the orchestrator, not by the agent that wrote
+        the code. Exit codes are recorded. Output tails are kept.</p>
+    </div>
+    <div class="card">
+      <span class="num">03</span>
+      <h4>Adversarial review</h4>
+      <p>A second agent reads the real diff and must end with an exact verdict marker. An
+        ambiguous verdict is treated as failure, never as a pass.</p>
+    </div>
+    <div class="card">
+      <span class="num">04</span>
+      <h4>Human landing</h4>
+      <p>Nothing merges on its own. A finished task sits in <code>ReadyToLand</code> until you
+        type a confirmation token.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <span class="lbl">Design rule</span>
+    <p>The command center is never the source of truth. Git holds the code, the agent CLIs hold
+      their own state, your test suite holds the verdict. This tool collects, correlates and
+      displays. When it disagrees with Git, Git is right.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="pipeline">
+  <h2>Pipeline <span class="slash">//</span> Eight stages, one loop</h2>
+  <p class="lede">Brief to Land, with a bounded repair cycle</p>
+
+  <figure>
+    <svg viewBox="0 0 980 260" role="img" aria-label="Task pipeline: Brief, Worktree, Plan, Implement, Verify, Audit, ReadyToLand, Land, with repair loops from Verify and Audit back to Implement.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5ed56d"/>
+        </marker>
+        <marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#ffc046"/>
+        </marker>
+      </defs>
+      <g font-family="Courier New,monospace" font-size="12.5">
+        <!-- main row -->
+        <g>
+          <rect x="14"  y="60" width="104" height="44" fill="#050b06" stroke="#1d5c27"/>
+          <text x="66"  y="87" fill="#caffd0" text-anchor="middle">BRIEF</text>
+
+          <rect x="136" y="60" width="104" height="44" fill="#050b06" stroke="#1d5c27"/>
+          <text x="188" y="87" fill="#caffd0" text-anchor="middle">WORKTREE</text>
+
+          <rect x="258" y="60" width="104" height="44" fill="#050b06" stroke="#1d5c27"/>
+          <text x="310" y="87" fill="#caffd0" text-anchor="middle">PLAN</text>
+
+          <rect x="380" y="60" width="104" height="44" fill="#07140a" stroke="#21ff38"/>
+          <text x="432" y="87" fill="#21ff38" text-anchor="middle">IMPLEMENT</text>
+
+          <rect x="502" y="60" width="104" height="44" fill="#07140a" stroke="#21ff38"/>
+          <text x="554" y="87" fill="#21ff38" text-anchor="middle">VERIFY</text>
+
+          <rect x="624" y="60" width="104" height="44" fill="#07140a" stroke="#21ff38"/>
+          <text x="676" y="87" fill="#21ff38" text-anchor="middle">AUDIT</text>
+
+          <rect x="746" y="60" width="110" height="44" fill="#050b06" stroke="#1d5c27"/>
+          <text x="801" y="82" fill="#caffd0" text-anchor="middle">READY</text>
+          <text x="801" y="96" fill="#8dbb95" text-anchor="middle" font-size="10">TO LAND</text>
+
+          <rect x="874" y="60" width="92" height="44" fill="#050b06" stroke="#ffc046"/>
+          <text x="920" y="87" fill="#ffc046" text-anchor="middle">LAND</text>
+        </g>
+        <!-- forward arrows -->
+        <g stroke="#5ed56d" stroke-width="1.4" marker-end="url(#ar)" fill="none">
+          <path d="M118 82 L132 82"/><path d="M240 82 L254 82"/><path d="M362 82 L376 82"/>
+          <path d="M484 82 L498 82"/><path d="M606 82 L620 82"/><path d="M728 82 L742 82"/>
+        </g>
+        <g stroke="#ffc046" stroke-width="1.4" marker-end="url(#ar-a)" fill="none">
+          <path d="M856 82 L870 82"/>
+        </g>
+        <!-- repair loops -->
+        <g stroke="#ffc046" stroke-width="1.3" marker-end="url(#ar-a)" fill="none" stroke-dasharray="5 4">
+          <path d="M554 104 L554 150 L432 150 L432 106"/>
+          <path d="M676 104 L676 186 L420 186 L420 106"/>
+        </g>
+        <text x="470" y="145" fill="#ffc046" font-size="11">verification failed</text>
+        <text x="470" y="181" fill="#ffc046" font-size="11">audit failed</text>
+        <!-- human gate -->
+        <text x="920" y="126" fill="#8dbb95" font-size="10" text-anchor="middle">human</text>
+        <text x="920" y="139" fill="#8dbb95" font-size="10" text-anchor="middle">gate</text>
+        <!-- legend -->
+        <text x="14" y="232" fill="#8dbb95" font-size="10.5">SOLID = advance   //   DASHED = bounded repair round   //   AMBER = requires explicit confirmation</text>
+        <text x="14" y="34" fill="#8dbb95" font-size="10.5">TASK LIFECYCLE</text>
+      </g>
+    </svg>
+    <figcaption>Implement, Verify and Audit reset together on failure and retry, up to the task's repair budget. Exhaust the budget and the task fails rather than degrading quietly.</figcaption>
+  </figure>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Stage</th><th>Owner</th><th>What actually happens</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Brief</strong></td><td>orchestrator</td><td>Writes <code>brief.md</code> with the request and the acceptance commands.</td></tr>
+      <tr><td><strong>Worktree</strong></td><td>orchestrator</td><td>Creates branch <code>fknrtd/&lt;task&gt;-&lt;title&gt;</code> and an isolated worktree.</td></tr>
+      <tr><td><strong>Plan</strong></td><td>Lead</td><td>Read-only pass. Produces <code>plan.md</code>. Forbidden from editing.</td></tr>
+      <tr><td><strong>Implement</strong></td><td>Implementer</td><td>Writes code inside the worktree only. Changed paths are recorded.</td></tr>
+      <tr><td><strong>Verify</strong></td><td>orchestrator</td><td>Runs your commands through the system shell. Exit codes and output tails stored.</td></tr>
+      <tr><td><strong>Audit</strong></td><td>Auditor</td><td>Reads the real diff. Must emit exactly one verdict marker.</td></tr>
+      <tr><td><strong>ReadyToLand</strong></td><td>orchestrator</td><td>Commits verified changes. Stops. Waits for a human.</td></tr>
+      <tr><td><strong>Land</strong></td><td><strong>you</strong></td><td>Merges <code>--no-ff</code> after every gate passes.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note warn">
+    <span class="lbl">The verdict contract</span>
+    <p>The auditor must finish with <code>FKNRTD_VERDICT: PASS</code> or
+      <code>FKNRTD_VERDICT: FAIL</code> alone on a line. The prompt contains both markers, so the
+      orchestrator strips its own prompt from the reply before counting. One PASS and zero FAIL is
+      a pass. Anything else &mdash; both markers, neither marker, two passes &mdash; fails.
+      Ambiguity never merges.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="seats">
+  <h2>Seats <span class="slash">//</span> Who does what to whom</h2>
+  <p class="lede">Three roles, deliberately not collapsed</p>
+
+  <div class="grid">
+    <div class="card">
+      <h4>Lead</h4>
+      <p>Plans in read-only mode. Inspects the repository, names the files that will change, states
+        the risks. Produces no code.</p>
+    </div>
+    <div class="card">
+      <h4>Implementer</h4>
+      <p>Writes the change inside the isolated worktree. Cannot merge. Cannot leave the worktree.
+        Its report is treated as a claim, not evidence.</p>
+    </div>
+    <div class="card">
+      <h4>Auditor</h4>
+      <p>Reads the diff and the verification results. Read-only. Must return an explicit verdict.
+        Should not be the same agent that implemented.</p>
+    </div>
+  </div>
+
+  <p>Any command-line coding tool can hold any seat. Claude Code and OpenAI Codex CLI ship
+    configured; anything else is a JSON object away.</p>
+
+  <h3>Registering another agent</h3>
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> agent registration</div>
+<pre><span class="c"># arguments are an array, so there are no quoting rules to get wrong</span>
+<span class="p">fknrtd</span> agent add <span class="o">-id</span> gemini <span class="o">-exe</span> gemini <span class="o">-arg</span>=-p <span class="o">-arg</span>=<span class="c">"{prompt}"</span>
+
+<span class="c"># or supply a full definition with per-stage profiles</span>
+<span class="p">fknrtd</span> agent add <span class="o">-file</span> examples/generic-agent.json</pre>
+  </div>
+  <p>Placeholders substituted at launch: <code>{prompt}</code>, <code>{taskId}</code>,
+    <code>{workspace}</code>, <code>{branch}</code>. A profile may deliver the prompt as an
+    argument or on standard input.</p>
+
+  <div class="note">
+    <span class="lbl">Sandboxing is theirs, not ours</span>
+    <p>Worktree isolation prevents agents colliding with each other. It is <strong>not</strong> a
+      security boundary. Only the agent's own CLI can constrain what it touches &mdash; use its
+      read-only or plan mode for the Plan and Audit seats.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="install">
+  <h2>Install <span class="slash">//</span> One tool, no supply chain</h2>
+  <p class="lede">Requires .NET 10 SDK and Git 2.28 or newer</p>
+
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> windows</div>
+<pre><span class="p">scripts\install.cmd</span></pre>
+  </div>
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> posix</div>
+<pre><span class="p">./scripts/install.sh</span></pre>
+  </div>
+
+  <p>Both pack <code>src/FKNRTD.Cli</code> into <code>artifacts/</code> and install or update the
+    global tool. Restart the terminal if <code>fknrtd</code> is not immediately on
+    <code>PATH</code>. Confirm with:</p>
+
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> verification</div>
+<pre><span class="p">fknrtd</span> --version        <span class="c"># FKNRTD.CLI 1.0.0</span>
+<span class="p">fknrtd</span> doctor           <span class="c"># .NET, Git, config, writable state, every agent</span></pre>
+  </div>
+
+  <p><code>doctor</code> reports rather than throwing. An agent that is not installed shows as a
+    failed check, not a crash.</p>
+
+  <div class="note">
+    <span class="lbl">Zero dependencies, deliberately</span>
+    <p>No <code>PackageReference</code> exists in any project. The entire product is the .NET base
+      class library. Nothing is vendored, nothing is transitive, nothing else can be compromised on
+      your behalf.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="quickstart">
+  <h2>Quickstart <span class="slash">//</span> First supervised task</h2>
+  <p class="lede">From empty repository to merged, verified work</p>
+
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> 01 // initialise</div>
+<pre><span class="p">cd</span> /path/to/your/repo
+<span class="p">fknrtd</span> init
+<span class="p">git</span> add .fknrtd/config.json .fknrtd/.gitignore
+<span class="p">git</span> commit <span class="o">-m</span> <span class="c">"Configure FKNRTD.CLI"</span>
+<span class="p">fknrtd</span> doctor</pre>
+  </div>
+  <p><code>init</code> requires an existing Git repository and detects your verification commands
+    where it can. Commit the config: it is reviewable project policy, and an uncommitted state
+    directory will block landing later.</p>
+
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> 02 // commission the work</div>
+<pre><span class="p">fknrtd</span> task create <span class="c">"Add JWT validation"</span> \
+  <span class="o">-brief</span> <span class="c">"Validate the signature and expiry on every inbound request.
+          Reject with 401. Do not change the login path."</span> \
+  <span class="o">-verify</span> <span class="c">"dotnet test"</span> \
+  <span class="o">-lead</span> claude <span class="o">-implementer</span> codex <span class="o">-auditor</span> claude</pre>
+  </div>
+
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> 03 // run and watch</div>
+<pre><span class="p">fknrtd</span> task run FKN-20260915-163416-cf12aec4
+<span class="p">fknrtd</span> task show FKN-20260915-163416-cf12aec4   <span class="c"># per-stage results</span>
+<span class="p">fknrtd</span> dashboard                                <span class="c"># live command center</span></pre>
+  </div>
+
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> 04 // land it yourself</div>
+<pre><span class="p">fknrtd</span> task land FKN-20260915-163416-cf12aec4 <span class="o">-confirm</span> LAND
+<span class="p">fknrtd</span> task cleanup FKN-20260915-163416-cf12aec4 <span class="o">-confirm</span> REMOVE</pre>
+  </div>
+
+  <div class="note">
+    <span class="lbl">What landing checks before it will move</span>
+    <p>The primary worktree is clean. You are on the task's base branch. Verification passed. The
+      audit returned a single PASS. You typed <code>-confirm LAND</code>. Any one missing and the
+      merge is refused with the reason.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="commands">
+  <h2>Commands <span class="slash">//</span> Full surface</h2>
+  <p class="lede">Single-dash options; <code>--</code> ends parsing</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Command</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td><code>fknrtd init [path]</code></td><td>Create configuration in an existing Git repository</td></tr>
+      <tr><td><code>fknrtd doctor</code></td><td>Check runtime, Git, config, writable state, agent executables</td></tr>
+      <tr><td><code>fknrtd dashboard</code></td><td>Open the interactive command center</td></tr>
+      <tr><td><code>fknrtd dashboard -once</code></td><td>Render one frame and exit</td></tr>
+      <tr><td><code>fknrtd status</code></td><td>One frame; exit code <strong>3</strong> signals a live collision</td></tr>
+      <tr><td><code>fknrtd status -json</code></td><td>Complete normalised snapshot for scripts</td></tr>
+      <tr><td><code>fknrtd config show | path | validate</code></td><td>Inspect and validate configuration</td></tr>
+      <tr><td><code>fknrtd task create "Title" -brief … -verify …</code></td><td>Commission a task</td></tr>
+      <tr><td><code>fknrtd task list | show | run | retry | cancel</code></td><td>Task lifecycle</td></tr>
+      <tr><td><code>fknrtd task land &lt;id&gt; -confirm LAND</code></td><td>Merge verified, audited work</td></tr>
+      <tr><td><code>fknrtd task cleanup &lt;id&gt; -confirm REMOVE</code></td><td>Remove the worktree and branch</td></tr>
+      <tr><td><code>fknrtd agent list | add | enable | disable</code></td><td>Manage registered agents</td></tr>
+      <tr><td><code>fknrtd message send | list</code></td><td>Agent-to-agent message bus</td></tr>
+      <tr><td><code>fknrtd claim add | list | renew | release</code></td><td>Reserve paths for read or write</td></tr>
+      <tr><td><code>fknrtd usage refresh | list | set</code></td><td>Capacity telemetry</td></tr>
+      <tr><td><code>fknrtd integration install-claude-statusline</code></td><td>Install the statusline into Claude Code</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Dashboard keys</h3>
+  <p><code>Up</code>/<code>Down</code> select &middot; <code>Enter</code> run &middot;
+     <code>N</code> new &middot; <code>C</code> cancel &middot; <code>G</code> land &middot;
+     <code>M</code> message &middot; <code>L</code> logs &middot; <code>U</code> usage &middot;
+     <code>Tab</code> view &middot; <code>Q</code> quit.</p>
+  <p>The layout has three breakpoints: narrow below 84 columns, medium to 119, wide at 120 and
+    above. Redirect the output and it renders a single frame instead of taking the terminal.
+    <code>-width</code> and <code>-height</code> force a size for scripts and screenshots.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="config">
+  <h2>Config <span class="slash">//</span> Executable project policy</h2>
+  <p class="lede">&lt;repo&gt;/.fknrtd/config.json</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>defaultBaseRef</code></td><td>current branch</td><td>Base new task branches fork from</td></tr>
+      <tr><td><code>maxParallelAgents</code></td><td>4</td><td>Concurrent dashboard task cap</td></tr>
+      <tr><td><code>defaultMaxRepairRounds</code></td><td>1</td><td>Repair attempts before a task fails</td></tr>
+      <tr><td><code>agentTimeoutSeconds</code></td><td>3600</td><td>Per-agent process timeout</td></tr>
+      <tr><td><code>verificationTimeoutSeconds</code></td><td>600</td><td>Per-verification-command timeout</td></tr>
+      <tr><td><code>agentStaleAfterSeconds</code></td><td>120</td><td>Age at which agent state is stale</td></tr>
+      <tr><td><code>claimStaleAfterSeconds</code></td><td>300</td><td>Age at which a file claim is stale</td></tr>
+      <tr><td><code>dashboardRefreshMilliseconds</code></td><td>1000</td><td>Refresh interval</td></tr>
+      <tr><td><code>requireCleanTreeForLanding</code></td><td>true</td><td>Block landing on a dirty primary worktree</td></tr>
+      <tr><td><code>autoCommitAgentChanges</code></td><td>true</td><td>Commit verified changes automatically</td></tr>
+      <tr><td><code>defaultVerificationCommands</code></td><td>detected</td><td>Commands applied to new tasks</td></tr>
+      <tr><td><code>agents</code></td><td>claude, codex</td><td>Registered agent definitions</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note stop">
+    <span class="lbl">Treat this file as code</span>
+    <p>Verification commands are executed through <code>cmd.exe</code> on Windows or
+      <code>/bin/sh</code> elsewhere. A malicious or careless edit to <code>config.json</code> is
+      arbitrary code execution on your machine. Review changes to it exactly as you would review a
+      build script. Commit it so the change is visible.</p>
+  </div>
+
+  <p>No environment variables configure behaviour. The process reads <code>PATH</code>,
+    <code>PATHEXT</code> and <code>COMSPEC</code> only, to find executables and pick a shell. It
+    stores no credentials: every agent authenticates itself.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="effective">
+  <h2>Effective Use <span class="slash">//</span> Operator doctrine</h2>
+  <p class="lede">The difference between a useful run and an expensive one</p>
+
+  <h3>1. A brief is a contract, not a wish</h3>
+  <p>The single largest quality lever. Name the files. State what must not change. Give the
+    acceptance criteria as commands, not adjectives. "Improve error handling" produces an
+    expensive mess; "Wrap every call in <code>PaymentClient</code> so a timeout returns
+    <code>Result.Failure</code>, do not change the retry policy, <code>dotnet test</code> must
+    pass" produces a diff you can review in a minute.</p>
+
+  <h3>2. Never let one agent implement and audit</h3>
+  <p>A model reviewing its own work agrees with itself. Put a different vendor in the Auditor seat
+    if you can, a different model at minimum. This is the entire point of the tool; collapsing the
+    seats turns it into an expensive script runner.</p>
+
+  <h3>3. Give it a real verification command</h3>
+  <p>With no commands the Verify stage is skipped and the audit becomes the only gate &mdash; you
+    are back to trusting prose. A build alone is weak evidence. A build plus tests that would
+    actually fail is the thing that makes the repair loop work.</p>
+
+  <div class="note warn">
+    <span class="lbl">Watch for empty evidence</span>
+    <p>A verification command that passes without doing anything is worse than none, because it
+      looks like proof. <code>dotnet test</code> against a project with no tests exits zero. Check
+      that your gate can fail before you trust it.</p>
+  </div>
+
+  <h3>4. Keep the repair budget low</h3>
+  <p>The default is one round, and that is usually right. An agent that could not satisfy a clear
+    brief and a failing test in two attempts is not going to find it on the fifth; it is going to
+    write increasingly speculative code while spending your allowance. A failed task with evidence
+    beats a passed task with damage.</p>
+
+  <h3>5. Mind the agent lease</h3>
+  <p>An agent runs one task at a time, enforced by an exclusive lease. If Claude holds both Lead
+    and Auditor and you start several tasks at once, they serialise; a long first task can make a
+    later one fail on lease timeout. Spread the seats across agents before you raise
+    <code>maxParallelAgents</code>.</p>
+
+  <h3>6. Read the evidence, not the summary</h3>
+  <p>When something looks wrong, go to the artifacts. The plan says what the Lead intended, the
+    audit says what the Auditor actually found, the logs say what the process actually printed.
+    Every one of them is a file on disk with no interpretation layer.</p>
+
+  <h3>7. Land deliberately</h3>
+  <p>The confirmation token is not ceremony. It is the last point at which a human reads a diff
+    that three machines have agreed about. Read it.</p>
+
+  <details>
+    <summary>Task shapes that work well &mdash; and badly</summary>
+    <div class="det-body">
+      <p><strong>Well:</strong> bounded refactors, adding a method to an existing class, migrating
+        a call site pattern, adding tests to an untested unit, mechanical renames, fixing a
+        reproducible bug with a failing test attached.</p>
+      <p><strong>Badly:</strong> open-ended design, anything needing product judgement, work whose
+        acceptance cannot be expressed as a command, changes spanning many modules at once, and
+        anything where you cannot describe "done" in a sentence.</p>
+    </div>
+  </details>
+</section>
+
+<!-- ============================================================ -->
+<section id="state">
+  <h2>Evidence <span class="slash">//</span> What is kept and where</h2>
+  <p class="lede">All of it is a file; none of it is a database</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Path</th><th>Contents</th><th>Committed</th></tr></thead>
+    <tbody>
+      <tr><td><code>.fknrtd/config.json</code></td><td>Project configuration</td><td>yes</td></tr>
+      <tr><td><code>.fknrtd/tasks/</code></td><td>One JSON document per task</td><td>no</td></tr>
+      <tr><td><code>.fknrtd/artifacts/&lt;task&gt;/</code></td><td>brief.md, plan.md, audit-N.md</td><td>no</td></tr>
+      <tr><td><code>.fknrtd/logs/&lt;task&gt;/</code></td><td>Per-stage process logs, written live</td><td>no</td></tr>
+      <tr><td><code>.fknrtd/runtime/events.jsonl</code></td><td>Append-only event history, rotated</td><td>no</td></tr>
+      <tr><td><code>.fknrtd/runtime/messages.jsonl</code></td><td>Append-only message bus</td><td>no</td></tr>
+      <tr><td><code>.fknrtd/runtime/claims/</code></td><td>Active file claims</td><td>no</td></tr>
+      <tr><td><code>.fknrtd/runtime/locks/</code></td><td>Exclusive leases, PID recorded</td><td>no</td></tr>
+      <tr><td><code>.fknrtd/worktrees/</code></td><td>Isolated per-task Git worktrees</td><td>no</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Writes are atomic: temporary file, then rename. History is JSON Lines, read from the tail and
+    rotated past a size cap, so a long-lived project does not make the dashboard slower every day.
+    A per-task exclusive lease stops two processes running the same task.</p>
+
+  <p>Machine-readable state for your own tooling:</p>
+  <div class="term">
+    <div class="term-bar"><span class="dot"></span> snapshot</div>
+<pre><span class="p">fknrtd</span> status <span class="o">-json</span> | jq <span class="c">'.tasks[] | {id, status, stage}'</span>
+<span class="p">fknrtd</span> status <span class="c"># exit 3 == live collision, usable in a pre-commit hook</span></pre>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="trouble">
+  <h2>Faults <span class="slash">//</span> When it will not cooperate</h2>
+  <p class="lede">Symptom, cause, remedy</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Symptom</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>Landing blocked: uncommitted changes</td><td>The primary worktree is dirty. Commonly the <code>.fknrtd/</code> directory you never committed after <code>init</code>.</td></tr>
+      <tr><td>Landing blocked: wrong branch</td><td>You are not on the task's base branch. Check out the base and retry.</td></tr>
+      <tr><td>Agent shows Offline</td><td>Its executable did not resolve on <code>PATH</code>. Run <code>doctor</code>.</td></tr>
+      <tr><td>Task is busy / lease held</td><td>Another process owns it. The message names the holding process id.</td></tr>
+      <tr><td>Audit failed with a sound-looking report</td><td>The verdict marker was missing, duplicated, or both markers appeared. Read <code>audit-N.md</code>.</td></tr>
+      <tr><td>Commit refused, no identity</td><td><code>user.name</code> and <code>user.email</code> are unset in that repository.</td></tr>
+      <tr><td>Agent ran forever</td><td>It did not. It was killed at <code>agentTimeoutSeconds</code> and the partial output was kept.</td></tr>
+      <tr><td><code>fknrtd</code> not found after install</td><td>Restart the terminal so <code>PATH</code> is refreshed.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Cancellation is a file marker: <code>fknrtd task cancel &lt;id&gt;</code> requests it and
+    running stages observe it within half a second. A cancelled task can be resumed with
+    <code>task retry</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="limits">
+  <h2>Limits <span class="slash">//</span> Stated plainly</h2>
+  <p class="lede">What this tool does not do, and will not pretend to</p>
+
+  <ul>
+    <li><strong>It is not a sandbox.</strong> Worktrees stop agents colliding. They do not stop an
+      agent reaching the rest of your filesystem. Only the agent's own CLI can do that.</li>
+    <li><strong>It cannot make a bad brief good.</strong> Vague instructions produce vague diffs,
+      faster and at greater expense than doing it yourself.</li>
+    <li><strong>An audit is a second opinion, not a proof.</strong> A model can approve wrong code
+      convincingly. The deterministic commands are the hard evidence; the audit is judgement on
+      top of it.</li>
+    <li><strong>Verification is only as good as your commands.</strong> The tool records exit
+      codes faithfully. It cannot tell that your test suite asserts nothing.</li>
+    <li><strong>Display width is terminal-dependent.</strong> Layout follows East Asian wide and
+      fullwidth plus emoji presentation. A terminal with different ambiguous-width rules will
+      disagree.</li>
+    <li><strong>POSIX paths are unverified.</strong> Development and validation ran on Windows.
+      The <code>/bin/sh</code> execution path and <code>install.sh</code> have not been exercised
+      on Linux or macOS.</li>
+    <li><strong>No telemetry leaves your machine.</strong> There is no server, no endpoint, no
+      metrics exporter. Capacity figures come from the agent CLIs you already run.</li>
+  </ul>
+
+  <div class="note">
+    <span class="lbl">Evidence standard</span>
+    <p>Every figure quoted in this document was produced by running the command on a real machine
+      against a real commit. Where something was not measured, it is not claimed. See
+      <code>VALIDATION.md</code> for the record and its stated limits.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <p class="sig">Nullcromancer // FKNRTD.CLI 1.0.0 // MIT</p>
+  <p>Further reading in this repository: <code>README.md</code> for the reference,
+     <code>docs/ARCHITECTURE.md</code> for the internals, <code>docs/COMMANDS.md</code> for the
+     command table, <code>AGENTS.md</code> for the invariants every contributor holds to, and
+     <code>VALIDATION.md</code> for what was actually tested.</p>
+  <p style="color:#5ed56d">The work is not done because a machine said so. It is done because it was checked.</p>
+</footer>
+
+</body>
+</html>
