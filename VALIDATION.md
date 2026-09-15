@@ -1,26 +1,86 @@
 # Validation record
 
-Date: 2026-09-14
+Date: 2026-09-15
+Revision: 1.0.0
+Commit verified: `8809a88b87920137852761361f2d6f44999221be` (branch `main`)
 
-## Checks completed in the authoring environment
+## What was actually executed
 
-- All 28 C# files passed a lexical delimiter, comment, character-literal, regular-string, verbatim-string, and raw-string structure scan.
-- All project XML files parsed successfully.
-- All JSON examples parsed successfully.
-- The GitHub Actions workflow parsed successfully as YAML.
-- The Unix installer passed `sh -n` syntax validation.
-- Every relative Markdown link resolves to a packaged file.
-- No zero-byte source or documentation files were found.
-- A real Git smoke test created and removed a linked worktree under an ignored `.fknrtd/worktrees` directory.
-- The repository contains no third-party runtime package reference.
+Every result below was produced by running the command on this machine against the
+commit named above. Nothing here is inferred, and nothing is reported that was not run.
 
-## Build limitation
+Environment: .NET SDK 10.0.302, .NET runtime 10.0.10, Git 2.55.0, Windows 11 (10.0.26200).
 
-The authoring container did not contain `dotnet`, `csc`, Mono, MSBuild, or a cached .NET SDK, and its network policy did not permit downloading the SDK. A local compilation was therefore not possible in that environment and is not falsely reported as completed.
+| Command | Result |
+| --- | --- |
+| `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 18/18 self-tests passed, exit code 0. |
+| `fknrtd init` in a fresh Git repository | Created `.fknrtd/` state and configuration, exit 0. |
+| `fknrtd doctor` | All checks passed, exit 0; both configured agent executables resolved and reported versions. |
+| `fknrtd task create` | Task created with an `FKN-` identifier. |
+| `fknrtd status -json` | Emitted a complete normalised snapshot. |
+| `fknrtd dashboard -once` | Rendered a single frame and exited. |
+| `fknrtd telemetry claude-statusline` | Rendered a statusline from the sample payload in `examples/`. |
 
-## Reproducible build verification
+## Self-test coverage
 
-Run from the repository root on a machine with the .NET 10 SDK:
+The suite in `tests/FKNRTD.SelfTest/Program.cs` performs 18 checks:
+
+1. Atomic snapshot and compact JSON Lines event storage
+2. Process timeout kills the process tree and reports the timeout
+3. Post-exit output drain is bounded when a grandchild inherits the pipe handles
+4. An unlaunchable executable is reported as a start failure, not thrown
+5. File lease acquisition is bounded and names the holding process
+6. JSON Lines tail reads tolerate a concurrent appender
+7. JSON Lines rotation preserves the most recent entries
+8. Windows PATHEXT resolution beats an extensionless shim of the same name
+9. A configuration file without the timeout keys still loads and receives defaults
+10. Doctor renders an unlaunchable agent instead of crashing
+11. Claude context and allowance conversion from used to remaining
+12. Codex duration-based rate-limit parsing and missing-bucket behaviour
+13. Same-worktree collision, separate-worktree merge risk, and stale-claim classification
+14. The audit verdict ignores an echoed prompt containing both verdict markers
+15. Git path lists round-trip verbatim, including non-ASCII and spaces
+16. Dashboard frames preserve display width and border topology
+17. Dashboard command-line dimension overrides take precedence over detection
+18. A complete fake-agent workflow: worktree, lead plan, implementation, deterministic
+    verification, exact audit verdict, commit, primary-state resolution from the linked
+    worktree, explicit landing, and cleanup
+
+## Independent renderer verification
+
+The renderer was checked from outside its own code, not only by the self-tests that use
+its own width implementation.
+
+Frames were produced from the built binary with
+`fknrtd dashboard -once -no-color -width W -height 32` at widths 60, 72, 84, 100, 119,
+120, 140 and 200, then measured with an independent Unicode width implementation
+(`unicodedata.east_asian_width` plus combining-mark detection).
+
+- Every line measured exactly the requested display width at every width.
+- No ESC (U+001B) character appeared in any frame under `-no-color`.
+- Repeated with task titles containing Japanese text and an emoji: wide characters were
+  confirmed present in the output and every line still measured exactly the requested
+  width at 84, 120 and 160.
+- A rendered 120-column frame contains no doubled corner seams; adjacent panels share
+  joined border junctions.
+
+## Limits of this record
+
+- Display width is terminal-dependent. The implementation follows East Asian
+  Wide/Fullwidth plus emoji presentation, which matches Windows Terminal and most modern
+  emulators. A terminal that renders ambiguous-width characters as double width will
+  still disagree.
+- The end-to-end workflow self-test drives a fake agent, not Claude Code or Codex CLI. It
+  proves the orchestration, worktree, verification, verdict and landing logic. It does not
+  prove behaviour against any particular assistant's real output.
+- Measured code coverage was not collected and is therefore not claimed.
+- Only Windows was exercised. The POSIX paths in `ProcessRunner.RunShellAsync` and
+  `scripts/install.sh` are unverified on Linux and macOS.
+
+## Reproducing this record
+
+From the repository root on a machine with the .NET 10 SDK:
 
 ```sh
 dotnet --info
@@ -29,12 +89,5 @@ dotnet build FKNRTD.CLI.sln -c Release --no-restore
 dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
 ```
 
-The self-test performs five checks:
-
-1. Atomic snapshot and compact JSONL event storage
-2. Claude context and allowance conversion from used to remaining
-3. Codex duration-based rate-limit parsing and missing-bucket behavior
-4. Same-worktree collision, separate-worktree merge risk, and stale-claim classification
-5. A complete fake-agent workflow: Git worktree, lead plan, implementation, deterministic verification, exact audit verdict, commit, primary-state resolution from the linked worktree, explicit landing, and cleanup
-
-The included GitHub Actions workflow executes the build and self-test on current Windows and Ubuntu runners with .NET 10.
+The self-test prints one line per check and a final `N/N self-tests passed` count,
+exiting 0 only when every check passes.
