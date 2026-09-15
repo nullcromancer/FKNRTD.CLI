@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using FKNRTD.Commands;
+using FKNRTD.Dashboard;
 using FKNRTD.Domain;
 using FKNRTD.Services;
 using FKNRTD.Telemetry;
@@ -28,6 +30,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Collision classification", TestConflictDetectionAsync),
     ("Audit verdict ignores echoed prompt", TestAuditVerdictAsync),
     ("Git paths round trip verbatim", TestGitPathRoundTripAsync),
+    ("Dashboard frames preserve display width and topology", TestDashboardRendererAsync),
+    ("Dashboard CLI dimensions override detection", TestDashboardDimensionsAsync),
     ("End-to-end isolated workflow", TestWorkflowAsync)
 };
 
@@ -125,6 +129,178 @@ static async Task TestJsonLinesAsync()
         var physicalLines = await File.ReadAllLinesAsync(store.Paths.Events).ConfigureAwait(false);
         Equal(2, physicalLines.Length, "JSONL physical line count");
     }).ConfigureAwait(false);
+}
+
+static Task TestDashboardRendererAsync()
+{
+    var tasks = Enumerable.Range(0, 12)
+        .Select(index => new WorkflowTask
+        {
+            Id = $"FKN-RENDER-{index:00}",
+            Title = index == 10 ? "Selected 任务 🚀" : $"Renderer task {index:00}",
+            LeadAgentId = "claude",
+            ImplementerAgentId = "codex",
+            AuditorAgentId = "claude",
+            Status = index == 10 ? WorkflowStatus.Running : WorkflowStatus.Queued
+        })
+        .ToArray();
+    var snapshot = new DashboardSnapshot
+    {
+        Config = new FknrtdConfig
+        {
+            ProjectName = "renderer",
+            Agents =
+            [
+                new AgentDefinition { Id = "claude", DisplayName = "Claude", Executable = "claude" },
+                new AgentDefinition { Id = "codex", DisplayName = "Codex", Executable = "codex" }
+            ]
+        },
+        Git = new GitSnapshot
+        {
+            RepositoryName = "测试-repo-😀",
+            Branch = "feature/é-render"
+        },
+        Tasks = tasks,
+        CapturedAt = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)
+    };
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!);
+    var widths = new[] { 60, 72, 84, 100, 119, 120, 140, 200 };
+    var heights = new[] { 20, 32, 48 };
+
+    foreach (var width in widths)
+    {
+        foreach (var height in heights)
+        {
+            var frame = renderer.Render(snapshot, width, height, useColor: false);
+            var lines = FrameLines(frame);
+            Equal(height, lines.Length, $"Frame line count at {width}x{height}");
+            True(!frame.Contains('\u001b'), $"Colorless frame ESC at {width}x{height}");
+            foreach (var line in lines)
+            {
+                Equal(width, Text.DisplayWidth(line), $"Frame display width at {width}x{height}");
+            }
+
+            Equal("┌", DisplayCell(lines[0], 0), $"Header upper-left at {width}x{height}");
+            Equal("┐", DisplayCell(lines[0], width - 1), $"Header upper-right at {width}x{height}");
+            True(!frame.Contains("┐┌", StringComparison.Ordinal), $"Doubled upper seam at {width}x{height}");
+            True(!frame.Contains("┘└", StringComparison.Ordinal), $"Doubled lower seam at {width}x{height}");
+        }
+    }
+
+    var narrow = FrameLines(renderer.Render(snapshot, 72, 32, useColor: false));
+    Equal("├", DisplayCell(narrow[16], 0), "Narrow joined left border");
+    Equal("┤", DisplayCell(narrow[16], 71), "Narrow joined right border");
+
+    var medium = FrameLines(renderer.Render(snapshot, 100, 32, useColor: false));
+    Equal("┬", DisplayCell(medium[4], 49), "Medium upper junction");
+    Equal("┼", DisplayCell(medium[16], 49), "Medium center junction");
+
+    var wide = FrameLines(renderer.Render(snapshot, 120, 32, useColor: false));
+    Equal("┬", DisplayCell(wide[4], 35), "Wide first upper junction");
+    Equal("┬", DisplayCell(wide[4], 80), "Wide second upper junction");
+    Equal("┼", DisplayCell(wide[16], 35), "Wide first center junction");
+    Equal("┼", DisplayCell(wide[16], 80), "Wide second center junction");
+
+    var selected = renderer.Render(snapshot, 60, 20, useColor: false, selectedTaskIndex: 10);
+    True(selected.Contains("FKN-RENDER-10", StringComparison.Ordinal), "Scrolled pipeline selected task");
+    True(selected.Contains("任务", StringComparison.Ordinal), "Unicode selected task title");
+    True(selected.Contains('↑') && selected.Contains('↓'), "Scrolled pipeline overflow indicators");
+    True(FrameLines(selected).All(line => Text.DisplayWidth(line) == 60), "Unicode selected frame width");
+
+    Equal(3, Text.DisplayWidth("é😀"), "Combining and emoji display width");
+    Equal(2, Text.DisplayWidth("❤️"), "Emoji presentation sequence width");
+    Equal("é", Text.Truncate("é", 1), "Combining sequence preservation");
+    Equal("…", Text.Truncate("😀x", 2), "Surrogate-safe truncation");
+    True(!Text.Truncate("ab😀", 3).EndsWith('\ud83d'), "Truncation has no dangling high surrogate");
+
+    var logRoot = Path.Combine(Path.GetTempPath(), "fknrtd-render-log-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(logRoot));
+        var logPath = store.TaskLogPath(tasks[10].Id, tasks[10].CurrentStage, tasks[10].RepairRound);
+        Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+        using var writer = new FileStream(
+            logPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.ReadWrite | FileShare.Delete);
+        using (var textWriter = new StreamWriter(writer, new UTF8Encoding(false), leaveOpen: true))
+        {
+            textWriter.WriteLine("active agent log line");
+        }
+
+        var logRenderer = new DashboardApp(null!, null!, null!, null!, null!, store);
+        var logFrame = logRenderer.RenderLog(snapshot, 72, 20, selectedTaskIndex: 10);
+        True(logFrame.Contains("active agent log line", StringComparison.Ordinal), "Shared active task log rendering");
+    }
+    finally
+    {
+        if (Directory.Exists(logRoot))
+        {
+            Directory.Delete(logRoot, recursive: true);
+        }
+    }
+
+    return Task.CompletedTask;
+}
+
+static async Task TestDashboardDimensionsAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { ProjectName = "dimension-test" }).ConfigureAwait(false);
+        var originalOutput = Console.Out;
+        using var output = new StringWriter();
+        try
+        {
+            Console.SetOut(output);
+            var exitCode = await CommandDispatcher.ExecuteAsync(
+                    new CliArguments(["status", "-root", root, "-width", "72", "-height", "20", "-no-color"]),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            Equal(0, exitCode, "Dimension override command exit code");
+        }
+        finally
+        {
+            Console.SetOut(originalOutput);
+        }
+
+        var lines = FrameLines(output.ToString());
+        if (lines.Length > 0 && lines[^1].Length == 0)
+        {
+            lines = lines[..^1];
+        }
+
+        Equal(20, lines.Length, "Dimension override frame height");
+        True(lines.All(line => Text.DisplayWidth(line) == 72), "Dimension override frame width");
+        True(!output.ToString().Contains('\u001b'), "Dimension override colorless output");
+    }).ConfigureAwait(false);
+}
+
+static string[] FrameLines(string frame) =>
+    frame.Split(["\r\n", "\n"], StringSplitOptions.None);
+
+static string DisplayCell(string line, int column)
+{
+    var cursor = 0;
+    foreach (var element in Text.Elements(line))
+    {
+        var width = Text.DisplayWidth(element);
+        if (cursor == column)
+        {
+            return element;
+        }
+
+        if (cursor < column && cursor + width > column)
+        {
+            return string.Empty;
+        }
+
+        cursor += width;
+    }
+
+    throw new InvalidOperationException($"Display column {column} is outside line width {cursor}.");
 }
 
 static async Task TestProcessTimeoutAsync()

@@ -167,7 +167,13 @@ internal static class CommandDispatcher
         CancellationToken cancellationToken)
     {
         var color = UseColor(arguments);
-        await runtime.Dashboard.RunAsync(arguments.Has("once"), color, cancellationToken).ConfigureAwait(false);
+        await runtime.Dashboard.RunAsync(
+                arguments.Has("once"),
+                color,
+                GetDimension(arguments, "width"),
+                GetDimension(arguments, "height"),
+                cancellationToken)
+            .ConfigureAwait(false);
         return 0;
     }
 
@@ -183,7 +189,13 @@ internal static class CommandDispatcher
             return snapshot.Conflicts.Any(conflict => conflict.Kind == ConflictKind.Collision) ? 3 : 0;
         }
 
-        await runtime.Dashboard.RunAsync(once: true, UseColor(arguments), cancellationToken).ConfigureAwait(false);
+        await runtime.Dashboard.RunAsync(
+                once: true,
+                UseColor(arguments),
+                GetDimension(arguments, "width"),
+                GetDimension(arguments, "height"),
+                cancellationToken)
+            .ConfigureAwait(false);
         return snapshot.Conflicts.Any(conflict => conflict.Kind == ConflictKind.Collision) ? 3 : 0;
     }
 
@@ -926,6 +938,14 @@ internal static class CommandDispatcher
             ? result
             : throw new ArgumentException($"'{value}' is not a valid {typeof(T).Name} value.");
 
+    private static int? GetDimension(CliArguments arguments, string name)
+    {
+        var value = arguments.GetInt(name);
+        return value is null || value > 0
+            ? value
+            : throw new ArgumentException($"Option -{name} must be greater than zero.");
+    }
+
     private static string Required(string? value, string label) => !string.IsNullOrWhiteSpace(value)
         ? value
         : throw new ArgumentException($"A {label} is required.");
@@ -969,8 +989,8 @@ internal static class CommandDispatcher
             Start
               fknrtd init [path]
               fknrtd doctor
-              fknrtd dashboard
-              fknrtd status [-json]
+              fknrtd dashboard [-once] [-width <cols>] [-height <rows>]
+              fknrtd status [-json] [-width <cols>] [-height <rows>]
 
             Tasks
               fknrtd task create "Title" -brief "What to build" -verify "dotnet test" [-run]
