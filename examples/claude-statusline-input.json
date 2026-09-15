@@ -1,0 +1,19 @@
+{
+  "workspace": {
+    "current_dir": "C:\\src\\example",
+    "project_dir": "C:\\src\\example"
+  },
+  "context_window": {
+    "used_percentage": 38
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 22,
+      "resets_at": 1893456000
+    },
+    "seven_day": {
+      "used_percentage": 36,
+      "resets_at": 1893542400
+    }
+  }
+}

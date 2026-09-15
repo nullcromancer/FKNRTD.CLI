@@ -1,0 +1,9 @@
+bin/
+obj/
+artifacts/
+publish/
+.fknrtd/runtime/
+.fknrtd/logs/
+.fknrtd/worktrees/
+.fknrtd/tasks/
+.fknrtd/artifacts/

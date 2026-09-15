@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FKNRTD.Core", "src\FKNRTD.Core\FKNRTD.Core.csproj", "{1C236378-180B-4CE1-9927-F8E0AF6CB902}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FKNRTD.Cli", "src\FKNRTD.Cli\FKNRTD.Cli.csproj", "{DF373722-99F3-46D4-B7D0-ED01869DDA5A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FKNRTD.SelfTest", "tests\FKNRTD.SelfTest\FKNRTD.SelfTest.csproj", "{BA71DA6E-4D8F-4E9C-8D2C-7394088CB34D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1C236378-180B-4CE1-9927-F8E0AF6CB902}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C236378-180B-4CE1-9927-F8E0AF6CB902}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C236378-180B-4CE1-9927-F8E0AF6CB902}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C236378-180B-4CE1-9927-F8E0AF6CB902}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DF373722-99F3-46D4-B7D0-ED01869DDA5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF373722-99F3-46D4-B7D0-ED01869DDA5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF373722-99F3-46D4-B7D0-ED01869DDA5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF373722-99F3-46D4-B7D0-ED01869DDA5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BA71DA6E-4D8F-4E9C-8D2C-7394088CB34D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BA71DA6E-4D8F-4E9C-8D2C-7394088CB34D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BA71DA6E-4D8F-4E9C-8D2C-7394088CB34D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BA71DA6E-4D8F-4E9C-8D2C-7394088CB34D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

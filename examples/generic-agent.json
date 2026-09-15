@@ -1,0 +1,29 @@
+{
+  "id": "myagent",
+  "displayName": "My Agent",
+  "kind": "generic",
+  "executable": "my-agent",
+  "enabled": true,
+  "color": "cyan",
+  "profiles": {
+    "default": {
+      "arguments": ["run", "--json"],
+      "promptDelivery": "standardInput"
+    },
+    "plan": {
+      "arguments": ["run", "--json", "--mode", "read-only"],
+      "promptDelivery": "standardInput"
+    },
+    "implement": {
+      "arguments": ["run", "--json", "--mode", "workspace-write"],
+      "promptDelivery": "standardInput"
+    },
+    "audit": {
+      "arguments": ["run", "--json", "--mode", "read-only"],
+      "promptDelivery": "standardInput",
+      "successMarker": "FKNRTD_VERDICT: PASS",
+      "failureMarker": "FKNRTD_VERDICT: FAIL"
+    }
+  },
+  "environment": {}
+}

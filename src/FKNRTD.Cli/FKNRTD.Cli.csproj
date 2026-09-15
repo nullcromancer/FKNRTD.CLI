@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>FKNRTD</RootNamespace>
+    <AssemblyName>fknrtd</AssemblyName>
+    <Version>1.0.0</Version>
+    <Description>A terminal command center for coordinating multiple coding CLIs.</Description>
+    <PackageId>FKNRTD.CLI</PackageId>
+    <Authors>nullcromancer</Authors>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>fknrtd</ToolCommandName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FKNRTD.Core\FKNRTD.Core.csproj" />
+  </ItemGroup>
+</Project>
