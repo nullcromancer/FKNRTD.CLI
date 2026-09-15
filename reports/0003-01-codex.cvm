@@ -1,0 +1,16 @@
+CVM1|R|P
+D|made Canvas grapheme-aware with East Asian wide/fullwidth and zero-width combining measurement
+D|joined adjacent wide/medium/narrow panel borders and added selection-following pipeline viewport indicators
+D|added shared task-log reads, resize clears, deterministic width/height CLI overrides, and renderer friend access
+D|added deterministic renderer, Unicode, topology, scrolling, log-sharing, and CLI dimension self-tests
+M|7ea6e2002c46ca8a79c8b00c9758feb451cb7578
+T|dotnet build FKNRTD.CLI.sln -c Release => 0; 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 0; 18/18 self-tests passed
+Q|Codex could not commit: its sandbox sets an explicit Write deny on the Git common-dir, so index.lock could not be created in the linked worktree. On Windows an explicit deny overrides the --add-dir allow added earlier, so that mitigation is insufficient for codex. The auditing seat committed the working tree unchanged.
+E|src/FKNRTD.Cli/Dashboard/Canvas.cs:Text.DisplayWidth
+E|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:Render
+E|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:RenderPipeline
+E|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:RenderLogs
+E|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:GetDimension
+E|tests/FKNRTD.SelfTest/Program.cs:TestDashboardRendererAsync
+E|tests/FKNRTD.SelfTest/Program.cs:TestDashboardDimensionsAsync

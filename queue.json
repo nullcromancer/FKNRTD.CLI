@@ -237,12 +237,20 @@
     {
       "id": 3,
       "title": "Renderer correctness: display width, layout, frame tests",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "reported",
+      "phase": "reported",
       "path": "briefs/0003-renderer-correctness-display-width-layou.cvm",
       "seat": "codex",
       "created": "2026-09-15T04:22:30+00:00",
-      "reports": [],
+      "reports": [
+        {
+          "path": "reports/0003-01-codex.cvm",
+          "seat": "codex",
+          "verdict": "pass",
+          "at": "2026-09-15T10:19:24+00:00",
+          "round": 1
+        }
+      ],
       "events": [
         {
           "type": "brief",
@@ -278,6 +286,13 @@
           "seat": "codex",
           "pid": 18708,
           "dispatch_id": "72c1c12e-9482-4807-86da-12a8652297ad"
+        },
+        {
+          "type": "report",
+          "at": "2026-09-15T10:19:24+00:00",
+          "seat": "codex",
+          "verdict": "pass",
+          "round": 1
         }
       ],
       "round": 1,
