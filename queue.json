@@ -75,6 +75,13 @@
           "seat": "codex",
           "pid": 11812,
           "dispatch_id": "63f454da-bd18-4aaf-8745-42368c0ec146"
+        },
+        {
+          "type": "process",
+          "at": "2026-09-15T03:31:52+00:00",
+          "seat": "codex",
+          "pid": 28104,
+          "dispatch_id": "63f454da-bd18-4aaf-8745-42368c0ec146"
         }
       ],
       "round": 2,
@@ -88,7 +95,7 @@
         "seat": "codex",
         "at": "2026-09-15T03:31:11+00:00",
         "lease_expires": "2026-09-15T04:16:11+00:00",
-        "pid": 11812,
+        "pid": 28104,
         "host": "Tenebris",
         "dispatch_id": "63f454da-bd18-4aaf-8745-42368c0ec146"
       }
