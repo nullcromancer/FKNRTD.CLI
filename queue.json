@@ -1,5 +1,26 @@
 {
   "version": 2,
   "created": "2026-09-15T03:09:05+00:00",
-  "briefs": []
+  "briefs": [
+    {
+      "id": 1,
+      "title": "Reliability core: process, locking, state IO",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0001-reliability-core-process-locking-state-i.cvm",
+      "seat": null,
+      "created": "2026-09-15T03:09:06+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-15T03:09:06+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
+    }
+  ]
 }

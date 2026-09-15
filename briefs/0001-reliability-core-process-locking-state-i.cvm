@@ -1,0 +1,45 @@
+CVM1|B
+G|Make FKNRTD.CLI process execution, executable resolution, file locking and state IO survive real-world conditions: no unbounded hang, no unhandled crash, no unbounded memory growth.
+S|ProcessRunner: launch failure handling and per-run timeout
+S|ExecutableLocator: Windows PATHEXT resolution order
+S|ExclusiveFileLease: bounded acquisition
+S|StateStore: bounded JSONL reads, concurrent-writer tolerance, log rotation
+S|DoctorService: never crash, report instead
+S|FknrtdConfig: new timeout settings wired through callers
+C|Zero new NuGet dependencies. BCL only.
+C|TreatWarningsAsErrors is on; the build must be warning-free.
+C|Do not change public behavior of commands beyond the fixes described.
+C|Config additions must be backward compatible: an existing .fknrtd/config.json without the new keys must still load and get sensible defaults.
+C|Do not touch Dashboard/Canvas.cs or StatusLineRenderer.cs in this brief.
+A|ProcessRunner.RunAsync wraps Process.Start and translates System.ComponentModel.Win32Exception into a CommandResult-or-exception carrying the executable path and OS message; it must not escape as an unhandled crash.
+A|ProcessRunner.RunAsync accepts an optional timeout; on expiry it kills the process tree, drains the pumps, and returns a CommandResult marked as timed out with the partial output captured.
+A|ExecutableLocator.Find on Windows prefers a PATHEXT-matched candidate over an extensionless file of the same name, so an npm shim named 'codex' with no extension no longer resolves ahead of 'codex.CMD'.
+A|ExclusiveFileLease.AcquireAsync never loops forever: when maximumAttempts is null it uses a bounded wall-clock timeout and then throws InvalidOperationException carrying busyMessage and the PID recorded in the lock file.
+A|ExclusiveFileLease deletes its lock file on dispose.
+A|StateStore.ReadJsonLinesAsync reads only the tail needed to satisfy limit instead of File.ReadAllLinesAsync over the whole file, and opens with FileShare.ReadWrite\pFileShare.Delete so a concurrent appender cannot make the dashboard throw.
+A|StateStore appends rotate events.jsonl and messages.jsonl when they exceed a configured byte cap, preserving the most recent entries.
+A|DoctorService.RunAsync returns a failed-but-rendered DoctorCheck when the config is missing or an agent executable cannot be launched, including the Win32Exception case; 'fknrtd doctor' exits without an unhandled exception on a machine where a configured agent is an unlaunchable shim.
+A|FknrtdConfig gains AgentTimeoutSeconds and VerificationTimeoutSeconds with defaults, honored by AgentRunner and by Orchestrator verification respectively.
+A|New self-tests in tests/FKNRTD.SelfTest/Program.cs cover: process timeout kills and reports; bad executable is reported not thrown; lease acquisition times out with a clear message; JSONL tail read returns the last N under concurrent append; rotation preserves recent entries.
+A|dotnet build FKNRTD.CLI.sln -c Release succeeds with 0 warnings and 0 errors.
+A|The self-test binary prints N/N self-tests passed and exits 0.
+F|src/FKNRTD.Core/Services/ProcessRunner.cs:RunAsync
+F|src/FKNRTD.Core/Services/ProcessRunner.cs:RunShellAsync
+F|src/FKNRTD.Core/Services/ProcessRunner.cs:ExecutableLocator.Find
+F|src/FKNRTD.Core/Services/StateStore.cs:ExclusiveFileLease.AcquireAsync
+F|src/FKNRTD.Core/Services/StateStore.cs:ReadJsonLinesAsync
+F|src/FKNRTD.Core/Services/StateStore.cs:AppendJsonLineAsync
+F|src/FKNRTD.Core/Services/DoctorService.cs:GetVersionAsync
+F|src/FKNRTD.Core/Services/DoctorService.cs:RunAsync
+F|src/FKNRTD.Core/Services/AgentRunner.cs:RunAsync
+F|src/FKNRTD.Core/Services/Orchestrator.cs:RunVerificationStageAsync
+F|src/FKNRTD.Core/Domain/Configuration.cs:FknrtdConfig
+F|src/FKNRTD.Core/Domain/Models.cs:CommandResult
+F|tests/FKNRTD.SelfTest/Program.cs
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+X|Terminal rendering and Canvas width math (separate brief)
+X|Audit verdict parsing and git/worktree semantics (separate brief)
+X|Renaming, docs rewrites, README edits
+X|Adding a test framework such as xunit
+U|Whether CommandResult should grow a TimedOut flag or signal timeout via a sentinel exit code; choose one, state it in the report, and keep it consistent across callers.
