@@ -143,7 +143,7 @@
       "id": 2,
       "title": "Workflow correctness: verdict, base refs, git paths",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0002-workflow-correctness-verdict-base-refs-g.cvm",
       "seat": null,
       "created": "2026-09-15T03:42:05+00:00",
@@ -154,10 +154,23 @@
           "at": "2026-09-15T03:42:05+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-15T03:42:06+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0002-workflow-correctness-verdict-base-refs-g",
+          "branch": "codex/pair-2-workflow-correctness-verdict-base-refs-g",
+          "base": "eee139a85be6457e86c63e08b6598f6ce9d7bd51"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0002-workflow-correctness-verdict-base-refs-g",
+      "branch": "codex/pair-2-workflow-correctness-verdict-base-refs-g",
+      "base_branch": "main",
+      "base_oid": "eee139a85be6457e86c63e08b6598f6ce9d7bd51"
     }
   ]
 }
