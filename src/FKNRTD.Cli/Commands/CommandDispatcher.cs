@@ -122,7 +122,7 @@ internal static class CommandDispatcher
         {
             ProjectName = snapshot.RepositoryName,
             DefaultBaseRef = string.IsNullOrWhiteSpace(snapshot.Branch) || snapshot.Branch == "detached"
-                ? "HEAD"
+                ? string.Empty
                 : snapshot.Branch,
             DefaultVerificationCommands = verification,
             Agents = BuiltInAgents.CreateDefaults().ToList()
@@ -414,7 +414,9 @@ internal static class CommandDispatcher
         }
 
         await runtime.Worktrees.RemoveAsync(task, arguments.Has("force"), cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"✓ Removed the worktree for {id}. The task record and Git branch were retained.");
+        Console.WriteLine(task.Status == WorkflowStatus.Landed
+            ? $"✓ Removed the worktree and landed task branch for {id}. The task record was retained."
+            : $"✓ Removed the worktree for {id}. The task record and Git branch were retained.");
         return 0;
     }
 

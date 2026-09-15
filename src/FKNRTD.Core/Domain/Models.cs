@@ -8,7 +8,7 @@ public sealed record WorkflowTask
     public string LeadAgentId { get; init; } = "claude";
     public string ImplementerAgentId { get; init; } = "codex";
     public string AuditorAgentId { get; init; } = "claude";
-    public string BaseRef { get; init; } = "HEAD";
+    public string BaseRef { get; set; } = string.Empty;
     public string BranchName { get; set; } = string.Empty;
     public string WorktreePath { get; set; } = string.Empty;
     public List<string> VerificationCommands { get; init; } = [];

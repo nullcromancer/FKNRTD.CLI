@@ -26,6 +26,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Claude usage parsing", TestClaudeUsageAsync),
     ("Codex rate-limit parsing", TestCodexUsageAsync),
     ("Collision classification", TestConflictDetectionAsync),
+    ("Audit verdict ignores echoed prompt", TestAuditVerdictAsync),
+    ("Git paths round trip verbatim", TestGitPathRoundTripAsync),
     ("End-to-end isolated workflow", TestWorkflowAsync)
 };
 
@@ -61,6 +63,7 @@ static async Task<int> RunFakeAgentAsync(string[] input)
             Console.WriteLine("Implemented feature.txt");
             return 0;
         case "audit":
+            Console.WriteLine(input.ElementAtOrDefault(1) ?? string.Empty);
             if (!File.Exists("feature.txt"))
             {
                 Console.WriteLine("FKNRTD_VERDICT: FAIL");
@@ -68,7 +71,9 @@ static async Task<int> RunFakeAgentAsync(string[] input)
             }
 
             Console.WriteLine("Independent test audit passed.");
-            Console.WriteLine("FKNRTD_VERDICT: PASS");
+            Console.WriteLine("```");
+            Console.WriteLine("**FKNRTD_VERDICT: PASS.**");
+            Console.WriteLine("```");
             return 0;
         case "hang":
             Console.WriteLine("before-timeout");
@@ -415,6 +420,63 @@ static async Task TestConflictDetectionAsync()
     }).ConfigureAwait(false);
 }
 
+static Task TestAuditVerdictAsync()
+{
+    const string success = "FKNRTD_VERDICT: PASS";
+    const string failure = "FKNRTD_VERDICT: FAIL";
+    const string prompt = """
+        Inspect the diff.
+        Finish with exactly one verdict marker on its own line:
+        FKNRTD_VERDICT: PASS
+        or
+        FKNRTD_VERDICT: FAIL
+        """;
+    var echoedPass = prompt + Environment.NewLine + "```" + Environment.NewLine +
+                     "**FKNRTD_VERDICT: PASS.**" + Environment.NewLine + "```";
+    True(
+        Orchestrator.IsPassingAuditVerdict(echoedPass, prompt, success, failure),
+        "Echoed prompt plus trailing markdown PASS verdict");
+
+    var ambiguous = prompt + Environment.NewLine + success + Environment.NewLine + failure;
+    True(
+        !Orchestrator.IsPassingAuditVerdict(ambiguous, prompt, success, failure),
+        "Ambiguous own verdict");
+    True(
+        !Orchestrator.IsPassingAuditVerdict(
+            prompt + Environment.NewLine + "Result is FKNRTD_VERDICT: PASS today.",
+            prompt,
+            success,
+            failure),
+        "Mid-sentence verdict mention");
+    return Task.CompletedTask;
+}
+
+static async Task TestGitPathRoundTripAsync()
+{
+    if (ExecutableLocator.Find("git") is null)
+    {
+        throw new InvalidOperationException("Git is required for the path round-trip self-test.");
+    }
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var git = new GitService(new ProcessRunner());
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]).ConfigureAwait(false), "git init");
+        var expected = new[] { "file with space.txt", "naïve-文件.txt" };
+        foreach (var path in expected)
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, path), path, new UTF8Encoding(false))
+                .ConfigureAwait(false);
+        }
+
+        var changed = await git.GetChangedPathsAsync(root).ConfigureAwait(false);
+        foreach (var path in expected)
+        {
+            True(changed.Contains(path, StringComparer.Ordinal), $"Verbatim changed path '{path}'");
+        }
+    }).ConfigureAwait(false);
+}
+
 static async Task TestWorkflowAsync()
 {
     if (ExecutableLocator.Find("git") is null)
@@ -463,9 +525,9 @@ static async Task TestWorkflowAsync()
         await store.InitializeAsync(new FknrtdConfig
         {
             ProjectName = "workflow-test",
-            DefaultBaseRef = "main",
             Agents = [fake]
         }).ConfigureAwait(false);
+        Equal(string.Empty, new FknrtdConfig().DefaultBaseRef, "Default config base ref");
         MustSucceed(await git.GitAsync(root, ["add", "README.md", ".fknrtd/config.json", ".fknrtd/.gitignore"])
             .ConfigureAwait(false), "git add");
         MustSucceed(await git.GitAsync(root, ["commit", "-m", "initial"])
@@ -486,6 +548,33 @@ static async Task TestWorkflowAsync()
                 "fake",
                 [verification])
             .ConfigureAwait(false);
+        Equal("main", task.BaseRef, "Task creation base branch");
+        task.BaseRef = "HEAD";
+        await store.SaveTaskAsync(task).ConfigureAwait(false);
+
+        MustSucceed(await git.GitAsync(root, ["config", "user.name", ""]).ConfigureAwait(false),
+            "clear git config name");
+        MustSucceed(await git.GitAsync(root, ["config", "user.email", ""]).ConfigureAwait(false),
+            "clear git config email");
+        try
+        {
+            await orchestrator.RunAsync(task.Id).ConfigureAwait(false);
+            throw new InvalidOperationException("Workflow unexpectedly committed without committer identity.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            True(exception.Message.Contains("user.name", StringComparison.Ordinal), "Missing user.name guidance");
+            True(exception.Message.Contains("user.email", StringComparison.Ordinal), "Missing user.email guidance");
+        }
+
+        task = await store.LoadTaskAsync(task.Id).ConfigureAwait(false);
+        Equal("main", task.BaseRef, "Legacy HEAD base repair");
+        Equal(StageState.Passed, task.Stage(WorkflowStage.Audit).State, "Echo-safe audit state");
+        MustSucceed(await git.GitAsync(root, ["config", "user.email", "fknrtd-self-test@example.invalid"])
+            .ConfigureAwait(false), "restore git config email");
+        MustSucceed(await git.GitAsync(root, ["config", "user.name", "FKNRTD.CLI Self Test"])
+            .ConfigureAwait(false), "restore git config name");
+        await tasks.ResetFailedStagesAsync(task.Id).ConfigureAwait(false);
 
         task = await orchestrator.RunAsync(task.Id).ConfigureAwait(false);
         Equal(WorkflowStatus.ReadyToLand, task.Status, "Workflow ready state");
@@ -493,10 +582,36 @@ static async Task TestWorkflowAsync()
         Equal(StageState.Passed, task.Stage(WorkflowStage.Audit).State, "Audit state");
         Equal(Path.GetFullPath(root), WorkspaceLocator.Find(task.WorktreePath).Root,
             "Linked worktree resolves primary FKNRTD.CLI state");
+
+        MustSucceed(await git.GitAsync(root, ["switch", "-c", "landing-mismatch"]).ConfigureAwait(false),
+            "switch to landing mismatch branch");
+        try
+        {
+            await orchestrator.LandAsync(task.Id).ConfigureAwait(false);
+            throw new InvalidOperationException("Landing unexpectedly accepted the wrong primary branch.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            True(exception.Message.Contains("'landing-mismatch'", StringComparison.Ordinal),
+                "Landing actual branch mismatch");
+            True(exception.Message.Contains("'main'", StringComparison.Ordinal), "Landing expected branch mismatch");
+        }
+
+        MustSucceed(await git.GitAsync(root, ["switch", "main"]).ConfigureAwait(false), "switch to main");
+        MustSucceed(await git.GitAsync(root, ["branch", "-D", "landing-mismatch"]).ConfigureAwait(false),
+            "remove landing mismatch branch");
         task = await orchestrator.LandAsync(task.Id).ConfigureAwait(false);
         Equal(WorkflowStatus.Landed, task.Status, "Landed state");
         True(File.Exists(Path.Combine(root, "feature.txt")), "Landed feature file");
+        var taskWorktree = task.WorktreePath;
+        var taskBranch = task.BranchName;
         await worktrees.RemoveAsync(task, force: false).ConfigureAwait(false);
+        True(!Directory.Exists(taskWorktree), "Landed worktree directory removed");
+        True(!await git.BranchExistsAsync(root, taskBranch).ConfigureAwait(false), "Landed task branch removed");
+        var worktreeList = await git.GitAsync(root, ["worktree", "list", "--porcelain"]).ConfigureAwait(false);
+        MustSucceed(worktreeList, "git worktree list");
+        True(!worktreeList.StandardOutput.Contains(taskWorktree, StringComparison.OrdinalIgnoreCase),
+            "Landed worktree metadata pruned");
     }).ConfigureAwait(false);
 }
 

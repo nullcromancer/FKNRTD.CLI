@@ -22,6 +22,12 @@ public sealed class WorktreeService
             throw new InvalidOperationException("FKNRTD.CLI worktree isolation requires a Git repository.");
         }
 
+        task.BaseRef = await _git.ResolveBaseBranchAsync(
+                _store.Paths.Root,
+                task.BaseRef,
+                cancellationToken)
+            .ConfigureAwait(false);
+
         var branch = string.IsNullOrWhiteSpace(task.BranchName)
             ? $"fknrtd/{Slug(task.Id)}-{Slug(task.Title, 36)}"
             : task.BranchName;
@@ -56,15 +62,21 @@ public sealed class WorktreeService
         CancellationToken cancellationToken = default)
     {
         var snapshot = await _git.GetSnapshotAsync(_store.Paths.Root, cancellationToken).ConfigureAwait(false);
+        var baseBranch = await _git.ResolveBaseBranchAsync(
+                _store.Paths.Root,
+                task.BaseRef,
+                cancellationToken)
+            .ConfigureAwait(false);
+        task.BaseRef = baseBranch;
         if (requireCleanTree && !snapshot.IsClean)
         {
             throw new InvalidOperationException("Landing is blocked because the primary worktree has uncommitted changes.");
         }
 
-        if (!string.Equals(snapshot.Branch, task.BaseRef, StringComparison.Ordinal))
+        if (!string.Equals(snapshot.Branch, baseBranch, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Landing is blocked because the primary worktree is on '{snapshot.Branch}', not '{task.BaseRef}'.");
+                $"Landing is blocked because the primary worktree is on '{snapshot.Branch}', not '{baseBranch}'.");
         }
 
         var result = await _git.GitAsync(
@@ -82,18 +94,39 @@ public sealed class WorktreeService
 
     public async Task RemoveAsync(WorkflowTask task, bool force, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(task.WorktreePath) || !Directory.Exists(task.WorktreePath))
+        if (!string.IsNullOrWhiteSpace(task.WorktreePath) && Directory.Exists(task.WorktreePath))
         {
-            return;
+            var arguments = force
+                ? new[] { "worktree", "remove", "--force", task.WorktreePath }
+                : new[] { "worktree", "remove", task.WorktreePath };
+            var remove = await _git.GitAsync(_store.Paths.Root, arguments, cancellationToken).ConfigureAwait(false);
+            if (!remove.Success)
+            {
+                throw new InvalidOperationException("Unable to remove the worktree: " + remove.StandardError.Trim());
+            }
         }
 
-        var arguments = force
-            ? new[] { "worktree", "remove", "--force", task.WorktreePath }
-            : new[] { "worktree", "remove", task.WorktreePath };
-        var result = await _git.GitAsync(_store.Paths.Root, arguments, cancellationToken).ConfigureAwait(false);
-        if (!result.Success)
+        var prune = await _git.GitAsync(_store.Paths.Root, ["worktree", "prune"], cancellationToken)
+            .ConfigureAwait(false);
+        if (!prune.Success)
         {
-            throw new InvalidOperationException("Unable to remove the worktree: " + result.StandardError.Trim());
+            throw new InvalidOperationException("Unable to prune stale worktree state: " + prune.StandardError.Trim());
+        }
+
+        if (task.Status == WorkflowStatus.Landed &&
+            !string.IsNullOrWhiteSpace(task.BranchName) &&
+            await _git.BranchExistsAsync(_store.Paths.Root, task.BranchName, cancellationToken).ConfigureAwait(false))
+        {
+            var delete = await _git.GitAsync(
+                    _store.Paths.Root,
+                    ["branch", "-d", task.BranchName],
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!delete.Success)
+            {
+                throw new InvalidOperationException("Unable to delete the landed task branch: " +
+                                                    delete.StandardError.Trim());
+            }
         }
     }
 

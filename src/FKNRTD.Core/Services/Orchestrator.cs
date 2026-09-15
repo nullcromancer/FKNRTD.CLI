@@ -48,6 +48,7 @@ public sealed class Orchestrator
             throw new InvalidOperationException($"Task {task.Id} is cancelled. Use 'fknrtd task retry {task.Id}' to resume it.");
         }
 
+        await RepairTaskBaseRefAsync(task, cancellationToken).ConfigureAwait(false);
         task.Status = WorkflowStatus.Running;
         task.LastError = null;
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
@@ -147,6 +148,7 @@ public sealed class Orchestrator
         await using var lease = await _store.AcquireTaskLeaseAsync(taskId, cancellationToken).ConfigureAwait(false);
         var config = await _store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
         var task = await _store.LoadTaskAsync(taskId, cancellationToken).ConfigureAwait(false);
+        await RepairTaskBaseRefAsync(task, cancellationToken).ConfigureAwait(false);
         if (task.Status != WorkflowStatus.ReadyToLand)
         {
             throw new InvalidOperationException(
@@ -443,9 +445,11 @@ public sealed class Orchestrator
 
         var definition = FindAgent(config, task.AuditorAgentId);
         var profile = ResolveProfile(definition, "audit");
-        var successVerdicts = CountVerdictLines(report, profile.SuccessMarker);
-        var failureVerdicts = CountVerdictLines(report, profile.FailureMarker);
-        var passed = result.Success && successVerdicts == 1 && failureVerdicts == 0;
+        var passed = result.Success && IsPassingAuditVerdict(
+            report,
+            prompt,
+            profile.SuccessMarker,
+            profile.FailureMarker);
         CompleteStage(
             stage,
             passed ? StageState.Passed : StageState.Failed,
@@ -504,6 +508,24 @@ public sealed class Orchestrator
                 "The task passed, but the worktree still has uncommitted changes and auto-commit is disabled.");
         }
 
+        var userName = await _git.GitAsync(
+                task.WorktreePath,
+                ["config", "--get", "user.name"],
+                cancellationToken)
+            .ConfigureAwait(false);
+        var userEmail = await _git.GitAsync(
+                task.WorktreePath,
+                ["config", "--get", "user.email"],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!userName.Success || string.IsNullOrWhiteSpace(userName.StandardOutput) ||
+            !userEmail.Success || string.IsNullOrWhiteSpace(userEmail.StandardOutput))
+        {
+            throw new InvalidOperationException(
+                "Unable to commit verified agent changes because Git committer identity is not configured. " +
+                "Set user.name and user.email before retrying.");
+        }
+
         var add = await _git.GitAsync(task.WorktreePath, ["add", "-A"], cancellationToken).ConfigureAwait(false);
         if (!add.Success)
         {
@@ -560,6 +582,22 @@ public sealed class Orchestrator
         state.TouchedPaths = paths.ToList();
         state.UpdatedAt = DateTimeOffset.UtcNow;
         await _store.SaveAgentRuntimeAsync(state, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RepairTaskBaseRefAsync(WorkflowTask task, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(task.BaseRef) &&
+            !task.BaseRef.Equals("HEAD", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        task.BaseRef = await _git.ResolveBaseBranchAsync(
+                _store.Paths.Root,
+                task.BaseRef,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task WatchCancellationAsync(string taskId, CancellationTokenSource linked)
@@ -645,6 +683,17 @@ public sealed class Orchestrator
                 ? profile
                 : throw new InvalidOperationException($"Agent '{definition.Id}' has no '{name}' profile.");
 
+    internal static bool IsPassingAuditVerdict(
+        string report,
+        string prompt,
+        string? successMarker,
+        string? failureMarker)
+    {
+        var finalText = RemovePromptEcho(report, prompt);
+        return CountVerdictLines(finalText, successMarker) == 1 &&
+               CountVerdictLines(finalText, failureMarker) == 0;
+    }
+
     private static int CountVerdictLines(string report, string? marker)
     {
         if (string.IsNullOrWhiteSpace(marker))
@@ -652,13 +701,20 @@ public sealed class Orchestrator
             return 0;
         }
 
+        var pattern = @"^\s*(?:>\s*)?(?:[-+]\s+)?(?:[*_~`#]+\s*)?" +
+                      Regex.Escape(marker.Trim()) +
+                      @"(?:\s*[\p{P}\p{S}]+)?\s*$";
         return report.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Count(line => line.Equals(marker, StringComparison.OrdinalIgnoreCase));
+            .Count(line => Regex.IsMatch(
+                line,
+                pattern,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
     }
 
     internal static string ExtractFinalText(string output)
     {
-        string? last = null;
+        string? lastStructured = null;
+        var plainText = new List<string>();
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             try
@@ -667,7 +723,7 @@ public sealed class Orchestrator
                 var root = document.RootElement;
                 if (TryGetString(root, "result", out var result))
                 {
-                    last = result;
+                    lastStructured = result;
                 }
 
                 if (TryGetProperty(root, "item", out var item) &&
@@ -675,7 +731,7 @@ public sealed class Orchestrator
                     itemType.Equals("agent_message", StringComparison.OrdinalIgnoreCase) &&
                     TryGetString(item, "text", out var text))
                 {
-                    last = text;
+                    lastStructured = text;
                 }
 
                 if (TryGetProperty(root, "message", out var message) &&
@@ -688,7 +744,7 @@ public sealed class Orchestrator
                             type.Equals("text", StringComparison.OrdinalIgnoreCase) &&
                             TryGetString(block, "text", out text))
                         {
-                            last = text;
+                            lastStructured = text;
                         }
                     }
                 }
@@ -697,13 +753,33 @@ public sealed class Orchestrator
             {
                 if (line.Trim().Length > 0)
                 {
-                    last = (last is null ? string.Empty : last + Environment.NewLine) + line.Trim();
+                    plainText.Add(line.Trim());
                 }
             }
         }
 
-        return string.IsNullOrWhiteSpace(last) ? output.Trim() : last.Trim();
+        return !string.IsNullOrWhiteSpace(lastStructured)
+            ? lastStructured.Trim()
+            : plainText.Count > 0
+                ? string.Join(Environment.NewLine, plainText)
+                : output.Trim();
     }
+
+    private static string RemovePromptEcho(string report, string prompt)
+    {
+        var normalizedReport = NormalizeLines(report);
+        var normalizedPrompt = NormalizeLines(prompt);
+        return normalizedPrompt.Length == 0
+            ? normalizedReport
+            : normalizedReport.Replace(normalizedPrompt, string.Empty, StringComparison.Ordinal);
+    }
+
+    private static string NormalizeLines(string value) => string.Join(
+        '\n',
+        value.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0));
 
     private static void ApplyQualityResult(QualitySnapshot quality, string command, CommandResult result)
     {
