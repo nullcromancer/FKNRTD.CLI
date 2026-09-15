@@ -238,7 +238,7 @@
       "id": 3,
       "title": "Renderer correctness: display width, layout, frame tests",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0003-renderer-correctness-display-width-layou.cvm",
       "seat": null,
       "created": "2026-09-15T04:22:30+00:00",
@@ -249,10 +249,23 @@
           "at": "2026-09-15T04:22:30+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-15T04:22:30+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0003-renderer-correctness-display-width-layou",
+          "branch": "codex/pair-3-renderer-correctness-display-width-layou",
+          "base": "0287708a9f17af80ef36f8aa172c88568a0da9bf"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0003-renderer-correctness-display-width-layou",
+      "branch": "codex/pair-3-renderer-correctness-display-width-layou",
+      "base_branch": "main",
+      "base_oid": "0287708a9f17af80ef36f8aa172c88568a0da9bf"
     }
   ]
 }
