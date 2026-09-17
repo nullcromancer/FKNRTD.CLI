@@ -579,18 +579,24 @@ internal static class Scenes
                     Delivery = MessageDelivery.Delivered, CreatedAt = captured.AddMinutes(-4)
                 }
             ],
+            // Types from EventTypes, not invented ones. These two were "stage.passed" and
+            // "stage.failed", which this product has never recorded - so the history screen was
+            // teaching a vocabulary that does not exist, which is the exact drift EventTypes was
+            // created to stop.
             Events =
             [
                 new FknrtdEvent
                 {
-                    Severity = EventSeverity.Success, Type = "stage.passed",
-                    Message = "Verification passed for FKN-20260917-101500-a1b2",
+                    Severity = EventSeverity.Success, Type = EventTypes.WorkflowReady,
+                    Message = "Task is verified, audited, and ready to land.",
+                    TaskId = "FKN-20260917-101500-a1b2",
                     Timestamp = captured.AddMinutes(-2)
                 },
                 new FknrtdEvent
                 {
-                    Severity = EventSeverity.Error, Type = "stage.failed",
-                    Message = "dotnet test exited 1 for FKN-20260916-221030-e5f6",
+                    Severity = EventSeverity.Error, Type = EventTypes.WorkflowRepair,
+                    Message = "dotnet test exited 1; handed back for repair.",
+                    TaskId = "FKN-20260916-221030-e5f6",
                     Timestamp = captured.AddMinutes(-31)
                 }
             ],

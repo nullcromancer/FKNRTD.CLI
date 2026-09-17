@@ -2520,6 +2520,15 @@ static async Task TestTaskReadingCommandsAsync()
 /// </summary>
 static Task TestEventVocabularyAsync()
 {
+    // Including the events the scenes draw. The history screen was showing "stage.passed" and
+    // "stage.failed", which this product has never recorded, so the one screen whose job is to
+    // teach the vocabulary was teaching two words that are not in it.
+    foreach (var recorded in Scenes.PopulatedSnapshot().Events)
+    {
+        True(EventTypes.All.Contains(recorded.Type),
+            $"The history screen shows '{recorded.Type}', which is a type this product records");
+    }
+
     Equal(EventTypes.All.Count, EventTypes.All.Distinct(StringComparer.Ordinal).Count(),
         "Event types are unique");
     foreach (var type in EventTypes.All)
