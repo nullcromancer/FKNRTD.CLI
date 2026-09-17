@@ -1463,6 +1463,29 @@ static Task TestCommandCatalogAsync()
             $"The catalog documents the '{verb}' command");
     }
 
+    // Every subcommand the dispatcher switches on, group by group. Only the top-level verbs were
+    // checked before, so a subcommand could be added — and two were — without an entry.
+    // "ls" and "acknowledge" are aliases of list and ack and are deliberately not separate entries.
+    var subcommands = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    {
+        ["task"] = ["create", "new", "list", "show", "diff", "prompts", "run", "retry", "cancel",
+                    "land", "cleanup"],
+        ["agent"] = ["list", "new", "add", "enable", "disable", "remove"],
+        ["message"] = ["send", "ack", "list"],
+        ["claim"] = ["add", "renew", "release", "list"],
+        ["usage"] = ["refresh", "set", "list"],
+        ["config"] = ["path", "show", "validate"]
+    };
+
+    foreach (var (group, names) in subcommands)
+    {
+        foreach (var name in names)
+        {
+            True(CommandCatalog.Find($"{group} {name}") is not null,
+                $"The catalog documents '{group} {name}'");
+        }
+    }
+
     foreach (var entry in CommandCatalog.All)
     {
         True(entry.Summary.Length > 20, $"Catalog summary is substantive for '{entry.Name}'");
