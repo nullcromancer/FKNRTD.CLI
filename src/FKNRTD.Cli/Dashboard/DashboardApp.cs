@@ -1969,6 +1969,16 @@ internal sealed class DashboardApp
         // Re-read so the panel shows what the refresh just wrote rather than the frame's snapshot.
         var refreshed = await _snapshots.CaptureAsync(cancellationToken).ConfigureAwait(false);
         _overlay = Reference.Usage(refreshed, error);
+
+        // R inside the panel asks again, which is the whole of what this screen can do. Asking
+        // again reopens it, so the answer replaces the one that was on screen.
+        _overlayCompleted = async (completed, current, token) =>
+        {
+            if (completed is InfoPanel { ActionRequested: true })
+            {
+                await ShowUsageAsync(current, token).ConfigureAwait(false);
+            }
+        };
     }
 
     private WorkflowTask? SelectedTask(DashboardSnapshot snapshot) => SelectedTask(snapshot, _selectedTask);

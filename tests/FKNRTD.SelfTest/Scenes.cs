@@ -441,6 +441,9 @@ internal static class Scenes
 
     public static DashboardSnapshot PopulatedSnapshot() => Populated();
 
+    /// <summary>A workspace with nothing in it, for a test that needs one.</summary>
+    public static DashboardSnapshot EmptySnapshotForTests() => EmptySnapshot();
+
     private static DashboardSnapshot Populated()
     {
         var captured = new DateTimeOffset(2026, 9, 17, 10, 15, 0, TimeSpan.Zero);

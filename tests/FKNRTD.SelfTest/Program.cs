@@ -140,7 +140,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The busy repaint stays inside the dashboard loop", TestBusyRepaintStaysInsideTheLoopAsync),
     ("Nothing on screen tells you to leave the dashboard", TestNothingTellsYouToLeaveAsync),
     ("Quitting asks when work is running", TestQuittingAsksWhenWorkIsRunningAsync),
-    ("A stage log reads as sentences, not JSON", TestLogIsReadableAsync)
+    ("A stage log reads as sentences, not JSON", TestLogIsReadableAsync),
+    ("A panel never names a key that does nothing there", TestPanelsDoNotNameDeadKeysAsync)
 };
 
 var failures = new List<string>();
@@ -3360,6 +3361,26 @@ static Task TestLogIsReadableAsync()
         "The log view shows what the agent did");
     True(!frame.Contains("\"type\":\"assistant\"", StringComparison.Ordinal),
         "And does not show the JSON it was written as");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// A panel that names a key must be a panel where that key does something. The budget screen told
+/// the operator to "press U to ask Codex directly" - while U was the key that had opened it, and
+/// does nothing once it is open.
+/// </summary>
+static Task TestPanelsDoNotNameDeadKeysAsync()
+{
+    var usage = Reference.Usage(Scenes.EmptySnapshotForTests(), refreshError: null);
+    Equal(OverlayResult.Submit, usage.HandleKey(Key(ConsoleKey.R)), "R asks again from inside");
+    True(usage.ActionRequested, "And the panel records the request");
+
+    var frame = Scenes.Render("usage-missing", 100, 30, colour: false);
+    True(frame.Contains("R ask Codex again", StringComparison.Ordinal),
+        "The footer offers the key the body names");
+    True(!frame.Contains("Press U to ask", StringComparison.Ordinal),
+        "And the body no longer names the key that opened it");
 
     return Task.CompletedTask;
 }

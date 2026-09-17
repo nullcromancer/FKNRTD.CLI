@@ -504,7 +504,11 @@ internal static class Reference
             }
         }
 
-        return new InfoPanel("BUDGET", Theme.Green, blocks);
+        // The panel used to tell the operator to press U while U was what had opened it, and U does
+        // nothing here. R asks again from inside, the same key the coordination panel uses for the
+        // one thing it can do.
+        return new InfoPanel("BUDGET", Theme.Green, _ => blocks, filterHint: null,
+            action: (ConsoleKey.R, "R", "ask Codex again"));
     }
 
     /// <summary>Why an agent has no figures, and what would give it some.</summary>
@@ -514,7 +518,7 @@ internal static class Reference
             "Nothing reported yet. Claude reports through its statusline: install it with " +
             "'fknrtd integration install-claude-statusline' and restart Claude Code.",
         "codex" =>
-            "Nothing reported yet. Press U to ask Codex directly; it answers on demand rather than " +
+            "Nothing reported yet. Press R to ask Codex directly; it answers on demand rather than " +
             "reporting on its own.",
         _ =>
             "Nothing reported yet. This agent has no automatic reporting. Feed figures in with " +

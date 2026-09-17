@@ -89,7 +89,10 @@ public static class Keymap
             "Records a note from one agent to another on the message bus."),
         new("U", "budget",
             "Asks Codex for its current rate-limit figures, then shows every agent's remaining " +
-            "context and window budget with what each window means and why one might be blank."),
+            "context and window budget with what each window means and why one might be blank. R " +
+            "asks again without leaving the panel. The figures are reported to FKNRTD.CLI rather " +
+            "than enforced by it: running low constrains what you should start, and nothing here " +
+            "will stop a task."),
         new("D", "doctor",
             "Runs the pre-flight checks and shows what is ready and what would fail, without leaving " +
             "the dashboard."),
