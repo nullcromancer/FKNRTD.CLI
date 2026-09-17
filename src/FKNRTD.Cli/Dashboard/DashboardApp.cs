@@ -633,8 +633,12 @@ internal sealed class DashboardApp
         if (row == inner.Y)
         {
             canvas.DrawWrapped(inner.X, row, inner.Width, Math.Max(1, inner.Bottom - row),
-                "Nothing has happened yet. Every stage, conflict and agent check-in is recorded here. " +
-                "Press E for the full history.", Theme.Muted);
+                // Not "every stage, conflict and agent check-in": stages record nothing, conflicts
+                // are computed live rather than stored, and an agent reporting in saves a runtime
+                // snapshot without writing history.
+                "Nothing has happened yet. Tasks being created, run, repaired, landed and cancelled " +
+                "are recorded here, along with messages between agents. Press E for the full " +
+                "history, or I on a task for its stages.", Theme.Muted);
         }
     }
 
@@ -679,7 +683,7 @@ internal sealed class DashboardApp
             }
 
             canvas.DrawWrapped(inner.X, row, inner.Width, Math.Max(1, inner.Bottom - row),
-                WhyThereIsNoLog(task), Theme.Amber);
+                WhyThereIsNoLog(task, snapshot.Config.Mode), Theme.Amber);
             return;
         }
 
@@ -782,7 +786,7 @@ internal sealed class DashboardApp
     /// Why there is nothing to read. "No log exists" is true and useless; which of the reasons
     /// applies determines whether the operator should press a key, wait, or go and look at Git.
     /// </summary>
-    private static string WhyThereIsNoLog(WorkflowTask task) => task.Status switch
+    private static string WhyThereIsNoLog(WorkflowTask task, WorkspaceMode mode) => task.Status switch
     {
         WorkflowStatus.Queued =>
             "This task has not run yet, so nothing has been written. Press Enter to start it and the " +
@@ -793,9 +797,16 @@ internal sealed class DashboardApp
         WorkflowStatus.Cancelled =>
             "This task was cancelled before the current stage wrote anything. Press R to reset it and " +
             "Enter to run it again.",
-        WorkflowStatus.Landed =>
-            "This task has landed and its logs may already have been cleaned up. The work itself is " +
-            "in your base branch.",
+        WorkflowStatus.Landed => mode == WorkspaceMode.Git
+            // Nothing deletes stage logs - not landing, and not cleanup, which keeps the record and
+            // the logs and takes only the worktree. There is no log here because landing merges
+            // with Git and launches no agent.
+            ? "This task has landed. Landing launches no agent, so this stage wrote nothing; the " +
+              "logs from the stages that did are still on disk. Press I for the full record, and " +
+              "read the work itself in your base branch."
+            : "This task has landed. Landing launches no agent, so this stage wrote nothing; the " +
+              "logs from the stages that did are still on disk. Press I for the full record. The " +
+              $"work itself is this folder — there was no branch to merge.",
         _ =>
             "No log has been written for this stage. Press I to see the full record of the task, " +
             "which records what each stage did."
