@@ -56,6 +56,10 @@ public static class Keymap
         new("A", "agents",
             "Lists the configured agents: which are enabled, which can actually be found on PATH, " +
             "and which are equipped to act as an auditor."),
+        new("/", "commands",
+            "Opens the command palette: every action the dashboard can take, searchable by name, " +
+            "with the reason stated for any that cannot be taken right now.",
+            InFooter: true),
         new("?", "help",
             "Opens the key reference and the searchable glossary of every term the product uses.",
             InFooter: true),

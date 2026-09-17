@@ -12,7 +12,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -86,6 +86,14 @@ internal static class Scenes
                 return Reference.Welcome(config);
             case "setup":
                 return SetupWizard.Create(SampleDetection());
+            case "palette":
+                return Palette.For(Populated(), null, running: 0);
+            case "palette-search":
+            {
+                var palette = Palette.For(Populated(), Populated().Tasks[1], running: 1);
+                Type(palette, "land");
+                return palette;
+            }
             case "land":
                 return new Confirmation(
                     "LAND THIS TASK",
@@ -163,6 +171,8 @@ internal static class Scenes
         },
         CapturedAt = new DateTimeOffset(2026, 9, 17, 10, 15, 0, TimeSpan.Zero)
     };
+
+    public static DashboardSnapshot PopulatedSnapshot() => Populated();
 
     private static DashboardSnapshot Populated()
     {

@@ -63,7 +63,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every documented command is a real command", TestCommandCatalogAsync),
     ("The portal is offline, deterministic and escaped", TestPortalAsync),
     ("A mistyped command names the one you meant", TestMistypedCommandAsync),
-    ("Help and explain render every entry they claim", TestHelpSurfacesAsync)
+    ("Help and explain render every entry they claim", TestHelpSurfacesAsync),
+    ("The palette says why an action cannot be run", TestPaletteExplainsRefusalsAsync)
 };
 
 var failures = new List<string>();
@@ -1538,4 +1539,59 @@ static async Task TestHelpSurfacesAsync()
         "help redirects a concept");
     True(concept.ToString().Contains("fknrtd explain brief", StringComparison.Ordinal),
         "help points a concept at explain");
+}
+
+/// <summary>
+/// An action that cannot be taken has to say why. Silently doing nothing when a key is pressed is
+/// how an operator concludes the tool is broken rather than that the task is not ready.
+/// </summary>
+static Task TestPaletteExplainsRefusalsAsync()
+{
+    var snapshot = Scenes.PopulatedSnapshot();
+    var ready = snapshot.Tasks.First(task => task.Status == WorkflowStatus.ReadyToLand);
+    var running = snapshot.Tasks.First(task => task.Status == WorkflowStatus.Running);
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+
+    // With nothing selected, an action that needs a task is listed rather than hidden, marked so
+    // that it reads as unavailable even with colour off.
+    var empty = Palette.For(snapshot, selected: null, running: 0);
+    var frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, empty);
+    True(frame.Contains("(not now)", StringComparison.Ordinal),
+        "The palette marks an unavailable action without relying on colour");
+
+    // The palette opens on something that can be done, so the first Enter is never a no-op.
+    True(empty.Actions[empty.Actions.ToList().FindIndex(action => action.Unavailable is null)].Unavailable is null,
+        "The palette has something available to start on");
+
+    // Selecting one that cannot be done explains what is missing, and Enter leaves that on screen.
+    Scenes.Type(empty, "run");
+    frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, empty);
+    True(frame.Contains("no task is selected", StringComparison.Ordinal),
+        "The palette says why an action needs a task");
+    Equal(OverlayResult.Continue, Scenes.Press(empty, ConsoleKey.Enter), "An unavailable action does not run");
+    True(empty.Chosen is null, "An unavailable action is never chosen");
+
+    // A running task cannot be landed, and the palette says so in those words.
+    var mid = Palette.For(snapshot, running, running: 1);
+    Scenes.Type(mid, "land");
+    frame = renderer.Render(snapshot, 110, 40, useColor: false, mid);
+    True(frame.Contains("verified, audited", StringComparison.Ordinal),
+        "The palette explains why a running task cannot land");
+    Equal(OverlayResult.Continue, Scenes.Press(mid, ConsoleKey.Enter), "Landing a running task is refused");
+
+    // The same action on a ready task is available and returns the identifier the dashboard routes on.
+    var landable = Palette.For(snapshot, ready, running: 0);
+    Scenes.Type(landable, "land");
+    Equal(OverlayResult.Submit, Scenes.Press(landable, ConsoleKey.Enter), "Landing a ready task is offered");
+    Equal("G", landable.Chosen?.Id, "The palette returns the key the action is bound to");
+
+    // Every palette action must correspond to a documented key, or the palette could offer
+    // something the help reference has never heard of.
+    foreach (var action in Palette.For(snapshot, ready, running: 0).Actions)
+    {
+        True(Keymap.All.Any(binding => binding.Key == action.Id),
+            $"Palette action '{action.Id}' is a documented key");
+    }
+
+    return Task.CompletedTask;
 }

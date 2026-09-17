@@ -689,24 +689,67 @@ internal sealed class DashboardApp
             return;
         }
 
-        switch (key.Key)
+        // Keys are translated to the same action identifiers the command palette uses, and both go
+        // through one router. A key and its palette entry therefore cannot drift apart, and every
+        // action has exactly one implementation.
+        var action = key.Key switch
         {
-            case ConsoleKey.Q:
-            case ConsoleKey.Escape:
+            ConsoleKey.Q or ConsoleKey.Escape => "Q",
+            ConsoleKey.UpArrow => "up",
+            ConsoleKey.DownArrow => "down",
+            ConsoleKey.Enter => "Enter",
+            ConsoleKey.C => "C",
+            ConsoleKey.G => "G",
+            ConsoleKey.X => "X",
+            ConsoleKey.R => "R",
+            ConsoleKey.N => "N",
+            ConsoleKey.M => "M",
+            ConsoleKey.L => "L",
+            ConsoleKey.U => "U",
+            ConsoleKey.I => "I",
+            ConsoleKey.A => "A",
+            ConsoleKey.D => "D",
+            ConsoleKey.Tab => "Tab",
+            // '?' and '/' have no ConsoleKey of their own and arrive differently on different
+            // keyboard layouts, so they are matched on the character instead.
+            _ => key.KeyChar switch
+            {
+                '?' or 'h' or 'H' => "?",
+                '/' or ':' => "/",
+                _ => null
+            }
+        };
+
+        if (action is not null)
+        {
+            await RunActionAsync(action, snapshot, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Performs one dashboard action, named by the key it is bound to. Both the keyboard and the
+    /// command palette call this, which is what lets the palette explain an action it is about to
+    /// run in the same words the help reference uses.
+    /// </summary>
+    private async Task RunActionAsync(string action, DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        switch (action)
+        {
+            case "Q":
                 _quit = true;
                 break;
-            case ConsoleKey.UpArrow:
+            case "up":
                 _selectedTask = Math.Max(0, _selectedTask - 1);
                 RememberSelection(snapshot);
                 break;
-            case ConsoleKey.DownArrow:
+            case "down":
                 _selectedTask = Math.Min(Math.Max(0, snapshot.Tasks.Count - 1), _selectedTask + 1);
                 RememberSelection(snapshot);
                 break;
-            case ConsoleKey.Enter:
+            case "Enter":
                 StartSelected(snapshot);
                 break;
-            case ConsoleKey.C:
+            case "C":
                 if (SelectedTask(snapshot) is { } cancelTask)
                 {
                     await _tasks.RequestCancellationAsync(cancelTask.Id, cancellationToken).ConfigureAwait(false);
@@ -718,63 +761,64 @@ internal sealed class DashboardApp
                 }
 
                 break;
-            case ConsoleKey.G:
+            case "G":
                 OpenLandConfirmation(snapshot);
                 break;
-            case ConsoleKey.X:
+            case "X":
                 OpenCleanupConfirmation(snapshot);
                 break;
-            case ConsoleKey.R:
+            case "R":
                 await RetrySelectedAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 break;
-            case ConsoleKey.N:
+            case "N":
                 OpenNewTaskWizard(snapshot);
                 break;
-            case ConsoleKey.M:
+            case "M":
                 OpenMessageWizard(snapshot);
                 break;
-            case ConsoleKey.L:
+            case "L":
+            case "Tab":
                 _view = _view == DashboardView.Logs ? DashboardView.Overview : DashboardView.Logs;
                 break;
-            case ConsoleKey.U:
+            case "U":
                 await RefreshUsageAsync(cancellationToken).ConfigureAwait(false);
                 break;
-            case ConsoleKey.Tab:
-                _view = _view switch
-                {
-                    DashboardView.Overview => DashboardView.Logs,
-                    _ => DashboardView.Overview
-                };
+            case "I":
+                _overlay = SelectedTask(snapshot) is { } inspected
+                    ? Reference.Task(inspected, snapshot.Config)
+                    : Reference.Welcome(snapshot.Config);
                 break;
-            case ConsoleKey.I:
-                if (SelectedTask(snapshot) is { } inspected)
-                {
-                    _overlay = Reference.Task(inspected, snapshot.Config);
-                }
-                else
-                {
-                    _overlay = Reference.Welcome(snapshot.Config);
-                }
-
-                break;
-            case ConsoleKey.A:
+            case "A":
                 _overlay = Reference.Agents(snapshot.Config);
                 break;
-            case ConsoleKey.D:
-                _toast = "Running the pre-flight checks…";
+            case "D":
+                _toast = "Running the pre-flight checks...";
                 _overlay = Reference.Doctor(await _doctor.RunAsync(cancellationToken).ConfigureAwait(false));
                 _toast = "Ready";
                 break;
-            default:
-                // '?' has no ConsoleKey of its own and arrives differently on different keyboards,
-                // so it is matched on the character rather than on the key.
-                if (key.KeyChar is '?' or 'h' or 'H')
-                {
-                    _overlay = Reference.Help();
-                }
-
+            case "?":
+                _overlay = Reference.Help();
+                break;
+            case "/":
+                OpenPalette(snapshot);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Opens the command palette. Keyboard shortcuts only help someone who already knows them, so
+    /// every action is also reachable by typing part of its name.
+    /// </summary>
+    private void OpenPalette(DashboardSnapshot snapshot)
+    {
+        _overlay = Palette.For(snapshot, SelectedTask(snapshot), _running.Count);
+        _overlayCompleted = async (completed, token) =>
+        {
+            if (((Palette)completed).Chosen is { } chosen)
+            {
+                await RunActionAsync(chosen.Id, snapshot, token).ConfigureAwait(false);
+            }
+        };
     }
 
     private void StartSelected(DashboardSnapshot snapshot)
