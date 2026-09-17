@@ -290,8 +290,10 @@ static Task TestDashboardRendererAsync()
     }
 
     var narrow = FrameLines(renderer.Render(snapshot, 72, 32, useColor: false));
-    Equal("├", DisplayCell(narrow[16], 0), "Narrow joined left border");
-    Equal("┤", DisplayCell(narrow[16], 71), "Narrow joined right border");
+    var narrowDivider = DividerRow(narrow);
+    True(narrowDivider > 5, "Narrow layout divides its body somewhere below the panel title");
+    Equal("├", DisplayCell(narrow[narrowDivider], 0), "Narrow joined left border");
+    Equal("┤", DisplayCell(narrow[narrowDivider], 71), "Narrow joined right border");
 
     // The row the upper and lower strips meet on depends on what the lower strip has to show, so
     // the divider is found rather than assumed. Pinning it to a fixed row only pinned the layout's

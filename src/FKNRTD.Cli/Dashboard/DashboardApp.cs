@@ -272,8 +272,8 @@ internal sealed class DashboardApp
     {
         var leftWidth = (body.Width + 1) / 2;
         var rightWidth = body.Width - leftWidth + 1;
-        var topHeight = body.Height / 2;
-        var bottomHeight = body.Height - topHeight + 1;
+        var bottomHeight = BottomStripHeight(snapshot, body.Height);
+        var topHeight = body.Height - bottomHeight + 1;
         var rightX = body.X + leftWidth - 1;
         var bottomY = body.Y + topHeight - 1;
         RenderPipeline(canvas, snapshot, new Rect(body.X, body.Y, leftWidth, topHeight), selectedTaskIndex);
@@ -285,7 +285,11 @@ internal sealed class DashboardApp
 
     private void RenderNarrow(Canvas canvas, DashboardSnapshot snapshot, Rect body, int selectedTaskIndex)
     {
-        var pipelineHeight = Math.Max(8, body.Height / 2);
+        // The radar below holds one row per configured agent and a summary line. Splitting the body
+        // in half gave it a dozen rows for three of them while the pipeline above truncated, which
+        // is the wrong way round on the narrowest layout of all - the one with the least to spare.
+        var radarHeight = Math.Clamp(snapshot.Config.Agents.Count + 3, 5, Math.Max(5, body.Height / 2));
+        var pipelineHeight = Math.Max(8, body.Height - radarHeight + 1);
         RenderPipeline(canvas, snapshot, new Rect(body.X, body.Y, body.Width, pipelineHeight), selectedTaskIndex);
         RenderAgents(canvas, snapshot,
             new Rect(body.X, body.Y + pipelineHeight - 1, body.Width, body.Height - pipelineHeight + 1));
