@@ -341,3 +341,21 @@ internal static class Scenes
         return task;
     }
 }
+
+/// <summary>
+/// The colour sequences the renderer is allowed to emit. Kept here rather than in the top-level
+/// program because a file-scoped statement list cannot hold a compiled pattern.
+/// </summary>
+internal static class Ansi
+{
+    /// <summary>Any SGR sequence, for stripping colour before a frame's width is measured.</summary>
+    public static readonly System.Text.RegularExpressions.Regex Sequence =
+        new("\u001b\\[[0-9;]*m");
+
+    /// <summary>
+    /// Reset, bold, and 24-bit foreground or background. Anything else means a colour was assembled
+    /// by hand somewhere it should not have been.
+    /// </summary>
+    public static readonly System.Text.RegularExpressions.Regex WellFormed =
+        new(@"^\u001b\[(0|1|38;2;\d{1,3};\d{1,3};\d{1,3}|48;2;\d{1,3};\d{1,3};\d{1,3})m$");
+}

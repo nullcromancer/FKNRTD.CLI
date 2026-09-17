@@ -1231,13 +1231,27 @@ static Task TestOverlayFramesAsync()
                 Equal(height, lines.Length, $"Scene '{scene}' line count at {width}x{height}");
                 True(lines.All(line => Text.DisplayWidth(line) == width),
                     $"Scene '{scene}' line width at {width}x{height}");
-                True(!frame.Contains(''), $"Scene '{scene}' emits no escapes without colour");
+                True(!frame.Contains('\u001b'), $"Scene '{scene}' emits no escapes without colour");
             }
         }
 
-        // The same frame in colour must still be the same shape once the escapes are stripped.
+        // The same frame in colour must still be the same shape once the escapes are stripped, must
+        // use only well-formed sequences, and must reset at the end of every row - otherwise a panel
+        // background bleeds across the rest of the terminal and stays there after the frame ends.
         var coloured = Scenes.Render(scene, 120, 34, colour: true);
-        True(coloured.Contains(''), $"Scene '{scene}' emits colour when asked");
+        True(coloured.Contains('\u001b'), $"Scene '{scene}' emits colour when asked");
+        foreach (var sequence in Ansi.Sequence.Matches(coloured).Select(match => match.Value))
+        {
+            True(Ansi.WellFormed.IsMatch(sequence), $"Scene '{scene}' emits only well-formed colour");
+        }
+
+        foreach (var line in FrameLines(coloured))
+        {
+            Equal(120, Text.DisplayWidth(Ansi.Sequence.Replace(line, string.Empty)),
+                $"Scene '{scene}' keeps its width once colour is stripped");
+            True(!line.Contains('\u001b') || line.EndsWith("\u001b[0m", StringComparison.Ordinal),
+                $"Scene '{scene}' resets colour at the end of every row");
+        }
     }
 
     return Task.CompletedTask;
