@@ -158,7 +158,9 @@ public sealed class DoctorService
             Detail = config?.DefaultVerificationCommands.Count > 0
                 ? string.Join("; ", config.DefaultVerificationCommands)
                 : "No default verification commands. New tasks start with nothing checking them, " +
-                  "leaving the audit as the only gate — and an audit is a judgement, not a measurement."
+                  "leaving the audit as the only gate — and an audit is a judgement, not a " +
+                  "measurement. Set defaultVerificationCommands to the build or test command you " +
+                  "already trust; the dashboard's S key edits it, and any task can override it."
         });
 
         var writable = false;

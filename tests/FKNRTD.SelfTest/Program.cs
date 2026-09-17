@@ -146,7 +146,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The offline guide shows real screens", TestPortalShowsRealScreensAsync),
     ("The agent builder can describe a piped agent", TestAgentBuilderAsync),
     ("Setup explains why there is no choice of mode", TestSetupExplainsWhyThereIsNoChoiceAsync),
-    ("A confirmation finishes its sentences at any width", TestConfirmationFinishesItsSentencesAsync)
+    ("A confirmation finishes its sentences at any width", TestConfirmationFinishesItsSentencesAsync),
+    ("Doctor says where it got to", TestDoctorReadsWellAsync)
 };
 
 var failures = new List<string>();
@@ -3726,4 +3727,73 @@ static Task TestConfirmationFinishesItsSentencesAsync()
         "Removing an unlanded task's worktree keeps the branch and says so");
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// What `fknrtd doctor` reads like. It listed its checks and stopped: a wall of ticks with one mark
+/// in it is easy to scan past, and the one check that had something to say said only what was wrong
+/// and not what to do. A long detail also ran off the right edge of the window, which lost the text
+/// of exactly the check that had most to say.
+/// </summary>
+static async Task TestDoctorReadsWellAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "Setting up the workspace");
+
+        var writer = new StringWriter();
+        await QuietlyAsync(["doctor", "-root", root], writer).ConfigureAwait(false);
+        var text = writer.ToString();
+        var lines = text.Split((char)10).Select(line => line.TrimEnd((char)13)).ToArray();
+
+        // Nothing runs off the edge: every line fits the window the wrapper was told about.
+        foreach (var line in lines)
+        {
+            True(Text.DisplayWidth(line) <= 110, $"A doctor line fits the window: {line}");
+        }
+
+        // It ends with a sentence rather than trailing off after the last check. The summary is one
+        // wrapped paragraph after a blank line, so the whole closing block is what to look at - the
+        // first attempt at this checked the final line and found the tail of the wrap.
+        // Written out rather than with FindLastIndex: every blank line is the same string, so an
+        // IndexOf inside the predicate answers about the first one and not the one being tested.
+        var blank = -1;
+        for (var index = 0; index < lines.Length - 1; index++)
+        {
+            if (lines[index].Trim().Length == 0)
+            {
+                blank = index;
+            }
+        }
+
+        True(blank > 0, "Doctor separates its summary from its checks with a blank line");
+        var closing = string.Join(' ', lines.Skip(blank + 1)).Trim();
+        True(closing.Contains("passed", StringComparison.OrdinalIgnoreCase),
+            $"Doctor ends by saying where it got to, not with its last check: {closing}");
+        True(!closing.StartsWith((char)8730) && !closing.StartsWith((char)8710),
+            "The closing block is a sentence rather than another check row");
+
+        // A workspace with no verification commands is told what to do about it, not only that it
+        // is a risk.
+        // Searched in the de-wrapped text: the detail now wraps under its name, so a phrase longer
+        // than the column can be split across two lines and a raw Contains would miss it.
+        var flowed = string.Join(' ', lines.Select(line => line.Trim()));
+        while (flowed.Contains("  ", StringComparison.Ordinal))
+        {
+            flowed = flowed.Replace("  ", " ", StringComparison.Ordinal);
+        }
+
+        True(flowed.Contains("Set defaultVerificationCommands", StringComparison.Ordinal),
+            "The verification warning names the fix");
+
+        // The -json form stays machine-readable: the summary is prose and must not reach it.
+        var json = new StringWriter();
+        Equal(0, await QuietlyAsync(["doctor", "-json", "-root", root], json).ConfigureAwait(false),
+            "doctor -json exits 0");
+        var payload = json.ToString().Trim();
+        True(payload.StartsWith('['), "doctor -json emits JSON");
+        True(!payload.Contains("Everything required passed", StringComparison.Ordinal),
+            "and no prose summary leaks into it");
+    }).ConfigureAwait(false);
 }

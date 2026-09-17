@@ -449,9 +449,50 @@ internal static class CommandDispatcher
         else
         {
             Console.WriteLine($"FKNRTD.CLI {Version} diagnostics");
+            // The name column is fixed so the marks line up and the list can be scanned; the detail
+            // wraps under it rather than running off the window, because a check that failed has
+            // the most to say and is exactly the one whose text would be lost off the right edge.
+            var width = Math.Clamp(Screen.Width(88), 50, 110);
+            const int NameColumn = 29;
             foreach (var check in checks)
             {
-                Console.WriteLine($"{(check.Passed ? "√" : check.Required ? "×" : "∆")} {check.Name,-26} {check.Detail}");
+                var mark = check.Passed ? "√" : check.Required ? "×" : "∆";
+                var head = $"{mark} {check.Name,-26} ";
+                var lines = Text.Wrap(check.Detail, Math.Max(20, width - NameColumn));
+                Console.WriteLine(head + lines.FirstOrDefault());
+                foreach (var line in lines.Skip(1))
+                {
+                    Console.WriteLine(new string(' ', NameColumn) + line);
+                }
+            }
+
+            // A wall of ticks with one mark in it is easy to scan past, and a reader who has just
+            // been told something is wrong has earned a sentence about what to do next.
+            var failed = checks.Where(check => check.Required && !check.Passed).ToArray();
+            var warned = checks.Where(check => !check.Required && !check.Passed).ToArray();
+            Console.WriteLine();
+            if (failed.Length > 0)
+            {
+                WriteParagraph(
+                    (failed.Length == 1 ? "One required check failed: " : $"{failed.Length} required " +
+                        "checks failed: ") +
+                    string.Join(", ", failed.Select(check => check.Name)) +
+                    ". Fix those before commissioning a task; a run that depends on them will fail " +
+                    "part-way through instead of not starting.", string.Empty);
+            }
+            else if (warned.Length > 0)
+            {
+                WriteParagraph(
+                    "Everything required passed. " +
+                    (warned.Length == 1 ? "One optional check did not: " : $"{warned.Length} optional " +
+                        "checks did not: ") +
+                    string.Join(", ", warned.Select(check => check.Name)) +
+                    ". Each one removes a capability rather than stopping a run.", string.Empty);
+            }
+            else
+            {
+                WriteParagraph("Everything passed. Describe a piece of work with 'fknrtd task new'.",
+                    string.Empty);
             }
         }
 
