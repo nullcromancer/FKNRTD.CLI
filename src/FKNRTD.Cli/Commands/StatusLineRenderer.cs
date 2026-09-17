@@ -83,10 +83,21 @@ internal static class StatusLineRenderer
                 useColor));
             return 0;
         }
+        catch (System.Text.Json.JsonException)
+        {
+            // Claude Code pipes a JSON payload in on every prompt. When it is absent or malformed
+            // there is nothing useful to say in a status bar, and the parser's own message - "The
+            // input does not contain any JSON tokens. Expected the input to start with..." - is the
+            // worst possible thing to put there: it is long, it is truncated mid-sentence, and it
+            // describes a fault in something the reader did not run.
+            Console.WriteLine("FKN | no status from Claude Code yet");
+            return 0;
+        }
         catch (Exception exception) when (exception is not StackOverflowException &&
                                           exception is not OutOfMemoryException)
         {
-            Console.WriteLine($"FKN | telemetry unavailable: {SingleLine(exception.Message, 80)}");
+            // Anything else is a workspace fault, and those messages were written to be read.
+            Console.WriteLine($"FKN | {SingleLine(exception.Message, 80)}");
             return 0;
         }
     }

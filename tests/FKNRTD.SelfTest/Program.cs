@@ -158,7 +158,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("An unreadable task file is reported, not hidden", TestUnreadableTasksAreReportedAsync),
     ("An unreadable configuration explains itself", TestUnreadableConfigExplainsItselfAsync),
     ("A missing worktree is not a missing stage", TestMissingWorktreeIsDistinguishedAsync),
-    ("A blank task field says what it is", TestBlankTaskFieldsAreExplainedAsync)
+    ("A blank task field says what it is", TestBlankTaskFieldsAreExplainedAsync),
+    ("The statusline survives whatever it is sent", TestStatusLineSurvivesBadInputAsync)
 };
 
 var failures = new List<string>();
@@ -4524,4 +4525,59 @@ static Task TestBlankTaskFieldsAreExplainedAsync()
         "Whitespace is blank too");
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// What the statusline says when Claude Code sends it nothing usable. It is a one-line status bar,
+/// and it was printing the JSON parser's own message into it - "The input does not contain any JSON
+/// tokens. Expected the input to start with..." - truncated mid-sentence, describing a fault in
+/// something the reader did not run.
+/// </summary>
+static async Task TestStatusLineSurvivesBadInputAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false), "init");
+
+        async Task<string> LineAsync(string payload)
+        {
+            var original = Console.In;
+            var writer = new StringWriter();
+            try
+            {
+                Console.SetIn(new StringReader(payload));
+                await QuietlyAsync(["telemetry", "claude-statusline", "-no-color", "-root", root], writer)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                Console.SetIn(original);
+            }
+
+            return writer.ToString().Split((char)10)[0].TrimEnd((char)13);
+        }
+
+        // Nothing at all, and nonsense, are the same situation from the reader's point of view.
+        foreach (var payload in new[] { string.Empty, "   ", "{ not json", "[1,2,3", "null" })
+        {
+            var line = await LineAsync(payload).ConfigureAwait(false);
+            True(line.StartsWith("FKN", StringComparison.Ordinal),
+                $"The statusline still produces a line for {payload.Length} bytes of nonsense");
+            True(line.Length <= 120, $"and it fits a status bar: {line}");
+            True(!line.Contains("JSON", StringComparison.OrdinalIgnoreCase),
+                $"and does not put a parser's complaint in it: {line}");
+            True(!line.Contains("Expected the input", StringComparison.Ordinal),
+                $"nor the rest of it: {line}");
+        }
+
+        // A payload with the shape but not the fields still renders, with the figures unknown.
+        var sparse = await LineAsync("{\"hello\":\"world\"}").ConfigureAwait(false);
+        True(sparse.Contains("N/A", StringComparison.Ordinal),
+            $"An unrecognised payload reports what it does not know: {sparse}");
+
+        // And a real one reports what it does.
+        var real = await LineAsync("{\"context_window\":{\"used_percentage\":38}}").ConfigureAwait(false);
+        True(real.Contains("62%", StringComparison.Ordinal),
+            $"A real payload is read: {real}");
+    }).ConfigureAwait(false);
 }
