@@ -52,9 +52,11 @@ internal sealed class InfoPanel : IOverlay
         // A panel that filters has already spent every letter key on the filter, so an action bound
         // to one would eat a character the operator meant to type. A function key cannot be typed
         // into a filter, so it is the one kind that is safe on a panel that has one.
-        _action = _filter is null || action is null || IsFunctionKey(action.Value.Key)
-            ? action
-            : null;
+        _action = action is null || action.Value.Key == ConsoleKey.Escape
+            ? null
+            : _filter is null || IsFunctionKey(action.Value.Key)
+                ? action
+                : null;
     }
 
     public InfoPanel(string title, Rgb accent, IReadOnlyList<InfoBlock> blocks)

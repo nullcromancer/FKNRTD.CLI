@@ -19,6 +19,12 @@ internal static class TaskWizard
     {
         var enabled = config.Agents.Where(agent => agent.Enabled).ToArray();
         var git = config.Mode == WorkspaceMode.Git;
+
+        // Built once rather than on every frame. Each option asks whether its executable is on
+        // PATH, and that question costs a walk of every PATH directory; the answer cannot change
+        // while the form is open, and the form redraws several times a second.
+        var anyAgent = AgentOptions(enabled, requireVerdict: false);
+        var auditors = AgentOptions(enabled, requireVerdict: true);
         var steps = new List<WizardStep>
         {
             new()
@@ -67,7 +73,7 @@ internal static class TaskWizard
                 GlossaryTerm = "lead",
                 Input = WizardInput.Choice,
                 Default = _ => Prefer(enabled, "claude", 0),
-                Options = _ => AgentOptions(enabled, requireVerdict: false)
+                Options = _ => anyAgent
             },
             new()
             {
@@ -82,7 +88,7 @@ internal static class TaskWizard
                         .FirstOrDefault(agent => !agent.Id.Equals(values.GetValueOrDefault("lead"),
                             StringComparison.OrdinalIgnoreCase))?.Id
                     ?? Prefer(enabled, "codex", 1),
-                Options = _ => AgentOptions(enabled, requireVerdict: false)
+                Options = _ => anyAgent
             },
             new()
             {
@@ -92,7 +98,7 @@ internal static class TaskWizard
                 GlossaryTerm = "auditor",
                 Input = WizardInput.Choice,
                 Default = values => values.GetValueOrDefault("lead", Prefer(enabled, "claude", 0)),
-                Options = _ => AgentOptions(enabled, requireVerdict: true),
+                Options = _ => auditors,
                 Validate = (value, _) => CanAudit(enabled, value)
                     ? null
                     : $"'{value}' cannot return a verdict. Its audit profile needs successMarker and " +

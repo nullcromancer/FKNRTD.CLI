@@ -26,13 +26,30 @@ internal sealed class AgentManager : IOverlay
 {
     private readonly IReadOnlyList<AgentDefinition> _agents;
     private readonly IReadOnlyDictionary<string, int> _usage;
+    private readonly IReadOnlyDictionary<string, bool> _onPath;
     private int _selected;
 
     public AgentManager(IReadOnlyList<AgentDefinition> agents, IReadOnlyDictionary<string, int> usage)
     {
         _agents = agents;
         _usage = usage;
+
+        // Resolved once, here, rather than per agent per frame. Find walks PATH with a File.Exists
+        // for every directory and every extension - on Windows that is well over a hundred probes -
+        // and this panel asked it about every agent about eight times a frame for as long as it was
+        // open. The roster is a picture of one moment either way; installing something while it is
+        // open and reopening it is the same gesture as any other refresh.
+        _onPath = agents
+            .Select(agent => agent.Executable)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                executable => executable,
+                executable => ExecutableLocator.Find(executable) is not null,
+                StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>Whether this agent's command was on PATH when the panel was opened.</summary>
+    private bool OnPath(AgentDefinition agent) => _onPath.GetValueOrDefault(agent.Executable);
 
     public string Mode => "AGENTS";
 
@@ -92,7 +109,9 @@ internal sealed class AgentManager : IOverlay
             return OverlayResult.Submit;
         }
 
-        if (key.Key is ConsoleKey.Delete or ConsoleKey.Backspace && Selected is { } removed)
+        // Delete only. Backspace used to do this too, and Backspace is the key people press to go
+        // back - putting a destructive confirmation behind it was a trap with no upside.
+        if (key.Key is ConsoleKey.Delete && Selected is { } removed)
         {
             Action = AgentAction.Remove;
             AgentId = removed.Id;
@@ -139,7 +158,7 @@ internal sealed class AgentManager : IOverlay
             canvas.DrawText(x, y, selected ? "▸ " : "  ", Theme.Violet, bold: true, maxWidth: 2,
                 background: fill);
 
-            var onPath = ExecutableLocator.Find(agent.Executable) is not null;
+            var onPath = OnPath(agent);
             canvas.DrawText(x + 2, y, agent.Enabled ? "√" : "·",
                 agent.Enabled ? Theme.Green : Theme.Muted, bold: true, maxWidth: 1, background: fill);
             canvas.DrawText(x + 4, y, Text.Truncate(agent.Id, idWidth),
@@ -225,7 +244,7 @@ internal sealed class AgentManager : IOverlay
         var widths = new int[4];
         foreach (var agent in _agents)
         {
-            var facts = Facts(agent, ExecutableLocator.Find(agent.Executable) is not null).ToArray();
+            var facts = Facts(agent, OnPath(agent)).ToArray();
             for (var column = 0; column < facts.Length && column < widths.Length; column++)
             {
                 widths[column] = Math.Max(widths[column], Text.DisplayWidth(facts[column]));
@@ -256,7 +275,7 @@ internal sealed class AgentManager : IOverlay
             $"{agent.DisplayName} runs the command {agent.Executable}."
         };
 
-        parts.Add(ExecutableLocator.Find(agent.Executable) is null
+        parts.Add(!OnPath(agent)
             ? $"That command is not on this machine's PATH, so any task that names {agent.Id} would " +
               "fail the moment it tried to launch it. Install it, or point this agent at a different " +
               $"executable with: fknrtd agent add -id {agent.Id} -exe <command>."

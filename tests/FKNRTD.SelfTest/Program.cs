@@ -2645,6 +2645,12 @@ static Task TestAgentManagerAsync()
     manager = AgentManager.Create(snapshot);
     Equal(OverlayResult.Cancel, manager.HandleKey(Key(ConsoleKey.Escape)), "Escape leaves it alone");
 
+    // Backspace used to remove an agent too. Backspace is the key people press to go back, and a
+    // destructive confirmation behind it was a trap with nothing to recommend it.
+    manager = AgentManager.Create(snapshot);
+    Equal(OverlayResult.Continue, manager.HandleKey(Key(ConsoleKey.Backspace)),
+        "Backspace does not start removing an agent");
+
     // An empty roster cannot toggle or remove anything, and must not claim it can.
     var empty = new AgentManager([], new Dictionary<string, int>());
     Equal(OverlayResult.Continue, empty.HandleKey(Key(ConsoleKey.Spacebar)),
@@ -3008,6 +3014,17 @@ static Task TestHelpWritesThePageAsync()
     Equal(OverlayResult.Continue, refused.HandleKey(Key(ConsoleKey.R)),
         "A letter action is not bound on a panel that filters");
     True(!refused.ActionRequested, "And it does not fire");
+
+    // An action bound to Escape would shadow the only way out of a modal, so it is refused
+    // whether or not the panel filters.
+    foreach (var filterHint in new string?[] { null, "search me" })
+    {
+        var trapped = new InfoPanel("T", Theme.Cyan, _ => [new InfoLine("a", "b")], filterHint,
+            action: (ConsoleKey.Escape, "Esc", "do a thing"));
+        Equal(OverlayResult.Cancel, trapped.HandleKey(Key(ConsoleKey.Escape)),
+            "Escape still closes the panel");
+        True(!trapped.ActionRequested, "And never fires an action bound to it");
+    }
 
     // The document it writes is the real one, with every table in it.
     var page = PortalCommand.Render(DateTimeOffset.UnixEpoch);
