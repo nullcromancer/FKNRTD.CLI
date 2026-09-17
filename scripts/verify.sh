@@ -132,6 +132,7 @@ json.dump(c, io.open(p, 'w', encoding='utf-8'), indent=2)
 # The reset-time parser decides how long the review queue sleeps. A wait of the wrong length
 # fails silently - too short spends a queue entry, too long misses the window entirely.
 row "reset-seconds --self-test"           0 python "$ROOT/scripts/reset-seconds.py" --self-test
+row "manage.sh help"                      0 bash "$ROOT/scripts/manage.sh" help
 
 row "fknrtd config validate (bad values)" 1 "$FKNRTD" config validate
 row "fknrtd doctor (bad values)"          2 "$FKNRTD" doctor

@@ -62,7 +62,24 @@ verify() {
 }
 
 pack() {
+  # The old package for this version goes first. The version number does not change during
+  # development, so 'dotnet tool install --version 1.0.0 --add-source artifacts' will happily
+  # resolve a package built days ago and report success: the tool is reinstalled, the version is
+  # right, and none of the work since is in it. Removing it first means the only 1.0.0 that can
+  # be resolved is the one this pack just produced.
+  rm -f "$artifacts/$package_id."*.nupkg
   dotnet pack "$project" -c Release -o "$artifacts"
+}
+
+# The compiled assembly inside the installed global tool, or empty when it cannot be found.
+installed_assembly() {
+  version=$1
+  find "$HOME/.dotnet/tools/.store/$(printf '%s' "$package_id" | tr 'A-Z' 'a-z')/$version"     -name "$command_name.dll" 2>/dev/null | head -n 1
+}
+
+# The most recently edited source file in this checkout.
+newest_source() {
+  find "$root/src" -name '*.cs' -newer "$1" 2>/dev/null | head -n 1
 }
 
 # Shared flag parsing for install and update.
@@ -78,8 +95,49 @@ parse_options() {
   done
 }
 
+# Process IDs of any running 'fknrtd', one per line, or nothing.
+#
+# Installing over a running tool fails part-way through: the uninstall cannot delete files the
+# running process holds open, and .NET reports it as "Access to the path ... is denied", which
+# names neither the cause nor the cure. The usual reason is the dashboard being open in another
+# window - the exact thing somebody does when they want to watch what changed.
+running_tool() {
+  if command -v tasklist >/dev/null 2>&1; then
+    # MSYS_NO_PATHCONV stops Git Bash rewriting /fi and /fo into Windows paths, which it does
+    # silently: tasklist then reports 'Invalid argument - C:/Program Files/Git/fi' on stderr,
+    # this function returns nothing, and the guard reads that as "no tool is running".
+    MSYS_NO_PATHCONV=1 tasklist /fi "imagename eq $command_name.exe" /fo csv /nh 2>/dev/null |
+      awk -F'","' 'NF > 1 { gsub(/"/, "", $2); print $2 }'
+  elif command -v pgrep >/dev/null 2>&1; then
+    pgrep -x "$command_name" 2>/dev/null
+  fi
+}
+
+# Refuse to install over a running tool, and say what to close.
+require_tool_not_running() {
+  pids=$(running_tool)
+  [ -z "$pids" ] && return 0
+
+  count=$(printf '%s
+' "$pids" | grep -c .)
+  printf 'fknrtd manage: %s is running (pid %s), so its files cannot be replaced.
+'     "$command_name" "$(printf '%s' "$pids" | tr '
+' ' ' | sed 's/ $//')" >&2
+  printf '
+' >&2
+  if [ "$count" -eq 1 ]; then
+    printf 'Quit it with Q and run this again. An open dashboard is the usual reason.
+' >&2
+  else
+    printf 'Quit them with Q and run this again. Open dashboards are the usual reason.
+' >&2
+  fi
+  exit 1
+}
+
 install_tool() {
   require_dotnet
+  require_tool_not_running
   parse_options "$@"
   current=$(installed_version)
   if [ -n "$current" ]; then
@@ -96,6 +154,7 @@ install_tool() {
 
 update_tool() {
   require_dotnet
+  require_tool_not_running
   parse_options "$@"
   current=$(installed_version)
   if [ -z "$current" ]; then
@@ -180,7 +239,21 @@ doctor() {
     report "WARN" "Up to date" "Installed $current, this checkout builds $version. Run 'manage.sh update'."
     status=1
   elif [ -n "$current" ]; then
-    report "OK"   "Up to date" "Matches this checkout."
+    # Not the version number. It does not change during development, so comparing it answered
+    # "is the installed tool the same number" and was read as "is the installed tool this work" -
+    # which it kept saying yes to while the installed tool was two days old. The assembly's own
+    # timestamp against the newest source file is the question actually being asked.
+    assembly=$(installed_assembly "$current")
+    if [ -z "$assembly" ]; then
+      report "WARN" "Up to date" "Version $current matches, but the installed assembly was not found to compare."
+      status=1
+    elif [ -n "$(newest_source "$assembly")" ]; then
+      changed=$(newest_source "$assembly")
+      report "WARN" "Up to date" "Version $current matches, but ${changed#"$root/"} is newer than the installed tool. Run 'manage.sh update'."
+      status=1
+    else
+      report "OK"   "Up to date" "No source file is newer than the installed tool."
+    fi
   fi
 
   resolved=$(command -v "$command_name" 2>/dev/null || true)
