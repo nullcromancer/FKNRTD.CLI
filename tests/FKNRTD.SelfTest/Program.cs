@@ -2530,6 +2530,19 @@ static Task TestEventVocabularyAsync()
             $"The history screen shows '{recorded.Type}', which is a type this product records");
     }
 
+    // Nor may it suggest one. The empty history told the reader events are recorded "as stages run
+    // and agents report in" - neither of which writes one - and the no-match hint suggested
+    // searching for "stage.failed", a type that has never existed.
+    foreach (var scene in new[] { "events", "events-empty" })
+    {
+        var prose = Prose(Scenes.Render(scene, 110, 40, colour: false));
+        foreach (var invented in new[] { "stage.failed", "stage.passed", "stages run", "agents report in" })
+        {
+            True(!prose.Contains(invented, StringComparison.Ordinal),
+                $"The {scene} screen does not offer '{invented}', which this product never records");
+        }
+    }
+
     Equal(EventTypes.All.Count, EventTypes.All.Distinct(StringComparer.Ordinal).Count(),
         "Event types are unique");
     foreach (var type in EventTypes.All)
@@ -3839,6 +3852,8 @@ static Task TestCorrectedClaimsStayCorrectedAsync()
             "the same claim on the prompts screen"),
         ("It proposes; it changes nothing",
             "the same claim about the lead, which nothing enforces"),
+        ("will not get through the pipeline until",
+            "doctor reports and does not gate; a task starts and fails part-way through"),
         ("no single agent both writes",
             "nothing stops one agent filling all three roles"),
         ("Safe means no overlap at all",

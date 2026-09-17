@@ -195,11 +195,18 @@ internal static class Reference
             {
                 return
                 [
+                    // Both of these named things that are not recorded. Stages produce no events -
+                    // press I on a task for stage detail - and an agent reporting in saves a runtime
+                    // snapshot without writing history. Suggesting a search for "stage.failed" sent
+                    // the reader looking for a type that has never existed.
                     new InfoParagraph(events.Count == 0
-                        ? "Nothing has happened in this workspace yet. Events are recorded as tasks are " +
-                          "created, stages run, and agents report in."
-                        : "No event matches that. Try a task id, a severity such as error, or an event " +
-                          "type such as stage.failed.", Theme.Muted)
+                        ? "Nothing has happened in this workspace yet. What gets recorded here is the " +
+                          "workspace being set up, tasks created and cancelled, workflows started, " +
+                          "repaired, failed, made ready and landed, and messages sent. Stage detail " +
+                          "is not here; press I on a task for that."
+                        : "No event matches that. Try a task id, a severity such as error, or one of " +
+                          "the recorded types: " + string.Join(", ", EventTypes.All.Take(4)) + " and " +
+                          $"{EventTypes.All.Count - 4} more.", Theme.Muted)
                 ];
             }
 
@@ -775,9 +782,12 @@ internal static class Reference
         blocks.Add(new InfoParagraph(blocking == 0
             ? "Everything a task run depends on is in place. A ∆ is an optional capability that is " +
               "not available; it removes a feature rather than stopping work."
-            : $"{blocking} required check{(blocking == 1 ? "" : "s")} failed. A task will not get " +
-              "through the pipeline until that is fixed — most often an agent whose executable is " +
-              "not on PATH, or Git missing from a Git-mode workspace."));
+            : $"{blocking} required check{(blocking == 1 ? "" : "s")} failed — most often an agent " +
+              "whose executable is not on PATH, or Git missing from a Git-mode workspace. Nothing " +
+              "here blocks a run: doctor reports and does not gate, so a task will start and fail " +
+              "part-way through instead. It can also fail on an enabled agent that the task you are " +
+              "about to run does not name, which is worth knowing before you go looking for the " +
+              "wrong fault."));
         var entry = Glossary.Find("doctor");
         if (entry is not null)
         {
