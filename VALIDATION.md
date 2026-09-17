@@ -97,6 +97,13 @@ gone unnoticed for the same reason — the situation was rendered nowhere:
   up first, a settings file that is not an object is left exactly as it was; and nothing an agent
   can print makes the observer throw, including a hundred-kilobyte line and two hundred levels of
   nesting.
+- **What a refresh costs.** The dashboard takes a snapshot and draws a frame once a second, and
+  neither had ever been timed — so "once a second" was a number chosen rather than a number
+  justified. Measured with a new `-- bench` dev command against a workspace holding twenty-five
+  tasks: a snapshot of a standalone workspace takes a median of 38 ms and a frame takes 2.3 ms. A
+  Git-backed workspace costs about 300 ms, almost all of it starting Git processes rather than
+  reading anything, which is 30% of the interval and the reason the setting's advice now names a
+  floor. A modal being open already slows the unattended redraw by four times.
 - **Wide characters, end to end.** The README claims a CJK or emoji task title does not shear the
   borders, because the renderer measures in terminal columns rather than characters. Two tasks were
   created through the real CLI — one Japanese, one with emoji — and every row of the resulting

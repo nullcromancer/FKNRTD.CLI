@@ -32,6 +32,90 @@ if (args.FirstOrDefault() == "render")
 // A developer sweep: every scene at every interesting size, in process. Far wider than the suite
 // samples, and too slow to keep in it, but it is what finds a crash the five sampled widths never
 // would.  dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz
+// What a refresh costs. The loop takes a snapshot and draws a frame once a second; if either were
+// slower than the interval the dashboard would spend its life behind, and neither had been timed.
+//   dotnet run --project tests/FKNRTD.SelfTest -c Release -- bench
+if (args.FirstOrDefault() == "bench")
+{
+    var benchRoot = Path.Combine(Path.GetTempPath(), "fknrtd-bench-" + Guid.NewGuid().ToString("N")[..8]);
+    Directory.CreateDirectory(benchRoot);
+    try
+    {
+        var paths = WorkspaceLocator.ForRoot(benchRoot);
+        var benchStore = new StateStore(paths);
+        await benchStore.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "bench",
+            Mode = WorkspaceMode.Standalone,
+            Agents = [CreateFakeAgent()]
+        }).ConfigureAwait(false);
+
+        var benchTasks = new TaskService(benchStore, new GitService(new ProcessRunner()));
+        var count = args.Length > 1 && int.TryParse(args[1], out var requested) ? requested : 25;
+        for (var index = 0; index < count; index++)
+        {
+            await benchTasks.CreateAsync($"Bench task {index:00}",
+                "A brief long enough to be accepted by the validator, repeated for the bench.",
+                "fake", "fake", "fake", ["dotnet build"]).ConfigureAwait(false);
+        }
+
+        var snapshots = new DashboardSnapshotService(
+            benchStore,
+            new GitService(new ProcessRunner()),
+            new ClaimService(benchStore),
+            new MessageService(benchStore));
+
+        // One untimed pass first: the first call pays for JIT and a cold file cache, and reporting
+        // that as the refresh cost would overstate it several times over.
+        await snapshots.CaptureAsync().ConfigureAwait(false);
+
+        var captureMs = new List<double>();
+        for (var index = 0; index < 20; index++)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            await snapshots.CaptureAsync().ConfigureAwait(false);
+            captureMs.Add(clock.Elapsed.TotalMilliseconds);
+        }
+
+        var benchSnapshot = await snapshots.CaptureAsync().ConfigureAwait(false);
+        var renderer = new DashboardApp(null!, null!, null!, null!, null!, benchStore, null!, null!, null!);
+        renderer.Render(benchSnapshot, 120, 40, useColor: true);
+
+        var renderMs = new List<double>();
+        for (var index = 0; index < 200; index++)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            renderer.Render(benchSnapshot, 120, 40, useColor: true);
+            renderMs.Add(clock.Elapsed.TotalMilliseconds);
+        }
+
+        static string Report(string what, List<double> samples)
+        {
+            samples.Sort();
+            return $"{what,-22} median {samples[samples.Count / 2],7:0.00} ms   " +
+                   $"worst {samples[^1],7:0.00} ms   over {samples.Count} runs";
+        }
+
+        Console.WriteLine($"{count} tasks in the workspace");
+        Console.WriteLine(Report("snapshot capture", captureMs));
+        Console.WriteLine(Report("frame render", renderMs));
+        Console.WriteLine();
+        Console.WriteLine("The loop does one of each per refresh, at 1000 ms by default.");
+        return 0;
+    }
+    finally
+    {
+        try
+        {
+            Directory.Delete(benchRoot, recursive: true);
+        }
+        catch (IOException)
+        {
+            // A bench directory left behind is not worth failing over.
+        }
+    }
+}
+
 if (args.FirstOrDefault() == "fuzz")
 {
     var widths = new[] { 1, 2, 10, 20, 40, 59, 60, 61, 62, 70, 83, 84, 85, 100, 119, 120, 121, 160, 200, 400 };

@@ -136,9 +136,17 @@ public static class SettingsCatalog
 
         new("dashboardRefreshMilliseconds", "Dashboard refresh interval", DashboardFields, "1000",
             "How often the dashboard re-reads state and redraws.",
-            "Must be at least 100. Each refresh reads the workspace's state files and queries Git.",
+            "Must be at least 100. Each refresh reads the workspace's state files and, in a " +
+            "Git-backed workspace, launches several Git processes. Measured on the machine this was " +
+            "written on: about 40 ms for a standalone workspace with twenty-five tasks in it, and " +
+            "about 300 ms for a Git-backed one, where almost all of the cost is starting those " +
+            "processes rather than reading anything.",
             "Lowering it makes a running task feel more live at the cost of steady disk and Git " +
-            "activity. Raising it is worth doing over a slow network filesystem."),
+            "activity, and below about 500 in a Git workspace each refresh starts before the last " +
+            "one has finished thinking — the dashboard keeps working and simply spends its time " +
+            "polling. Raising it is worth doing over a slow network filesystem. A modal being open " +
+            "already slows the unattended redraw by four times, because somebody reading a panel is " +
+            "not watching the numbers behind it."),
 
         new("requireCleanTreeForLanding", "Require a clean tree to land", Safety, "true",
             "Whether landing refuses while your own checkout has uncommitted changes.",
