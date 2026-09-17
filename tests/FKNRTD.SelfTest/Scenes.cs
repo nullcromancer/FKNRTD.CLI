@@ -254,6 +254,13 @@ internal static class Scenes
         ]
     };
 
+    /// <summary>
+    /// The real conflict detector, so a scene shows the classification the product would actually
+    /// produce for those claims rather than one written out by hand beside it.
+    /// </summary>
+    private static ClaimService Detector() =>
+        new(new StateStore(WorkspaceLocator.ForRoot(Path.GetTempPath())));
+
     public static FknrtdConfig SampleConfig() => new()
     {
         ProjectName = "aurora-api",
@@ -301,6 +308,26 @@ internal static class Scenes
                 WorkflowStatus.Waiting, WorkflowStage.Verify)
         };
 
+        var claims = new List<FileClaim>
+        {
+            new()
+            {
+                Id = "claim-live", AgentId = "codex", TaskId = "FKN-20260917-094212-c3d4",
+                Mode = ClaimMode.Write, WorktreePath = "/src/aurora-api/.fknrtd/worktrees/c3d4",
+                Paths = ["src/Csv/CsvReader.cs"],
+                CreatedAt = captured.AddMinutes(-2), UpdatedAt = captured.AddMinutes(-2),
+                ExpiresAt = captured.AddMinutes(3)
+            },
+            new()
+            {
+                Id = "claim-stale", AgentId = "claude", TaskId = "FKN-20260916-221030-e5f6",
+                Mode = ClaimMode.Write, WorktreePath = "/src/aurora-api/.fknrtd/worktrees/e5f6",
+                Paths = ["src/Csv/CsvReader.cs", "src/Csv/Schedule.cs"],
+                CreatedAt = captured.AddMinutes(-40), UpdatedAt = captured.AddMinutes(-40),
+                ExpiresAt = captured.AddMinutes(-35)
+            }
+        };
+
         return new DashboardSnapshot
         {
             Config = SampleConfig(),
@@ -333,6 +360,11 @@ internal static class Scenes
                     UpdatedAt = captured
                 }
             ],
+            // Two reservations, one of them past its expiry, and the conflicts the real detector
+            // makes of them. The coordination panel's whole job is showing an overlap, and it had
+            // only ever been rendered with nothing to show.
+            Claims = claims,
+            Conflicts = Detector().Detect(claims, [], captured),
             Usage =
             [
                 new UsageSnapshot

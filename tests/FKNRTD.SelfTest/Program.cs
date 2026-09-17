@@ -129,7 +129,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync),
     ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync),
     ("The agent roster lists and changes the roster", TestAgentManagerAsync),
-    ("The settings screen can change what it explains", TestSettingsBrowserAsync)
+    ("The settings screen can change what it explains", TestSettingsBrowserAsync),
+    ("Coordination can clear the reservations it reports", TestCoordinationReleaseAsync)
 };
 
 var failures = new List<string>();
@@ -2693,4 +2694,43 @@ static async Task TestSettingsBrowserAsync()
     }
 
     await Task.CompletedTask;
+}
+
+/// <summary>
+/// The coordination screen, and the one action it offers. An expired reservation is reported as
+/// stale for as long as its record exists, and nothing deletes the record - so a panel that listed
+/// them without a way to clear them was describing a problem it had decided not to solve.
+/// </summary>
+static Task TestCoordinationReleaseAsync()
+{
+    var snapshot = Scenes.PopulatedSnapshot();
+    var expired = snapshot.Claims.Where(claim => claim.ExpiresAt <= snapshot.CapturedAt).ToArray();
+    True(expired.Length > 0, "The sample workspace has a reservation to clear");
+
+    var frame = Scenes.Render("coordination", 110, 44, colour: false);
+    True(frame.Contains("R release", StringComparison.Ordinal),
+        "The panel offers the key that clears them");
+    True(frame.Contains("does not go away on its own", StringComparison.Ordinal),
+        "It says why they need clearing");
+
+    // The two entries on this screen used to contradict each other: one said claims expire on
+    // their own, the other said an expired claim is reported until somebody releases it.
+    True(!frame.Contains("Claims expire on their own", StringComparison.Ordinal),
+        "Nothing on the screen claims a reservation clears itself");
+
+    var panel = Reference.Coordination(snapshot);
+    Equal(OverlayResult.Submit, panel.HandleKey(Key(ConsoleKey.R)), "R asks for the release");
+    True(panel.ActionRequested, "The panel records that it was asked");
+
+    // With nothing expired there is no key, because a key that does nothing is worse than no key.
+    var clean = snapshot with
+    {
+        Claims = snapshot.Claims.Where(claim => claim.ExpiresAt > snapshot.CapturedAt).ToArray()
+    };
+    var quiet = Reference.Coordination(clean);
+    Equal(OverlayResult.Continue, quiet.HandleKey(Key(ConsoleKey.R)),
+        "R does nothing when nothing has expired");
+    True(!quiet.ActionRequested, "And the panel does not claim it was asked");
+
+    return Task.CompletedTask;
 }

@@ -99,7 +99,9 @@ public static class Keymap
             "Shows what the agents have reserved and where they overlap right now: every live file " +
             "claim, every conflict the sentinel currently sees, and the message bus. Claims warn; " +
             "they do not block, so an overlap here is something for you to act on rather than " +
-            "something the pipeline is already waiting out."),
+            "something the pipeline is already waiting out. An expired claim is not removed by " +
+            "expiring - it keeps being reported as stale until somebody clears it, which R does " +
+            "for all of them at once."),
         new("E", "events",
             "Opens the workspace history — the most recent five hundred recorded events, newest " +
             "first and searchable: the workspace being set up, tasks created and cancelled, " +

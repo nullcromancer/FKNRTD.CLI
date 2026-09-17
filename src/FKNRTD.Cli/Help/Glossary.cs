@@ -467,8 +467,11 @@ public static class Glossary
             "A claim is how two agents working at once avoid editing the same file. An agent " +
             "registers the paths it is about to touch, in read or write mode, with an expiry. " +
             "FKNRTD.CLI compares live claims and raises a conflict when they overlap in a way that " +
-            "matters. Claims expire on their own so a crashed agent cannot hold a path forever, " +
-            "which is also why a long operation has to renew its claim rather than set a long one.",
+            "matters. A claim carries an expiry so that a crashed agent stops being treated as an " +
+            "authority on a path, which is why a long operation has to renew its claim rather than " +
+            "set a long one. Expiring is not disappearing: the record stays until somebody releases " +
+            "it, and until then it is reported as a stale claim. Claims only ever warn — nothing " +
+            "in the pipeline waits for one or refuses to run because of one.",
             "fknrtd claim add -agent codex -path src/auth.cs -mode write -ttl 300"),
 
         new("claim-mode", "Claim mode", Coordination,

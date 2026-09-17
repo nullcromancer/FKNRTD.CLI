@@ -271,6 +271,21 @@ public static class Milestones
             "to. And some were right about the ordinary case and wrong about the dangerous one - " +
             "landing was said to require verification to have passed, when a task with no " +
             "verification commands skips that stage and lands on the audit alone."),
+
+        new("2026-09-17",
+            "Clearing what the screen complains about",
+            "Correcting the glossary turned up something the screen itself was guilty of. A file " +
+            "reservation past its expiry is reported as stale for as long as its record exists, " +
+            "and nothing deletes the record - so K listed a complaint that would never go away and " +
+            "offered no way to end it.",
+            "R on the coordination screen releases every expired reservation, and the panel says " +
+            "plainly that expiring is not disappearing. The key only appears when there is " +
+            "something to clear.",
+            "Two entries on that one screen had been contradicting each other: the claim entry said " +
+            "reservations expire on their own, and the stale-claim entry said an expired one is " +
+            "reported until somebody releases it. The second was right. A screen that argues with " +
+            "itself is worse than a screen that is simply wrong, because the reader cannot tell " +
+            "which half to act on."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

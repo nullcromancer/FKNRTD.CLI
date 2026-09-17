@@ -33,6 +33,7 @@ internal sealed class InfoPanel : IOverlay
     private readonly Rgb _accent;
     private readonly Func<string, IReadOnlyList<InfoBlock>> _build;
     private readonly TextField? _filter;
+    private readonly (ConsoleKey Key, string Label, string Meaning)? _action;
     private readonly string _filterHint;
     private int _scroll;
 
@@ -40,13 +41,17 @@ internal sealed class InfoPanel : IOverlay
         string title,
         Rgb accent,
         Func<string, IReadOnlyList<InfoBlock>> build,
-        string? filterHint = null)
+        string? filterHint = null,
+        (ConsoleKey Key, string Label, string Meaning)? action = null)
     {
         _title = title;
         _accent = accent;
         _build = build;
         _filterHint = filterHint ?? string.Empty;
         _filter = filterHint is null ? null : new TextField();
+        // A panel that filters has already spent every letter key on the filter, so an action key
+        // would eat a character the operator meant to type. Only an unfiltered panel can offer one.
+        _action = _filter is null ? action : null;
     }
 
     public InfoPanel(string title, Rgb accent, IReadOnlyList<InfoBlock> blocks)
@@ -56,8 +61,20 @@ internal sealed class InfoPanel : IOverlay
 
     public string Mode => _title;
 
+    /// <summary>
+    /// True when the operator pressed this panel's action key. A reference panel is normally a
+    /// dead end, which is right for a glossary and wrong for a panel listing something you can fix.
+    /// </summary>
+    public bool ActionRequested { get; private set; }
+
     public OverlayResult HandleKey(ConsoleKeyInfo key)
     {
+        if (_action is { } available && key.Key == available.Key)
+        {
+            ActionRequested = true;
+            return OverlayResult.Submit;
+        }
+
         switch (key.Key)
         {
             case ConsoleKey.Escape:
@@ -152,6 +169,11 @@ internal sealed class InfoPanel : IOverlay
         if (_filter is not null)
         {
             keys.Add(("type", "to search"));
+        }
+
+        if (_action is { } available)
+        {
+            keys.Add((available.Label, available.Meaning));
         }
 
         keys.Add(("Esc", "close"));

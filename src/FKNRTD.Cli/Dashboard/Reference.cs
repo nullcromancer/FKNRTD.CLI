@@ -223,6 +223,7 @@ internal static class Reference
     /// </summary>
     public static InfoPanel Coordination(DashboardSnapshot snapshot)
     {
+        var expired = snapshot.Claims.Count(claim => claim.ExpiresAt <= snapshot.CapturedAt);
         var blocks = new List<InfoBlock>();
 
         blocks.Add(new InfoHeading("Overlaps"));
@@ -246,7 +247,10 @@ internal static class Reference
                     Indent: 2));
                 if (conflict.AgentIds.Count > 0)
                 {
-                    blocks.Add(new InfoParagraph("Between: " + string.Join(" and ", conflict.AgentIds),
+                    blocks.Add(new InfoParagraph(
+                        conflict.AgentIds.Count == 1
+                            ? "Held by: " + conflict.AgentIds[0]
+                            : "Between: " + string.Join(" and ", conflict.AgentIds),
                         Theme.Muted, Indent: 2));
                 }
 
@@ -309,10 +313,26 @@ internal static class Reference
             blocks.Add(new InfoParagraph(claimEntry.Detail, Theme.Muted));
         }
 
+        if (expired > 0)
+        {
+            blocks.Add(new InfoGap());
+            blocks.Add(new InfoParagraph(
+                (expired == 1
+                    ? "One reservation has passed its expiry. "
+                    : expired + " reservations have passed their expiry. ") +
+                "An expired reservation does not go away on its own: the record stays " +
+                "where it is and keeps being reported as stale until somebody renews or releases it. " +
+                "Press R to release every expired one now. Nothing that is running is affected - a " +
+                "reservation is a warning to you, not a lock on anything.", Theme.Amber));
+        }
+
         var worst = snapshot.Conflicts.FirstOrDefault();
         return new InfoPanel("COORDINATION",
             worst is null ? Theme.Green : worst.Kind == ConflictKind.Collision ? Theme.Red : Theme.Amber,
-            blocks);
+            _ => blocks,
+            action: expired == 0
+                ? null
+                : (ConsoleKey.R, "R", expired == 1 ? "release the expired one" : $"release {expired} expired"));
     }
 
     /// <summary>

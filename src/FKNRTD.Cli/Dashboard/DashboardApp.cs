@@ -1098,7 +1098,7 @@ internal sealed class DashboardApp
                     snapshot.CapturedAt);
                 break;
             case "K":
-                _overlay = Reference.Coordination(snapshot);
+                OpenCoordination(snapshot);
                 break;
             case "S":
                 OpenSettings(snapshot);
@@ -1448,6 +1448,35 @@ internal sealed class DashboardApp
             {
                 _toast = "Could not create the task: " + exception.Message;
             }
+        };
+    }
+
+    /// <summary>
+    /// Opens the coordination screen behind K. It is the one reference panel that lists something
+    /// the operator can fix rather than only read: an expired reservation is reported as stale
+    /// forever, because nothing deletes the record, so R releases them.
+    /// </summary>
+    private void OpenCoordination(DashboardSnapshot snapshot)
+    {
+        _overlay = Reference.Coordination(snapshot);
+        _overlayCompleted = (completed, current, _) =>
+        {
+            if (completed is not InfoPanel { ActionRequested: true })
+            {
+                return Task.CompletedTask;
+            }
+
+            var expired = current.Claims
+                .Where(claim => claim.ExpiresAt <= current.CapturedAt)
+                .ToArray();
+            // The store is asked directly rather than through ClaimService, whose Release throws
+            // when a claim has already gone. Here that race is the wanted outcome, not an error.
+            var released = expired.Count(claim => _store.DeleteClaim(claim.Id));
+
+            _toast = released == 0
+                ? "Those reservations were already gone."
+                : $"Released {released} expired reservation{(released == 1 ? "" : "s")}.";
+            return Task.CompletedTask;
         };
     }
 
