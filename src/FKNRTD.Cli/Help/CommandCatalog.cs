@@ -143,6 +143,18 @@ public static class CommandCatalog
             "For a failed stage, read its output under .fknrtd/logs/<task-id>/ before retrying.",
             TaskId(), ["fknrtd task show FKN-<id>"], ["task", "status.failed", "verification"]),
 
+        Entry("fknrtd task prompts <id>", "task prompts", Tasks,
+            "Print the exact instruction each agent on a task will be sent.",
+            "Composes the three prompts from the task's brief — the lead's, the implementer's and " +
+            "the auditor's — and prints them verbatim. The implementer's includes the lead's plan " +
+            "once the plan stage has run, and a placeholder before that. It reads the task and the " +
+            "plan artifact and changes nothing. Knowing what an agent is about to be told is the " +
+            "part of authorising it that no amount of sandboxing substitutes for.",
+            "If a prompt is not what you meant, the brief is what to change; create a new task.",
+            [new("<id>", "<task id>", "The task whose prompts to print.", Required: true)],
+            ["fknrtd task prompts FKN-20260917-101500-a1b2"],
+            ["brief", "lead", "implementer", "auditor", "verdict"]),
+
         Entry("fknrtd task diff <id>", "task diff", Tasks,
             "Print the finished change a task made, so it can be read before it is landed.",
             "Shows everything the task committed on top of its base branch, followed by anything " +

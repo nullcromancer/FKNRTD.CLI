@@ -51,6 +51,10 @@ public static class Keymap
             "the base branch, plus anything still uncommitted in its worktree — searchable by file " +
             "or by any text in it. This is the reading that landing asks you to have done.",
             InFooter: true),
+        new("P", "prompts",
+            "Shows the exact text each of the three agents will be sent for this task, composed from " +
+            "your brief. Knowing what an agent is about to be told is the part of authorising it " +
+            "that no amount of sandboxing substitutes for."),
         new("I", "inspect",
             "Opens the full record of the highlighted task: every stage and its outcome, the agents " +
             "assigned to it, where its worktree is on disk, and what to do next."),

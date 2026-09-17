@@ -7,7 +7,7 @@ report to: it isolates their work, runs the checks itself, makes a second machin
 first, keeps the paperwork, and refuses to merge anything until you personally say the word.
 
 `net10.0` &middot; **zero dependencies** &middot; command `fknrtd` &middot; 8 stages &middot;
-39/39 self-tests &middot; MIT
+40/40 self-tests &middot; MIT
 
 > **The operator guide is [`fknrtd-portal.html`](fknrtd-portal.html)** — one self-contained page
 > covering the pipeline, every command, every dashboard key and the full glossary. It opens from
@@ -77,7 +77,7 @@ Git is driven by invoking the `git` executable, never a library. The dashboard r
 in-memory character grid and emits ANSI at three responsive breakpoints
 (`src/FKNRTD.Cli/Dashboard/Canvas.cs`). FKNRTD.CLI holds no credentials of its own; each assistant
 authenticates itself. Testing is a hand-rolled, dependency-free harness, not a framework
-(`tests/FKNRTD.SelfTest/Program.cs`), currently 39 checks, all passing on this checkout.
+(`tests/FKNRTD.SelfTest/Program.cs`), currently 40 checks, all passing on this checkout.
 
 There is no HTTP surface, no hosted service, and no CI/CD pipeline in this repository; it runs on
 a developer machine against a local checkout and exposes no network endpoint. It is aimed at a
@@ -186,6 +186,12 @@ its worktree is, what decides correctness, every stage with what that stage is f
 next.
 
 ![A task's full record](docs/screenshots/inspect.png)
+
+`P` shows the exact instruction each of the three agents will be sent, composed from your brief.
+This product asks you to authorise agents against your code; the least it can do is show you what
+they are going to be told.
+
+![What the agents are told](docs/screenshots/prompts.png)
 
 `V` shows the finished change — everything the task committed on top of the base branch, plus
 anything still uncommitted in its worktree — searchable by file or by any text in it. Landing asks
@@ -390,7 +396,7 @@ dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --n
 ```
 
 The harness prints one line per check and a final `N/N self-tests passed` count, exiting 0 only
-when every check passes. Verified on this checkout: `39/39 self-tests passed`.
+when every check passes. Verified on this checkout: `40/40 self-tests passed`.
 
 Install as a global tool. One management script per platform covers the whole lifecycle:
 
@@ -533,6 +539,7 @@ only, to find executables and pick a shell. It stores no credentials.
 | `fknrtd task create "Title" -brief ... -verify ...` | Commission a task from a script |
 | `fknrtd task list \| show \| run \| retry \| cancel` | Task lifecycle |
 | `fknrtd task diff <id>` | **Print the finished change, to read before landing** |
+| `fknrtd task prompts <id>` | **Print exactly what each agent will be told** |
 | `fknrtd task land <id> -confirm LAND` | Merge verified, audited work |
 | `fknrtd task cleanup <id> -confirm REMOVE` | Remove the worktree and branch |
 | `fknrtd agent new` | **Register a coding CLI through a guided form** |
@@ -546,7 +553,7 @@ only, to find executables and pick a shell. It stores no credentials.
 | `fknrtd portal [-out <file>]` | **Write the offline operator guide** |
 
 **Dashboard keys.** Up/Down select, Enter run, `N` new task, `I` inspect, `L` logs, `R` retry,
-`V` view the change, `C` cancel, `G` land, `X` clean up, `M` message, `U` budget, `D` doctor,
+`V` view the change, `P` prompts, `C` cancel, `G` land, `X` clean up, `M` message, `U` budget, `D` doctor,
 `A` agents, `E` events, `F` find a task,
 `K` coordination, `S` settings, `/` command palette, `?` help, Tab view, `Q` quit.
 

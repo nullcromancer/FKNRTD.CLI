@@ -938,6 +938,7 @@ internal sealed class DashboardApp
             ConsoleKey.S => "S",
             ConsoleKey.F => "F",
             ConsoleKey.V => "V",
+            ConsoleKey.P => "P",
             ConsoleKey.Tab => "Tab",
             ConsoleKey.PageUp => "log-up",
             ConsoleKey.PageDown => "log-down",
@@ -1065,6 +1066,9 @@ internal sealed class DashboardApp
             case "V":
                 await ShowDiffAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 break;
+            case "P":
+                await ShowPromptsAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
             case "?":
                 _overlay = Reference.Help();
                 break;
@@ -1072,6 +1076,37 @@ internal sealed class DashboardApp
                 OpenPalette(snapshot);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Shows what each agent on the highlighted task will be told. The lead's plan is read from disk
+    /// when it exists so the implementer's prompt is the real one rather than a template.
+    /// </summary>
+    private async Task ShowPromptsAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        var task = SelectedTask(snapshot);
+        if (task is null)
+        {
+            _toast = "No task is selected.";
+            return;
+        }
+
+        string? plan = null;
+        var planPath = _store.TaskArtifactPath(task.Id, "plan.md");
+        if (File.Exists(planPath))
+        {
+            try
+            {
+                plan = await File.ReadAllTextAsync(planPath, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // The template placeholder is shown instead; an unreadable plan is not worth
+                // refusing to show the other two prompts over.
+            }
+        }
+
+        _overlay = Reference.Prompts(task, snapshot.Config, plan);
     }
 
     /// <summary>

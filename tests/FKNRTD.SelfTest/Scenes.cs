@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -104,6 +104,13 @@ internal static class Scenes
                 return Reference.Coordination(Populated());
             case "settings":
                 return Reference.Settings(SampleConfig(), "/src/aurora-api/.fknrtd/config.json");
+            case "prompts":
+                return Reference.Prompts(FailedTask(), config, string.Join((char)10,
+                [
+                    "1. Read Schedule.cs and find where the zone is applied.",
+                    "2. Replace ToLocalTime with the workspace zone.",
+                    "3. Add a test that fails before the change."
+                ]));
             case "diff":
                 return Reference.Diff(FailedTask(), config, SampleDiff(), truncated: false);
             case "diff-empty":

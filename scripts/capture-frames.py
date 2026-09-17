@@ -36,6 +36,7 @@ FRAMES = {
     "inspect": ("inspect", 112, 34),
     "land": ("land", 112, 30),
     "diff": ("diff", 112, 30),
+    "prompts": ("prompts", 112, 32),
     "settings": ("settings", 112, 32),
     "welcome": ("welcome", 118, 32),
 }

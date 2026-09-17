@@ -69,7 +69,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Overlay review regressions stay fixed", TestOverlayReviewRegressionsAsync),
     ("The diff view keeps a diff readable", TestDiffViewAsync),
     ("Advice is phrased for the surface asking", TestNextStepIsSurfaceAwareAsync),
-    ("Doctor reports rather than throws on a broken workspace", TestDoctorSurvivesABrokenWorkspaceAsync)
+    ("Doctor reports rather than throws on a broken workspace", TestDoctorSurvivesABrokenWorkspaceAsync),
+    ("The prompt preview shows what is actually sent", TestPromptPreviewAsync)
 };
 
 var failures = new List<string>();
@@ -2038,4 +2039,56 @@ static async Task TestDoctorSurvivesABrokenWorkspaceAsync()
         True(!checks.Single(check => check.Name == "Work gets verified").Required,
             "The verification check is advisory, not required");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// The prompt preview has to show the text an agent will actually receive, not a paraphrase of it.
+/// The whole value of the surface is that it is the same string the orchestrator sends.
+/// </summary>
+static Task TestPromptPreviewAsync()
+{
+    var config = Scenes.SampleConfig();
+    var task = Scenes.PopulatedSnapshot().Tasks.First(item => item.Status == WorkflowStatus.Failed);
+
+    // Every prompt carries the brief. An agent that is not sent the brief cannot do the task, and a
+    // preview that omits it would be reassuring about the wrong thing.
+    foreach (var prompt in new[]
+             {
+                 AgentPrompts.Plan(task),
+                 AgentPrompts.Implement(task, config.Mode, "a plan", string.Empty),
+                 AgentPrompts.Audit(task, config.Mode, "all commands passed")
+             })
+    {
+        True(prompt.Contains(task.Brief, StringComparison.Ordinal), "Every prompt carries the brief verbatim");
+        True(prompt.Contains(task.Id, StringComparison.Ordinal), "Every prompt names the task");
+    }
+
+    // The two read-only roles say so, and only the implementer is told it may write.
+    True(AgentPrompts.Plan(task).Contains("read-only", StringComparison.OrdinalIgnoreCase),
+        "The lead is told it is read-only");
+    True(AgentPrompts.Audit(task, config.Mode, "x").Contains("Do not edit any file", StringComparison.Ordinal),
+        "The auditor is told not to edit");
+    True(AgentPrompts.Audit(task, config.Mode, "x").Contains("FKNRTD_VERDICT: PASS", StringComparison.Ordinal),
+        "The auditor is told the verdict markers");
+
+    // Isolation is stated in terms of the mode the workspace is actually in.
+    True(AgentPrompts.Isolation(task, WorkspaceMode.Git)
+            .Contains("isolated Git worktree", StringComparison.Ordinal),
+        "A Git task is told it is isolated");
+    True(AgentPrompts.Isolation(task, WorkspaceMode.Standalone)
+            .Contains("no Git isolation", StringComparison.Ordinal),
+        "A standalone task is told it is not");
+
+    // Previewed before the worktree exists, an unset branch must still read as a sentence.
+    var unstarted = task with { BranchName = string.Empty, WorktreePath = string.Empty };
+    True(!AgentPrompts.Isolation(unstarted, WorkspaceMode.Git).Contains("branch .", StringComparison.Ordinal),
+        "An unset branch does not render as an empty name");
+
+    // And the panel shows the real text rather than a summary of it.
+    var frame = Scenes.Render("prompts", 110, 44, colour: false);
+    True(frame.Contains("You are the lead developer", StringComparison.Ordinal),
+        "The preview shows the lead's actual instruction");
+    True(frame.Contains("Nothing else is sent", StringComparison.Ordinal),
+        "The preview says this is all that is sent");
+    return Task.CompletedTask;
 }

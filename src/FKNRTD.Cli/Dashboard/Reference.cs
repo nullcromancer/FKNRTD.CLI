@@ -631,6 +631,75 @@ internal static class Reference
         return line.StartsWith('-') ? Theme.Red : Theme.Muted;
     }
 
+    /// <summary>
+    /// What each agent on this task will actually be told, behind <c>P</c>. This product's whole
+    /// argument is that you should know what you are authorising before an agent runs, and the one
+    /// thing it would not show was the instruction the agent receives.
+    /// </summary>
+    public static InfoPanel Prompts(WorkflowTask task, FknrtdConfig config, string? plan) => new(
+        "WHAT THE AGENTS ARE TOLD",
+        Theme.Violet,
+        filter =>
+        {
+            var blocks = new List<InfoBlock>
+            {
+                new InfoParagraph(
+                    "This is the text each agent receives, composed from your brief. Nothing else is " +
+                    "sent. Each agent then reads the code itself, under the sandbox its profile sets.",
+                    Theme.Muted)
+            };
+
+            void Section(string heading, string role, string prompt)
+            {
+                if (filter.Length > 0 &&
+                    !heading.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
+                    !prompt.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                blocks.Add(new InfoHeading(heading));
+                blocks.Add(new InfoParagraph(role, Theme.Muted));
+                blocks.Add(new InfoGap());
+                // Wrapped, not truncated. A diff needs its leading + or - kept at the start of a
+                // row, which is why that view renders raw; a prompt is prose, and cutting an
+                // instruction off at the panel edge defeats the entire point of showing it.
+                foreach (var line in prompt.Split((char)10))
+                {
+                    var text = line.TrimEnd((char)13);
+                    blocks.Add(text.Length == 0 ? new InfoGap() : new InfoParagraph(text));
+                }
+            }
+
+            Section($"Sent to {task.LeadAgentId} — the plan stage", "Read-only. It proposes; it changes nothing.",
+                AgentPrompts.Plan(task));
+
+            Section($"Sent to {task.ImplementerAgentId} — the implement stage",
+                "The only agent that may write files. This prompt carries the lead's plan.",
+                AgentPrompts.Implement(
+                    task,
+                    config.Mode,
+                    plan ?? "[the lead's plan is inserted here once the plan stage has run]",
+                    task.RepairRound == 0
+                        ? string.Empty
+                        : "[on a repair round, the failing verification output is added here]"));
+
+            Section($"Sent to {task.AuditorAgentId} — the audit stage",
+                "Read-only. It must end with a PASS or FAIL verdict.",
+                AgentPrompts.Audit(
+                    task,
+                    config.Mode,
+                    "[the verification results are inserted here once the verify stage has run]"));
+
+            if (blocks.Count == 1)
+            {
+                blocks.Add(new InfoParagraph("Nothing in these prompts matches that.", Theme.Muted));
+            }
+
+            return blocks;
+        },
+        filterHint: "any text you want to check is or is not being sent");
+
     /// <summary>The pre-flight checks behind <c>D</c>, with what a failure would actually cost.</summary>
     public static InfoPanel Doctor(IReadOnlyList<DoctorCheck> checks)
     {

@@ -252,15 +252,7 @@ public sealed class Orchestrator
 
         var stage = BeginStage(task, WorkflowStage.Plan, task.LeadAgentId);
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-        var prompt = $"""
-            You are the lead developer for FKNRTD.CLI task {task.Id}.
-            Work in read-only planning mode. Inspect the repository and create a concise implementation plan for this brief:
-
-            {task.Brief}
-
-            Include exact files likely to change, risks, acceptance criteria, and the verification approach.
-            Do not edit files and do not claim implementation is complete.
-            """;
+        var prompt = AgentPrompts.Plan(task);
         var result = await RunAgentAsync(
                 config,
                 task.LeadAgentId,
@@ -314,25 +306,11 @@ public sealed class Orchestrator
               This is repair round {task.RepairRound}. Correct the failures recorded here:
               {BuildRepairContext(task)}
               """;
-        var isolation = config.Mode == WorkspaceMode.Standalone
-            ? $"You are working directly in the FKNRTD.CLI workspace at {task.WorktreePath}. " +
-              "There is no Git isolation, so change only what the brief requires."
-            : $"You are already inside an isolated Git worktree on branch {task.BranchName}.";
-        var prompt = $"""
-            You are the implementing developer for FKNRTD.CLI task {task.Id}.
-            {isolation}
-
-            Brief:
-            {task.Brief}
-
-            Lead plan:
-            {await File.ReadAllTextAsync(planPath, cancellationToken).ConfigureAwait(false)}
-            {repairContext}
-
-            Implement the requested change completely in this workspace. Keep unrelated files untouched.
-            You may run focused checks. Do not merge anything and do not edit outside this workspace.
-            Report the changed files and the checks you ran when finished.
-            """;
+        var prompt = AgentPrompts.Implement(
+            task,
+            config.Mode,
+            await File.ReadAllTextAsync(planPath, cancellationToken).ConfigureAwait(false),
+            repairContext);
         var result = await RunAgentAsync(
                 config,
                 task.ImplementerAgentId,
@@ -443,25 +421,7 @@ public sealed class Orchestrator
 
         var stage = BeginStage(task, WorkflowStage.Audit, task.AuditorAgentId);
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-        var against = config.Mode == WorkspaceMode.Standalone
-            ? "Review the implementation in this workspace against this brief:"
-            : $"Review the implementation in this worktree against base ref {task.BaseRef} and this brief:";
-        var prompt = $"""
-            You are the independent auditor for FKNRTD.CLI task {task.Id}.
-            {against}
-
-            {task.Brief}
-
-            Verification results:
-            {BuildVerificationSummary(task)}
-
-            Inspect the actual changes and evidence. Do not edit any file.
-            Finish with exactly one verdict marker on its own line:
-            FKNRTD_VERDICT: PASS
-            or
-            FKNRTD_VERDICT: FAIL
-            A PASS means the implementation satisfies the brief and has no blocking correctness, safety, or maintainability issue.
-            """;
+        var prompt = AgentPrompts.Audit(task, config.Mode, BuildVerificationSummary(task));
         var result = await RunAgentAsync(
                 config,
                 task.AuditorAgentId,

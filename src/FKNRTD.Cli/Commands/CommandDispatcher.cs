@@ -460,6 +460,7 @@ internal static class CommandDispatcher
             "list" or "ls" or "" => await ListTasksAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "show" => await ShowTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "diff" => await DiffTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
+            "prompts" => await PromptsTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "new" => await NewTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "run" => await RunTaskAsync(runtime,
                 Required(arguments.Get("id") ?? arguments.Positional(2), "task ID"), cancellationToken)
@@ -696,6 +697,53 @@ internal static class CommandDispatcher
         }
 
         return task.Status == WorkflowStatus.Failed ? 3 : 0;
+    }
+
+    /// <summary>
+    /// <c>fknrtd task prompts</c>. Prints the instruction each agent on a task will receive. This
+    /// product asks you to authorise agents against your code; the least it can do is show you what
+    /// they are going to be told before you do.
+    /// </summary>
+    private static async Task<int> PromptsTaskAsync(
+        FknrtdRuntime runtime,
+        CliArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var id = Required(arguments.Get("id") ?? arguments.Positional(2), "task ID");
+        var task = await runtime.Store.LoadTaskAsync(id, cancellationToken).ConfigureAwait(false);
+        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+
+        var planPath = runtime.Store.TaskArtifactPath(task.Id, "plan.md");
+        var plan = File.Exists(planPath)
+            ? await File.ReadAllTextAsync(planPath, cancellationToken).ConfigureAwait(false)
+            : "[the lead's plan is inserted here once the plan stage has run]";
+
+        void Section(string heading, string note, string prompt)
+        {
+            Console.WriteLine(heading);
+            Console.WriteLine(note);
+            Console.WriteLine();
+            Console.WriteLine(prompt);
+            Console.WriteLine();
+        }
+
+        Console.WriteLine(
+            "This is the text each agent receives, composed from your brief. Nothing else is sent.");
+        Console.WriteLine();
+        Section($"--- sent to {task.LeadAgentId} for the plan stage ---",
+            "Read-only. It proposes; it changes nothing.",
+            AgentPrompts.Plan(task));
+        Section($"--- sent to {task.ImplementerAgentId} for the implement stage ---",
+            "The only agent that may write files.",
+            AgentPrompts.Implement(task, config.Mode, plan,
+                task.RepairRound == 0
+                    ? string.Empty
+                    : "[on a repair round, the failing verification output is added here]"));
+        Section($"--- sent to {task.AuditorAgentId} for the audit stage ---",
+            "Read-only. It must end with a PASS or FAIL verdict.",
+            AgentPrompts.Audit(task, config.Mode,
+                "[the verification results are inserted here once the verify stage has run]"));
+        return 0;
     }
 
     /// <summary>
