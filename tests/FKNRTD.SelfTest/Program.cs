@@ -29,6 +29,58 @@ if (args.FirstOrDefault() == "render")
     return 0;
 }
 
+// A developer sweep: every scene at every interesting size, in process. Far wider than the suite
+// samples, and too slow to keep in it, but it is what finds a crash the five sampled widths never
+// would.  dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz
+if (args.FirstOrDefault() == "fuzz")
+{
+    var widths = new[] { 1, 2, 10, 20, 40, 59, 60, 61, 62, 70, 83, 84, 85, 100, 119, 120, 121, 160, 200, 400 };
+    var heights = new[] { 1, 2, 5, 10, 19, 20, 21, 24, 30, 40, 80 };
+    var problems = new List<string>();
+    var checkedRenders = 0;
+
+    foreach (var scene in Scenes.Names)
+    {
+        foreach (var width in widths)
+        {
+            foreach (var height in heights)
+            {
+                checkedRenders++;
+                var expectedWidth = Math.Max(60, width);
+                var expectedHeight = Math.Max(20, height);
+                try
+                {
+                    var lines = Scenes.Render(scene, width, height, colour: false)
+                        .Split([(char)13, (char)10], StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length != expectedHeight)
+                    {
+                        problems.Add($"{scene} {width}x{height}: {lines.Length} rows, expected {expectedHeight}");
+                    }
+                    else if (lines.FirstOrDefault(line => Text.DisplayWidth(line) != expectedWidth) is { } bad)
+                    {
+                        problems.Add(
+                            $"{scene} {width}x{height}: a row is {Text.DisplayWidth(bad)} wide, " +
+                            $"expected {expectedWidth}");
+                    }
+                }
+                catch (Exception exception)
+                {
+                    problems.Add($"{scene} {width}x{height}: {exception.GetType().Name}: {exception.Message}");
+                }
+            }
+        }
+    }
+
+    Console.WriteLine($"checked {checkedRenders} renders across {Scenes.Names.Length} scenes");
+    foreach (var problem in problems.Take(40))
+    {
+        Console.WriteLine("  " + problem);
+    }
+
+    Console.WriteLine(problems.Count == 0 ? "no failures" : $"FAILURES: {problems.Count}");
+    return problems.Count == 0 ? 0 : 1;
+}
+
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("JSONL state round trip", TestJsonLinesAsync),

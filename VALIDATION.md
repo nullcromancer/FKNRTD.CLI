@@ -46,6 +46,10 @@ Also verified directly, outside the suite:
   of every row so a panel background cannot bleed past the frame.
 - **The generated guide.** `fknrtd-portal.html` was checked to contain no external references,
   no broken internal links, and balanced structural tags.
+- **A renderer sweep.** `dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz` renders
+  every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 7,040 frames — and
+  checks each for the right number of rows, the right display width on every row, and no exception.
+  All 7,040 passed. The suite itself samples five widths and three heights; this is the wider net.
 
 Independent review: two read-only audits by an OpenAI Codex seat, recorded in
 `docs/collab/LOG.md`. The first found a non-terminating text wrap and eight other real defects
