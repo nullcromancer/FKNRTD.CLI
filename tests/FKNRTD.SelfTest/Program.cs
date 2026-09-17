@@ -1978,6 +1978,28 @@ static Task TestDiffViewAsync()
     True(!frame.Contains("after.ToLocalTime", StringComparison.Ordinal),
         "A filtered diff drops the files that do not match");
 
+    // Git puts the enclosing function in the hunk header, so a method name often appears only
+    // there. Searching for one has to find the hunk it names rather than nothing.
+    // "public sealed class Schedule" appears only in the hunk header, nowhere in the body.
+    var byFunction = Reference.Diff(task, config, Scenes.SampleDiff(), truncated: false);
+    Scenes.Type(byFunction, "public sealed class Schedule");
+    frame = renderer.Render(Scenes.PopulatedSnapshot(), 104, 34, useColor: false, byFunction);
+    True(frame.Contains("public sealed class Schedule", StringComparison.Ordinal),
+        "A match in a hunk header keeps that hunk");
+    True(frame.Contains("TimeZoneInfo.ConvertTime", StringComparison.Ordinal),
+        "A match in a hunk header keeps every line under it");
+    True(!frame.Contains("NextRunUsesTheWorkspaceZone", StringComparison.Ordinal),
+        "A match in one hunk header does not keep the other file");
+
+    // A match on a body line keeps that line with its headers, not the whole hunk around it.
+    var byLine = Reference.Diff(task, config, Scenes.SampleDiff(), truncated: false);
+    Scenes.Type(byLine, "ToLocalTime");
+    frame = renderer.Render(Scenes.PopulatedSnapshot(), 104, 34, useColor: false, byLine);
+    True(frame.Contains("-        var local = after.ToLocalTime();", StringComparison.Ordinal),
+        "A matching line is kept");
+    True(!frame.Contains("TimeZoneInfo.ConvertTime", StringComparison.Ordinal),
+        "A non-matching line in the same hunk is not");
+
     // The two states that are not a diff each explain themselves.
     True(Scenes.Render("diff-empty", 104, 24, colour: false)
             .Contains("Nothing has changed against", StringComparison.Ordinal),

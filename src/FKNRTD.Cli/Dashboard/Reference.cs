@@ -560,6 +560,7 @@ internal static class Reference
         var kept = new List<string>();
         var file = string.Empty;
         var hunk = string.Empty;
+        var hunkMatches = false;
         var shownFile = string.Empty;
         var shownHunk = string.Empty;
         foreach (var line in lines)
@@ -568,16 +569,22 @@ internal static class Reference
             {
                 file = line;
                 hunk = string.Empty;
+                hunkMatches = false;
                 continue;
             }
 
             if (line.StartsWith("@@", StringComparison.Ordinal))
             {
                 hunk = line;
+                // Git puts the enclosing function in the hunk header, so searching for a method name
+                // often matches only there. Treat that as a match for the whole hunk rather than
+                // finding nothing in the one place the reader was looking.
+                hunkMatches = hunk.Contains(filter, StringComparison.OrdinalIgnoreCase);
                 continue;
             }
 
-            if (!line.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
+            if (!hunkMatches &&
+                !line.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
                 !file.Contains(filter, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
