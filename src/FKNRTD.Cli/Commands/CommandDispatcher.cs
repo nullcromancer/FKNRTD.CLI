@@ -721,9 +721,11 @@ internal static class CommandDispatcher
 
         if (string.IsNullOrWhiteSpace(task.WorktreePath) || !Directory.Exists(task.WorktreePath))
         {
-            Console.WriteLine(
-                $"{task.Id} has no worktree yet, so there is nothing to compare. It has not reached " +
-                "its worktree stage.");
+            Console.WriteLine(task.Status == WorkflowStatus.Landed
+                ? $"{task.Id} landed and its worktree has been removed. Its change is in " +
+                  $"{Blank(task.BaseRef)}; read it there with Git."
+                : $"{task.Id} has no worktree yet, so there is nothing to compare. It has not " +
+                  "reached its worktree stage.");
             return 0;
         }
 

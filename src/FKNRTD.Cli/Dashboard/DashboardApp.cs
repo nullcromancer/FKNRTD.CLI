@@ -1067,7 +1067,13 @@ internal sealed class DashboardApp
 
         if (string.IsNullOrWhiteSpace(task.WorktreePath) || !Directory.Exists(task.WorktreePath))
         {
-            _toast = $"{task.Id} has no worktree yet — it has not reached its worktree stage.";
+            // A task that never reached its worktree stage and one whose worktree was cleaned up
+            // after landing look identical here, and the operator needs quite different advice.
+            _toast = task.Status == WorkflowStatus.Landed
+                ? $"{task.Id} landed and its worktree has been removed. Its change is in " +
+                  $"{(string.IsNullOrWhiteSpace(task.BaseRef) ? "this workspace" : task.BaseRef)}; " +
+                  "read it there with Git."
+                : $"{task.Id} has no worktree yet — it has not reached its worktree stage.";
             return;
         }
 

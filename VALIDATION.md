@@ -1,5 +1,62 @@
 # Validation record
 
+## 2026-09-17 — the usability programme
+
+Revision: 1.0.0
+Commit verified: `bb7eef43974d453585066531c9528a023ab37d3c`
+(branch `feature/standalone-workspaces-and-tool-management`)
+
+Environment: .NET SDK 10.0.401, Git 2.55.0.windows.4, Windows 11 (10.0.26200).
+
+Every result below was produced by running the command on this machine against the commit
+named above, in a freshly created temporary Git repository. Nothing here is inferred, and
+nothing is reported that was not run.
+
+| Command | Result |
+| --- | --- |
+| `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 38/38 self-tests passed, exit 0. |
+| `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
+| `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
+| `fknrtd agent list` | Exit 0. |
+| `fknrtd config validate` | Exit 0. |
+| `fknrtd task create` | Exit 0; task created with an `FKN-` identifier. |
+| `fknrtd task show <id>` | Exit 0; brief, roles, verification, every stage and the next step. |
+| `fknrtd task diff <id>` | Exit 0; reported that the task has no worktree yet rather than printing nothing. |
+| `fknrtd status -json` | Exit 0; complete normalised snapshot. |
+| `fknrtd dashboard -once -no-color -width 100 -height 30` | Exit 0; one frame, no ANSI. |
+| `fknrtd events` | Exit 0. |
+| `fknrtd explain brief` | Exit 0. |
+| `fknrtd help task diff` | Exit 0. |
+| `fknrtd portal -out <file>` | Exit 0; 69 terms, 43 commands, 25 keys, 25 settings, 12 log entries. |
+| `fknrtd taks` | Exit 2; reported the typo and named the commands meant. |
+
+Also verified directly, outside the suite:
+
+- **Glyph coverage.** Every non-ASCII character the dashboard can draw was measured against
+  Cascadia Mono, Consolas and Lucida Console by rendering each one and comparing it to the
+  font's own missing-glyph box. Four had been missing from all three, including the failure
+  marker; all are replaced. Only Lucida Console still lacks anything, and only the heavy
+  borders used for modal panels.
+- **The diff plumbing.** Both Git invocations behind `task diff` and `V` were run against a
+  repository with one committed change and one uncommitted line on top, and returned exactly
+  the two halves the implementation combines.
+- **Colour output.** Every rendered scene was checked to emit only reset, bold and 24-bit
+  colour sequences, to hold its exact width once escapes are stripped, and to reset at the end
+  of every row so a panel background cannot bleed past the frame.
+- **The generated guide.** `fknrtd-portal.html` was checked to contain no external references,
+  no broken internal links, and balanced structural tags.
+
+Independent review: two read-only audits by an OpenAI Codex seat, recorded in
+`docs/collab/LOG.md`. The first found a non-terminating text wrap and eight other real defects
+in the overlay layer; the second found twenty-six factual errors in the documentation tables.
+All are fixed, with regressions.
+
+## 2026-09-15 — baseline
+
+This section is the record as it stood before the usability programme above. It is kept
+as written; the numbers in it were true of the commit it names.
+
 Date: 2026-09-15
 Revision: 1.0.0
 Commit verified: `8809a88b87920137852761361f2d6f44999221be` (branch `main`)
