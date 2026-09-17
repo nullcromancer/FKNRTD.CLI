@@ -1,5 +1,6 @@
 using FKNRTD.Dashboard;
 using FKNRTD.Domain;
+using FKNRTD.Services;
 
 /// <summary>
 /// Named dashboard frames, built from one sample workspace. Two jobs: the self-tests assert against
@@ -12,13 +13,20 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
     {
         var snapshot = name == "empty" ? EmptySnapshot() : Populated();
-        var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+        var renderer = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
+            WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!);
+        if (name == "logs")
+        {
+            // Index 2 is the failed task, which is the state the log view exists to serve.
+            return renderer.RenderLog(snapshot, width, height, selectedTaskIndex: 2, colour);
+        }
+
         var overlay = Overlay(name, snapshot.Config);
         return overlay is null
             ? renderer.Render(snapshot, width, height, colour)

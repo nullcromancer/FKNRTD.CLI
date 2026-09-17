@@ -141,8 +141,13 @@ internal sealed class DashboardApp
     internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor, int selectedTaskIndex) =>
         RenderFrame(snapshot, width, height, useColor, selectedTaskIndex, DashboardView.Overview, "Ready", null);
 
-    internal string RenderLog(DashboardSnapshot snapshot, int width, int height, int selectedTaskIndex) =>
-        RenderFrame(snapshot, width, height, useColor: false, selectedTaskIndex, DashboardView.Logs, "Ready", null);
+    internal string RenderLog(
+        DashboardSnapshot snapshot,
+        int width,
+        int height,
+        int selectedTaskIndex,
+        bool useColor = false) =>
+        RenderFrame(snapshot, width, height, useColor, selectedTaskIndex, DashboardView.Logs, "Ready", null);
 
     /// <summary>Renders a frame with a modal layer over it. The renderer's test seam for overlays.</summary>
     internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor, IOverlay overlay) =>
@@ -514,34 +519,54 @@ internal sealed class DashboardApp
         }
     }
 
+    /// <summary>
+    /// The log view. This is the screen an operator stares at when something has gone wrong, so it
+    /// leads with what is being run and why, rather than with a file path and a wall of output. When
+    /// there is no log it says which of the several possible reasons applies, and what to do about it.
+    /// </summary>
     private void RenderLogs(Canvas canvas, DashboardSnapshot snapshot, Rect rect, int selectedTaskIndex)
     {
-        canvas.DrawBox(rect, "TASK LOG", Theme.Cyan);
-        var inner = rect.Inset();
         var task = SelectedTask(snapshot, selectedTaskIndex);
         if (task is null)
         {
-            canvas.DrawText(inner.X, inner.Y, "No task selected.", Theme.Muted, maxWidth: inner.Width);
+            canvas.DrawBox(rect, "TASK LOG", Theme.Cyan);
+            var empty = rect.Inset();
+            canvas.DrawWrapped(empty.X, empty.Y, empty.Width, 3,
+                "No task is selected, so there is no log to show. Press N to create a task, or Tab " +
+                "to go back to the overview.", Theme.Muted);
             return;
         }
 
-        var path = _store.TaskLogPath(task.Id, task.CurrentStage, task.RepairRound);
-        if (!File.Exists(path))
-        {
-            var directory = Path.GetDirectoryName(path);
-            path = directory is not null && Directory.Exists(directory)
-                ? Directory.EnumerateFiles(directory, "*.log")
-                    .OrderByDescending(File.GetLastWriteTimeUtc)
-                    .FirstOrDefault() ?? path
-                : path;
-        }
+        var stageEntry = Glossary.Find("stage." + task.CurrentStage.ToString().ToLowerInvariant());
+        var stageState = task.Stage(task.CurrentStage).State;
+        canvas.DrawBox(rect, $"TASK LOG  ·  {task.CurrentStage}  {StageIcon(stageState)}", StageColour(stageState));
+        var inner = rect.Inset();
+        var row = inner.Y;
 
-        canvas.DrawText(inner.X, inner.Y, Text.Truncate(path, inner.Width), Theme.Muted, maxWidth: inner.Width);
-        if (!File.Exists(path))
+        canvas.DrawText(inner.X, row++, Text.Truncate(task.Title, inner.Width), Theme.Foreground, bold: true,
+            maxWidth: inner.Width);
+        if (stageEntry is not null && row < inner.Bottom)
         {
-            canvas.DrawText(inner.X, inner.Y + 2, "No log exists for the current stage.", Theme.Muted,
+            canvas.DrawText(inner.X, row++, Text.Truncate(stageEntry.Summary, inner.Width), Theme.Muted,
                 maxWidth: inner.Width);
+        }
+
+        var path = ResolveLogPath(task);
+        if (path is null || !File.Exists(path))
+        {
+            if (row < inner.Bottom)
+            {
+                row++;
+            }
+
+            canvas.DrawWrapped(inner.X, row, inner.Width, Math.Max(1, inner.Bottom - row),
+                WhyThereIsNoLog(task), Theme.Amber);
             return;
+        }
+
+        if (row < inner.Bottom)
+        {
+            canvas.DrawText(inner.X, row++, Text.Truncate(path, inner.Width), Theme.Muted, maxWidth: inner.Width);
         }
 
         string[] lines;
@@ -553,21 +578,112 @@ internal sealed class DashboardApp
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream);
-            lines = ReadTail(reader, Math.Max(0, inner.Height - 2));
+            lines = ReadTail(reader, Math.Max(0, inner.Bottom - row));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            canvas.DrawText(inner.X, inner.Y + 2, Text.Truncate("Log unavailable: " + exception.Message, inner.Width),
-                Theme.Amber, maxWidth: inner.Width);
+            canvas.DrawWrapped(inner.X, row, inner.Width, 3,
+                "The log could not be read: " + exception.Message +
+                " It is still on disk; another process may be holding it open.", Theme.Amber);
             return;
         }
 
-        var row = inner.Y + 1;
+        if (lines.Length == 0)
+        {
+            canvas.DrawWrapped(inner.X, row, inner.Width, 2,
+                "The log exists but is still empty. The agent has been launched and has not written " +
+                "anything yet.", Theme.Muted);
+            return;
+        }
+
         foreach (var line in lines)
         {
-            canvas.DrawText(inner.X, row++, Text.Truncate(line, inner.Width), Theme.Foreground, maxWidth: inner.Width);
+            if (row >= inner.Bottom)
+            {
+                break;
+            }
+
+            canvas.DrawText(inner.X, row++, Text.Truncate(line, inner.Width), LogLineColour(line),
+                maxWidth: inner.Width);
         }
     }
+
+    /// <summary>
+    /// The log for the stage the task is on, falling back to the most recent log it has. A task that
+    /// has moved on should still show the output of what it just did rather than nothing at all.
+    /// </summary>
+    private string? ResolveLogPath(WorkflowTask task)
+    {
+        var path = _store.TaskLogPath(task.Id, task.CurrentStage, task.RepairRound);
+        if (File.Exists(path))
+        {
+            return path;
+        }
+
+        var directory = Path.GetDirectoryName(path);
+        if (directory is null || !Directory.Exists(directory))
+        {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(directory, "*.log")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Why there is nothing to read. "No log exists" is true and useless; which of the reasons
+    /// applies determines whether the operator should press a key, wait, or go and look at Git.
+    /// </summary>
+    private static string WhyThereIsNoLog(WorkflowTask task) => task.Status switch
+    {
+        WorkflowStatus.Queued =>
+            "This task has not run yet, so nothing has been written. Press Enter to start it and the " +
+            "output will appear here as it arrives.",
+        WorkflowStatus.Running =>
+            "The stage has started but has not produced output yet. Agents often think for a while " +
+            "before writing anything.",
+        WorkflowStatus.Cancelled =>
+            "This task was cancelled before the current stage wrote anything. Press R to reset it and " +
+            "Enter to run it again.",
+        WorkflowStatus.Landed =>
+            "This task has landed and its logs may already have been cleaned up. The work itself is " +
+            "in your base branch.",
+        _ =>
+            "No log has been written for this stage. Press I to see the full record of the task, " +
+            "which records what each stage did."
+    };
+
+    /// <summary>
+    /// Colours the lines that matter. Agent output is long and uniform; a failure buried in the
+    /// middle of it is missed on a monochrome wall of text.
+    /// </summary>
+    private static Rgb LogLineColour(string line)
+    {
+        if (line.Contains("FKNRTD_VERDICT: PASS", StringComparison.Ordinal))
+        {
+            return Theme.Green;
+        }
+
+        if (line.Contains("FKNRTD_VERDICT: FAIL", StringComparison.Ordinal) ||
+            line.Contains("error", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("exception", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains(" failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return Theme.Red;
+        }
+
+        return line.Contains("warn", StringComparison.OrdinalIgnoreCase) ? Theme.Amber : Theme.Foreground;
+    }
+
+    private static Rgb StageColour(StageState state) => state switch
+    {
+        StageState.Running => Theme.Blue,
+        StageState.Passed => Theme.Green,
+        StageState.Failed => Theme.Red,
+        StageState.Skipped => Theme.Muted,
+        _ => Theme.Cyan
+    };
 
     private static string[] ReadTail(TextReader reader, int count)
     {
@@ -619,7 +735,7 @@ internal sealed class DashboardApp
         }
 
         var mode = overlay?.Mode ?? view.ToString();
-        var hint = overlay is null ? NextStepHint(snapshot, selectedTaskIndex) : null;
+        var hint = overlay is null ? NextStepHint(snapshot, selectedTaskIndex, view) : null;
         var line = hint is null ? $"{mode} · {toast}" : $"{mode} · {toast} · {hint}";
         canvas.DrawText(rect.X, rect.Y + 1, Text.Truncate(line, rect.Width),
             hint is null ? Theme.Muted : Theme.Cyan, maxWidth: rect.Width);
@@ -630,7 +746,7 @@ internal sealed class DashboardApp
     /// center that shows state without saying what to do with it leaves a first-time user stuck on
     /// a screen full of correct information.
     /// </summary>
-    private static string? NextStepHint(DashboardSnapshot snapshot, int selectedTaskIndex)
+    private static string? NextStepHint(DashboardSnapshot snapshot, int selectedTaskIndex, DashboardView view)
     {
         if (snapshot.Conflicts.Any(conflict => conflict.Kind == ConflictKind.Collision))
         {
@@ -648,6 +764,20 @@ internal sealed class DashboardApp
         }
 
         var task = SelectedTask(snapshot, selectedTaskIndex);
+
+        // Pointing at the log view from inside the log view is the kind of detail that makes an
+        // operator stop trusting the hints altogether.
+        if (view == DashboardView.Logs)
+        {
+            return task?.Status switch
+            {
+                WorkflowStatus.Queued => "Press Enter to run this task and the output will appear here",
+                WorkflowStatus.Running => "Following the live output. Press C to stop it, Tab for the overview",
+                WorkflowStatus.Failed => "Press R to reset the failed stages, then Enter to run it again",
+                _ => "Press Tab to go back to the overview"
+            };
+        }
+
         return task?.Status switch
         {
             WorkflowStatus.Queued => "This task has never run — press Enter to start it",

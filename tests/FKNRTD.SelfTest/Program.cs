@@ -1329,6 +1329,19 @@ static Task TestEmptyWorkspaceGuidesAsync()
     var frame = Scenes.Render("empty", 120, 34, colour: false);
     True(frame.Contains("Press N", StringComparison.Ordinal), "Empty workspace names the next key");
     True(frame.Contains("explained", StringComparison.Ordinal), "Empty workspace promises the explanation");
+
+    // The log view is where an operator lands when something has failed. Absence of output is one
+    // of several different situations, and saying which one applies is the whole point.
+    var logs = Scenes.Render("logs", 100, 24, colour: false);
+    True(logs.Contains("Verify", StringComparison.Ordinal), "The log view names the stage");
+    True(logs.Contains("Every one must exit 0", StringComparison.Ordinal),
+        "The log view says what the stage is for");
+    True(logs.Contains("Press I to see the full record", StringComparison.Ordinal),
+        "An absent log explains itself and names a next step");
+
+    // And it must not tell the operator to open the view they are already looking at.
+    True(!logs.Contains("Press L to read", StringComparison.Ordinal),
+        "The log view does not point at itself");
     return Task.CompletedTask;
 }
 
