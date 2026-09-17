@@ -12,7 +12,7 @@ internal static class Scenes
 {
     public static readonly string[] Names =
     [
-        "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
+        "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "land-landed", "remove", "remove-landed",
         "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
     ];
 
@@ -61,6 +61,36 @@ internal static class Scenes
             WriteSampleLog(store, snapshot.Tasks[2], name == "logs-json");
             var reader = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
             return reader.RenderLog(snapshot, width, height, selectedTaskIndex: 2, colour);
+        }
+
+        if (name is "land" or "remove")
+        {
+            // The product's own dialog, opened by the key that opens it. These scenes used to hold
+            // a copy of its words, which is how the removal dialog went on promising that a landed
+            // task's branch is kept after the product had stopped doing that.
+            var app = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
+                WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
+            app.HandleKeyAsync(
+                    new ConsoleKeyInfo((char)0, name == "land" ? ConsoleKey.G : ConsoleKey.X,
+                        false, false, false),
+                    snapshot, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            return app.RenderLive(snapshot, width, height, colour);
+        }
+
+        if (name is "land-landed" or "remove-landed")
+        {
+            // The same two dialogs for a task that has already landed, which is the case whose
+            // wording differs and the one nobody had rendered.
+            var landed = snapshot with { Tasks = [snapshot.Tasks.First(task => task.Status == WorkflowStatus.Landed)] };
+            var app = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
+                WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
+            app.HandleKeyAsync(
+                    new ConsoleKeyInfo((char)0, name == "land-landed" ? ConsoleKey.G : ConsoleKey.X,
+                        false, false, false),
+                    landed, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            return app.RenderLive(landed, width, height, colour);
         }
 
         if (name == "quit-while-running")
@@ -265,26 +295,6 @@ internal static class Scenes
                 Type(palette, "land");
                 return palette;
             }
-            case "land":
-                return new Confirmation(
-                    "LAND THIS TASK",
-                    Theme.Green,
-                    "FKN-20260917-101500-a1b2 — Add rate limiting to the login endpoint",
-                    "This merges the branch fknrtd/rate-limiting into main. It is the only action that " +
-                    "changes your base branch, and the dashboard cannot undo it afterwards.",
-                    "LAND",
-                    "land",
-                    "The finished diff is in .fknrtd/worktrees/FKN-20260917-101500-a1b2 if you want to " +
-                    "read it before you decide.");
-            case "remove":
-                return new Confirmation(
-                    "REMOVE THE WORKTREE",
-                    Theme.Amber,
-                    "FKN-20260917-101500-a1b2 — Add rate limiting to the login endpoint",
-                    "This deletes the directory .fknrtd/worktrees/FKN-20260917-101500-a1b2 and nothing " +
-                    "else. The task record, its stage logs and its Git branch are all kept.",
-                    "REMOVE",
-                    "cleanup");
             default:
                 return null;
         }

@@ -145,7 +145,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every state the dashboard draws is explained", TestEveryDrawnStateIsExplainedAsync),
     ("The offline guide shows real screens", TestPortalShowsRealScreensAsync),
     ("The agent builder can describe a piped agent", TestAgentBuilderAsync),
-    ("Setup explains why there is no choice of mode", TestSetupExplainsWhyThereIsNoChoiceAsync)
+    ("Setup explains why there is no choice of mode", TestSetupExplainsWhyThereIsNoChoiceAsync),
+    ("A confirmation finishes its sentences at any width", TestConfirmationFinishesItsSentencesAsync)
 };
 
 var failures = new List<string>();
@@ -2616,11 +2617,42 @@ static Task TestOverlayHostFrameAsync()
 /// </summary>
 static string Prose(string frame)
 {
-    var words = FrameLines(frame)
-        .Select(line => line.Trim('│', '┃', '┌', '┐', '└', '┘',
-            '├', '┤', '┬', '┴', '┼', '─', '━',
-            '┏', '┓', '┗', '┛', ' '))
-        .Where(line => line.Length > 0);
+    // Trimmed by character class rather than by a list. A list stops at the first character it does
+    // not know, and the panel behind a modal leaves its own truncation ellipsis in the right margin
+    // - so trimming stopped there and left a box character glued to the end of the sentence.
+    static bool Decoration(char character) =>
+        character is ' ' or '…' or '›' or '·' ||
+        character is >= '─' and <= '╿';
+
+    static string Strip(string line)
+    {
+        var start = 0;
+        var end = line.Length;
+        while (start < end && Decoration(line[start]))
+        {
+            start++;
+        }
+
+        while (end > start && Decoration(line[end - 1]))
+        {
+            end--;
+        }
+
+        return line[start..end];
+    }
+
+    // A modal is drawn over the frame, so a row can hold the panel behind it as well - the pipeline
+    // panel's "Stages" label sits immediately left of the modal's border and would otherwise be
+    // spliced into the middle of the modal's sentence. The heavy border marks where the modal
+    // starts and ends, so when a row has one, only what is between them counts.
+    static string Interior(string line)
+    {
+        var first = line.IndexOf('┃');
+        var last = line.LastIndexOf('┃');
+        return first >= 0 && last > first ? line[(first + 1)..last] : line;
+    }
+
+    var words = FrameLines(frame).Select(Interior).Select(Strip).Where(line => line.Length > 0);
     var joined = string.Join(' ', words);
     while (joined.Contains("  ", StringComparison.Ordinal))
     {
@@ -3644,6 +3676,54 @@ static Task TestSetupExplainsWhyThereIsNoChoiceAsync()
     var repo = Prose(Scenes.Render("setup", 100, 28, colour: false));
     True(repo.Contains("Git-backed", StringComparison.Ordinal), "A repository is offered Git mode");
     True(repo.Contains("Standalone", StringComparison.Ordinal), "and standalone");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// A confirmation panel finishes its sentences at every width. It measured itself faithfully and
+/// then drew each paragraph through a fixed row cap, so anything needing more rows than its
+/// constant was clipped - at 62 columns the "here is the reversible thing to do instead" line
+/// stopped at "That is". Measure and Draw agreed with each other perfectly; they were both wrong in
+/// the same way, which is exactly why mirroring one against the other had not caught it.
+/// </summary>
+static Task TestConfirmationFinishesItsSentencesAsync()
+{
+    // The last words of each paragraph on the two confirmation scenes. If a cap comes back, the
+    // panel will still look plausible and one of these will be missing.
+    var endings = new (string Scene, string[] Endings)[]
+    {
+        ("agents-remove", ["configuring the agent again.", "the stage that needed it.", "That is reversible."]),
+        ("land", ["cannot undo it afterwards.", "if you would rather use your own tools."]),
+        ("remove", ["because this task has not landed.", "worktree directory that no longer exists."]),
+        ("remove-landed", ["not already merged.", "worktree directory that no longer exists."])
+    };
+
+    foreach (var (scene, expected) in endings)
+    {
+        foreach (var width in new[] { 62, 70, 84, 100, 140 })
+        {
+            var prose = Prose(Scenes.Render(scene, width, 40, colour: false));
+            foreach (var ending in expected)
+            {
+                True(prose.Contains(ending, StringComparison.Ordinal),
+                    $"The {scene} panel reaches '{ending}' at {width} columns");
+            }
+        }
+    }
+
+    // The dialog that asks permission to delete things has to be right about what it deletes. A
+    // landed task's branch goes with its worktree; an unlanded one's does not, and the dialog said
+    // the branch was kept in both cases long after that stopped being true.
+    var landed = Prose(Scenes.Render("remove-landed", 100, 40, colour: false));
+    True(landed.Contains("it also deletes its branch", StringComparison.Ordinal),
+        "Removing a landed task's worktree says the branch goes too");
+    True(!landed.Contains("its Git branch are all kept", StringComparison.Ordinal),
+        "and does not also claim it is kept");
+
+    var unlanded = Prose(Scenes.Render("remove", 100, 40, colour: false));
+    True(unlanded.Contains("its Git branch are all kept", StringComparison.Ordinal),
+        "Removing an unlanded task's worktree keeps the branch and says so");
 
     return Task.CompletedTask;
 }

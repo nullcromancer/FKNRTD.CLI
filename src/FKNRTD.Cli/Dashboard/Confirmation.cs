@@ -77,9 +77,15 @@ internal sealed class Confirmation : IOverlay
         var width = Math.Max(10, panel.Width - 6);
         var lastRow = panel.Bottom - 4;
 
-        var row = canvas.DrawWrapped(x, panel.Y + 1, width, 2, _subject, Theme.Foreground, bold: true,
+        // Each block takes the rows it needs, bounded only by what is left before the footer. A
+        // fixed cap here would clip a sentence on a narrow terminal while the panel above it had
+        // already been measured tall enough to hold the whole thing.
+        int Remaining(int at) => Math.Max(1, lastRow - at + 1);
+
+        var row = canvas.DrawWrapped(x, panel.Y + 1, width, Remaining(panel.Y + 1), _subject,
+            Theme.Foreground, bold: true, background: Theme.Surface);
+        row = canvas.DrawWrapped(x, row + 1, width, Remaining(row + 1), _consequence, Theme.Amber,
             background: Theme.Surface);
-        row = canvas.DrawWrapped(x, row + 1, width, 6, _consequence, Theme.Amber, background: Theme.Surface);
         row++;
 
         canvas.DrawText(x, row++, $"Type {_word} to confirm:", Theme.Muted, maxWidth: width,
@@ -89,14 +95,15 @@ internal sealed class Confirmation : IOverlay
 
         if (_mistyped)
         {
-            row = canvas.DrawWrapped(x, row, width, 2, MistypedMessage, Theme.Red, bold: true,
-                background: Theme.Surface);
+            row = canvas.DrawWrapped(x, row, width, Remaining(row), MistypedMessage, Theme.Red,
+                bold: true, background: Theme.Surface);
             row++;
         }
 
         if (_alternative is not null && row < lastRow)
         {
-            row = canvas.DrawWrapped(x, row, width, 2, _alternative, Theme.Muted, background: Theme.Surface);
+            row = canvas.DrawWrapped(x, row, width, Remaining(row), _alternative, Theme.Muted,
+                background: Theme.Surface);
             row++;
         }
 
@@ -115,17 +122,19 @@ internal sealed class Confirmation : IOverlay
     private int Measure(int width)
     {
         // Mirrors Draw row for row, gaps included, so the panel is never a line short of its text.
-        var rows = Math.Min(2, Text.Wrap(_subject, width).Count);
-        rows += 1 + Math.Min(6, Text.Wrap(_consequence, width).Count) + 1;
+        // Neither side caps a block any more: they used to agree on the same wrong number, which is
+        // exactly why mirroring one against the other did not catch the clipping.
+        var rows = Text.Wrap(_subject, width).Count;
+        rows += 1 + Text.Wrap(_consequence, width).Count + 1;
         rows += 3;                                       // the "type X" caption, the field, a gap
         if (_mistyped)
         {
-            rows += Math.Min(2, Text.Wrap(MistypedMessage, width).Count) + 1;
+            rows += Text.Wrap(MistypedMessage, width).Count + 1;
         }
 
         if (_alternative is not null)
         {
-            rows += Math.Min(2, Text.Wrap(_alternative, width).Count) + 1;
+            rows += Text.Wrap(_alternative, width).Count + 1;
         }
 
         if (_entry is not null)

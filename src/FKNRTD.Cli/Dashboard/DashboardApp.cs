@@ -1529,8 +1529,20 @@ internal sealed class DashboardApp
             "REMOVE THE WORKTREE",
             Theme.Amber,
             $"{task.Id} — {task.Title}",
-            $"This deletes the directory {task.WorktreePath} and nothing else. The task record, its " +
-            "stage logs and its Git branch are all kept, so you can still read what happened.",
+            // A landed task's branch is deleted here as well, by 'git branch -d'. Saying the branch
+            // is kept - in the dialog that asks permission to delete things - was the worst place
+            // in the product for that claim to survive.
+            task.Status == WorkflowStatus.Landed
+                ? $"This deletes the directory {task.WorktreePath}, and because this task has landed " +
+                  $"it also deletes its branch {(string.IsNullOrWhiteSpace(task.BranchName) ? "for this task" : task.BranchName)} with 'git branch -d', which " +
+                  "refuses to remove anything not already merged. The task record and its stage logs " +
+                  "are kept, so you can still read what happened. It also runs 'git worktree prune', " +
+                  "which clears Git's record of any worktree directory that no longer exists."
+                : $"This deletes the directory {task.WorktreePath} and nothing else. The task record, " +
+                  "its stage logs and its Git branch are all kept, so you can still read what " +
+                  "happened, and the branch is left because this task has not landed. It also runs " +
+                  "'git worktree prune', which clears Git's record of any worktree directory that no " +
+                  "longer exists.",
             "REMOVE",
             "cleanup");
         _overlayCompleted = async (_, _, token) =>
@@ -1538,7 +1550,10 @@ internal sealed class DashboardApp
             try
             {
                 await _worktrees.RemoveAsync(task, force: false, snapshot.Config.Mode, token).ConfigureAwait(false);
-                _toast = $"Removed the worktree for {task.Id}. Its branch and log were kept.";
+                _toast = task.Status == WorkflowStatus.Landed
+                    ? $"Removed the worktree for {task.Id}, and its branch with it. Its record and " +
+                      "logs were kept."
+                    : $"Removed the worktree for {task.Id}. Its branch, record and logs were kept.";
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
