@@ -287,7 +287,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("An age reads like a time", TestAgeReadsLikeATimeAsync),
     ("Every label on the main screen leads somewhere", TestEveryLabelOnTheMainScreenLeadsSomewhereAsync),
     ("The log window is right at scale and at its edges", TestLogWindowAtScaleAsync),
-    ("Documented examples survive the option check", TestDocumentedExamplesSurviveTheOptionCheckAsync)
+    ("Documented examples survive the option check", TestDocumentedExamplesSurviveTheOptionCheckAsync),
+    ("A failed creation hands the form back", TestAFailedCreationHandsTheFormBackAsync)
 };
 
 var failures = new List<string>();
@@ -5248,6 +5249,128 @@ static Task TestDocumentedExamplesSurviveTheOptionCheckAsync()
     // better message than this one could give.
     var (missing, _) = CommandDispatcher.FirstUnacceptedOption(new CliArguments(["taks", "-jsno"]));
     Equal(null, missing?.Name, "An unknown command is left for the command check to report");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// A task that cannot be created hands the form back with every answer still in it.
+/// </summary>
+/// <remarks>
+/// Creation is attempted after the form closes, and it can fail for a reason the form could not
+/// have known — a base branch that does not exist is the ordinary one, and Git is only asked once
+/// the answers are complete. That used to leave a toast reading "Could not create the task" and
+/// nothing else: the title, the brief and up to eight other answers were gone, and the only way
+/// forward was to press N and type all of it again.
+/// </remarks>
+static Task TestAFailedCreationHandsTheFormBackAsync()
+{
+    var config = Scenes.SampleConfig();
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
+
+    // Walk the long path, so there are answers after the one that will be wrong.
+    var first = TaskWizard.Create(config);
+    Scenes.Type(first, "Add rate limiting to the login endpoint");
+    Scenes.Press(first, ConsoleKey.Enter);
+    Scenes.Type(first, "Requests to POST /login from one IP are limited to five a minute.");
+    Scenes.Press(first, ConsoleKey.Enter);
+    Scenes.Press(first, ConsoleKey.DownArrow);          // review: "let me look"
+    Scenes.Press(first, ConsoleKey.Enter);
+    while (Scenes.Press(first, ConsoleKey.Enter) == OverlayResult.Continue)
+    {
+        // Accept every remaining default until the form submits.
+    }
+
+    Equal("Add rate limiting to the login endpoint", first.Value("title"), "The long path was walked");
+    True(first.Value("brief").Length > 15, "and carries the brief");
+
+    // What the dashboard does with the failure: a fresh form, restored, with the reason on it.
+    const string Problem =
+        "'mian' is not a local branch in this repository, so a task cannot start from it. " +
+        "Check the spelling, or create the branch first. 'git branch' lists what exists.";
+    var handed = TaskWizard.Create(config);
+    handed.Reopen(first.Values, Problem);
+
+    foreach (var key in new[] { "title", "brief", "lead", "implementer", "auditor", "base", "repairs" })
+    {
+        Equal(first.Value(key), handed.Value(key), $"The reopened form keeps its {key}");
+    }
+
+    var frame = renderer.Render(Scenes.EmptySnapshot(), 110, 44, useColor: false, handed);
+    True(frame.Contains("is not a local branch", StringComparison.Ordinal),
+        "The reopened form says why the task could not be created");
+    True(frame.Contains("git branch", StringComparison.Ordinal),
+        "and keeps the part of the reason that says what to do about it");
+
+    // On the last question, so the operator is one Enter from trying again rather than nine.
+    var lastStep = handed.Steps.Count(step => step.Applies(handed.Values));
+    True(frame.Contains($"Step {lastStep} of {lastStep}", StringComparison.Ordinal),
+        $"and opens on the last question, step {lastStep}");
+
+    // And it still works the second time: one Enter resubmits the corrected answers.
+    Equal(OverlayResult.Submit, Scenes.Press(handed, ConsoleKey.Enter),
+        "A reopened form submits again rather than being a dead end");
+    Equal("Add rate limiting to the login endpoint", handed.Value("title"),
+        "and submits the answers it was holding");
+
+    // When the reason quotes an answer, the form opens on that answer rather than on the end.
+    // Walking back three questions to find the one field that was wrong is the small
+    // unhelpfulness this is here to remove.
+    var typo = TaskWizard.Create(config);
+    Scenes.Type(typo, "Add rate limiting");
+    Scenes.Press(typo, ConsoleKey.Enter);
+    Scenes.Type(typo, "A brief long enough to be accepted by the form.");
+    Scenes.Press(typo, ConsoleKey.Enter);
+    Scenes.Press(typo, ConsoleKey.DownArrow);
+    Scenes.Press(typo, ConsoleKey.Enter);
+    Scenes.Press(typo, ConsoleKey.Enter);               // lead
+    Scenes.Press(typo, ConsoleKey.Enter);               // implementer
+    Scenes.Press(typo, ConsoleKey.Enter);               // auditor
+    for (var clear = 0; clear < 12; clear++)
+    {
+        Scenes.Press(typo, ConsoleKey.Backspace);       // the base field arrives holding "main"
+    }
+
+    Scenes.Type(typo, "mian");
+    while (Scenes.Press(typo, ConsoleKey.Enter) == OverlayResult.Continue)
+    {
+    }
+
+    Equal("mian", typo.Value("base"), "The form submitted the mistyped branch");
+
+    var aimed = TaskWizard.Create(config);
+    aimed.Reopen(typo.Values, Problem);
+    var aimedFrame = renderer.Render(Scenes.EmptySnapshot(), 110, 44, useColor: false, aimed);
+    True(aimedFrame.Contains("Base branch", StringComparison.Ordinal),
+        "A reason that quotes an answer reopens on that answer's question");
+    True(aimedFrame.Contains("Step 7 of", StringComparison.Ordinal),
+        "which is step 7, not the last one");
+    True(aimedFrame.Contains("mian", StringComparison.Ordinal),
+        "with the rejected value still in the field, ready to be corrected");
+
+    // The narrowness matters: only a quoted answer is blamed. A title that happens to contain a
+    // word from the reason must not pull the form away from the real problem.
+    var innocent = TaskWizard.Create(config);
+    innocent.Reopen(typo.Values, "Could not write the task file: the disk is full.");
+    var innocentFrame = renderer.Render(Scenes.EmptySnapshot(), 110, 44, useColor: false, innocent);
+    True(innocentFrame.Contains("Step 10 of 10", StringComparison.Ordinal),
+        "A reason that blames no answer reopens on the last question");
+
+    // The failure that prompts all this, spelled out: a base branch is not checked until Git is
+    // asked, which is after the form has closed.
+    var wrong = TaskWizard.Create(config);
+    Scenes.Type(wrong, "Title");
+    Scenes.Press(wrong, ConsoleKey.Enter);
+    Scenes.Type(wrong, "A brief long enough to be accepted by the form.");
+    Scenes.Press(wrong, ConsoleKey.Enter);
+    Scenes.Press(wrong, ConsoleKey.DownArrow);
+    Scenes.Press(wrong, ConsoleKey.Enter);
+    Scenes.Press(wrong, ConsoleKey.Enter);              // lead
+    Scenes.Press(wrong, ConsoleKey.Enter);              // implementer
+    Scenes.Press(wrong, ConsoleKey.Enter);              // auditor
+    Scenes.Type(wrong, "mian");                          // base: a typo the form cannot catch
+    Equal(OverlayResult.Continue, Scenes.Press(wrong, ConsoleKey.Enter),
+        "A branch that does not exist is accepted by the form, because only Git can say");
 
     return Task.CompletedTask;
 }

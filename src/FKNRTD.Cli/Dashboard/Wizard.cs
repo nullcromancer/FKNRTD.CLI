@@ -101,6 +101,71 @@ internal sealed class Wizard : IOverlay
         LoadStep();
     }
 
+    /// <summary>
+    /// Put the operator back in this form with everything they wrote still in it, on the last
+    /// question it asked, with <paramref name="problem"/> shown against it.
+    /// </summary>
+    /// <remarks>
+    /// Creating a task can fail after the form closes — a base branch that does not exist is the
+    /// ordinary case, and it is only checked once Git is asked. That used to discard the answers:
+    /// a title, a brief somebody had thought about for several minutes, and six more steps, all
+    /// replaced by a toast reading "Could not create the task", with the only way forward being to
+    /// press N and type it all again. Nothing about the answers was wrong, so nothing about them
+    /// should be thrown away.
+    /// </remarks>
+    public void Reopen(IReadOnlyDictionary<string, string> answers, string problem)
+    {
+        _values.Clear();
+        foreach (var (key, value) in answers)
+        {
+            _values[key] = value;
+        }
+
+        _index = BlamedStep(problem);
+        _error = problem;
+        LoadStep();
+    }
+
+    /// <summary>
+    /// The question to reopen on: the one whose answer the problem names, or the last one asked.
+    /// </summary>
+    /// <remarks>
+    /// Landing on the final step is right when the failure belongs to no single answer, and wrong
+    /// when it belongs to an obvious one. "'mian' is not a local branch" is about the base branch,
+    /// which is three questions back, and leaving the operator on the last step to find that out
+    /// themselves is the sort of small unhelpfulness this form exists to avoid.
+    ///
+    /// The match is deliberately narrow: an answer counts only when the problem quotes it, which is
+    /// how this product names a value it is complaining about. Matching anywhere in the text would
+    /// let a title of "main" claim an error about a branch.
+    /// </remarks>
+    private int BlamedStep(string problem)
+    {
+        var last = -1;
+        var blamed = -1;
+        for (var index = 0; index < _steps.Count; index++)
+        {
+            if (!_steps[index].Applies(_values))
+            {
+                continue;
+            }
+
+            last = index;
+            var answer = Value(_steps[index].Key);
+            if (answer.Length > 0 && problem.Contains($"'{answer}'", StringComparison.Ordinal))
+            {
+                // The earliest quoted answer wins. Two steps can hold the same value — an auditor
+                // that defaults to the lead — and the earlier one is the one to correct first.
+                if (blamed < 0)
+                {
+                    blamed = index;
+                }
+            }
+        }
+
+        return blamed >= 0 ? blamed : last;
+    }
+
     public string Mode => _title;
 
     /// <summary>

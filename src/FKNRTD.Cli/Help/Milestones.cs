@@ -480,6 +480,21 @@ public static class Milestones
             "which have always worked: the catalog lists those without a dash because they are " +
             "usually positional, while the commands accept either form. A sweep of every command " +
             "found it; the self-tests did not, because nothing documented used that form."),
+
+        new("2026-09-17",
+            "A task that cannot be created no longer costs you the brief",
+            "Creating a task is attempted after the form closes, and it can fail for a reason the " +
+            "form could not have known - a base branch that does not exist is the ordinary one, " +
+            "because only Git can say whether a branch is there.",
+            "That used to leave a toast reading 'Could not create the task' and nothing else. The " +
+            "title, the brief somebody had spent several minutes on, and up to eight other " +
+            "answers were gone, and the only way forward was to press N and type all of it again. " +
+            "None of those answers was the thing that was wrong.",
+            "The form now comes back holding all of them, open on the question the reason names " +
+            "rather than on the end of the form: a message that quotes an answer is matched to the " +
+            "step that holds it, so a mistyped branch reopens on the branch question with the " +
+            "value still in the field. Only a quoted answer counts, or a title of 'main' would " +
+            "claim an error about a branch."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

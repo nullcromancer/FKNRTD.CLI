@@ -1715,9 +1715,26 @@ internal sealed class DashboardApp
             return;
         }
 
-        var git = config.Mode == WorkspaceMode.Git;
         _overlay = TaskWizard.Create(config);
-        _overlayCompleted = async (completed, _, token) =>
+        _overlayCompleted = NewTaskHandler(config);
+    }
+
+    /// <summary>
+    /// What to do with the answers to the new-task form, including handing the form back with all
+    /// of them still in it if the task cannot be created.
+    /// </summary>
+    /// <remarks>
+    /// Creation can fail after the form has closed: a base branch that does not exist is the
+    /// ordinary case, and Git is only asked once the answers are complete. Replacing the form with
+    /// a toast discarded a title, a brief that took several minutes to write, and up to eight
+    /// other answers, none of which was the thing that was wrong. It reopens on the last question
+    /// with the reason shown, so the fix is one edit rather than the whole form again.
+    /// </remarks>
+    private Func<IOverlay, DashboardSnapshot, CancellationToken, Task> NewTaskHandler(
+        FknrtdConfig config)
+    {
+        var git = config.Mode == WorkspaceMode.Git;
+        return async (completed, _, token) =>
         {
             var wizard = (Wizard)completed;
             try
@@ -1745,7 +1762,12 @@ internal sealed class DashboardApp
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                _toast = "Could not create the task: " + exception.Message;
+                // The host clears the overlay before calling this, so setting one here reopens the
+                // form rather than fighting with it.
+                var reopened = TaskWizard.Create(config);
+                reopened.Reopen(wizard.Values, exception.Message);
+                _overlay = reopened;
+                _overlayCompleted = NewTaskHandler(config);
             }
         };
     }

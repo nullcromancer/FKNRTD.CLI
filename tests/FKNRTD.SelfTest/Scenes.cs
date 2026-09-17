@@ -12,7 +12,7 @@ internal static class Scenes
 {
     public static readonly string[] Names =
     [
-        "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "land-landed", "remove", "remove-landed",
+        "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "wizard-failed", "message", "land", "land-landed", "remove", "remove-landed",
         "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "welcome-standalone", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running",
         "tasks-unreadable", "tasks-all-unreadable", "wide-glyphs"
     ];
@@ -186,6 +186,37 @@ internal static class Scenes
                 Type(wizard, "Add rate limiting to the login endpoint");
                 Press(wizard, ConsoleKey.Enter);
                 Type(wizard, "Requests to POST /login from one IP are limited to 5 a minute.");
+                return wizard;
+            }
+            case "wizard-failed":
+            {
+                // The form handed back after the task could not be created. Nothing else renders an
+                // error on a step, so without this scene the state is never drawn at any width.
+                var answers = TaskWizard.Create(config);
+                Type(answers, "Add rate limiting to the login endpoint");
+                Press(answers, ConsoleKey.Enter);
+                Type(answers, "Requests to POST /login from one IP are limited to 5 a minute.");
+                Press(answers, ConsoleKey.Enter);
+                Press(answers, ConsoleKey.DownArrow);
+                Press(answers, ConsoleKey.Enter);
+                Press(answers, ConsoleKey.Enter);       // lead
+                Press(answers, ConsoleKey.Enter);       // implementer
+                Press(answers, ConsoleKey.Enter);       // auditor
+                for (var clear = 0; clear < 12; clear++)
+                {
+                    Press(answers, ConsoleKey.Backspace);   // the field arrives holding "main"
+                }
+
+                Type(answers, "mian");                  // base: the typo Git will refuse
+                while (Press(answers, ConsoleKey.Enter) == OverlayResult.Continue)
+                {
+                }
+
+                var wizard = TaskWizard.Create(config);
+                wizard.Reopen(answers.Values,
+                    "'mian' is not a local branch in this repository, so a task cannot start from " +
+                    "it. Check the spelling, or create the branch first. 'git branch' lists what " +
+                    "exists.");
                 return wizard;
             }
             case "wizard-review":
