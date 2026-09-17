@@ -13,6 +13,7 @@ the zero-dependency rule in AGENTS.md is about what `fknrtd` itself installs.
     python scripts/capture-frames.py wizard     # just one
 """
 
+import io
 import os
 import re
 import subprocess
@@ -23,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "docs", "screenshots")
 SELFTEST = os.path.join(ROOT, "tests", "FKNRTD.SelfTest", "FKNRTD.SelfTest.csproj")
+FKNRTD = os.path.join(ROOT, "src", "FKNRTD.Cli", "bin", "Release", "net10.0", "fknrtd.exe")
 
 # scene name -> (output file, columns, rows)
 FRAMES = {
@@ -40,6 +42,19 @@ FRAMES = {
     "settings": ("settings", 112, 32),
     "welcome": ("welcome", 118, 32),
 }
+
+# Frames that are a command's own output rather than a dashboard scene. Each runs against a
+# throwaway workspace so the capture shows real output and not a transcription of it.
+COMMANDS = {
+    "doctor": ["doctor", "-color"],
+    "statusline": ["telemetry", "claude-statusline", "-color"],
+}
+
+STATUSLINE_PAYLOAD = (
+    '{"workspace":{"current_dir":%s},'
+    '"context_window":{"used_percentage":38},'
+    '"rate_limits":{"five_hour":{"used_percentage":22},"seven_day":{"used_percentage":36}}}'
+)
 
 BACKGROUND = (13, 17, 23)
 FOREGROUND = (230, 237, 243)
@@ -121,15 +136,67 @@ def capture(name, scene, columns, rows):
     print(f"  {name}.png  {size[0]}x{size[1]}  from scene '{scene}' at {columns}x{rows}")
 
 
+def temporary_workspace():
+    """A throwaway Git repository with a workspace in it, for the command captures."""
+    import tempfile
+
+    # A fixed, short, plausible name: doctor prints absolute paths, and a random temp directory
+    # makes the capture both wide and obviously synthetic.
+    import shutil
+    root = os.path.join(tempfile.gettempdir(), "aurora-api")
+    shutil.rmtree(root, ignore_errors=True)
+    os.makedirs(root, exist_ok=True)
+    run = lambda *args: subprocess.run(args, cwd=root, capture_output=True, text=True)
+    run("git", "init", "-q", "-b", "main", ".")
+    with io.open(os.path.join(root, "README.md"), "w", encoding="utf-8") as handle:
+        handle.write("# aurora-api\n")
+    # A project file so setup detects build and test commands. That makes the doctor capture show
+    # a fully healthy workspace, which is the representative case and a far narrower frame than the
+    # advisory about having nothing that verifies the work.
+    with io.open(os.path.join(root, "aurora-api.csproj"), "w", encoding="utf-8") as handle:
+        handle.write('<Project Sdk="Microsoft.NET.Sdk"></Project>')
+    run("git", "add", "-A")
+    run("git", "-c", "user.email=a@b", "-c", "user.name=n", "commit", "-qm", "init")
+    subprocess.run([FKNRTD, "init", "-yes", "-root", root], capture_output=True, text=True)
+    return root
+
+
+def capture_command(name, arguments):
+    root = temporary_workspace()
+    payload = None
+    if name == "statusline":
+        import json
+        payload = STATUSLINE_PAYLOAD % json.dumps(root)
+
+    result = subprocess.run(
+        [FKNRTD] + arguments + ["-root", root],
+        input=payload, capture_output=True, text=True, encoding="utf-8", cwd=root)
+    frame = (result.stdout or "").rstrip("\n")
+    if not frame:
+        raise SystemExit(f"{name} produced no output:\n{result.stderr}")
+
+    # Pad to a tidy rectangle so the image is not ragged.
+    rows = frame.split("\n")
+    width = max(len(SEQUENCE.sub("", row)) for row in rows) + 2
+    frame = "\n".join(row + " " * (width - len(SEQUENCE.sub("", row))) for row in rows)
+    path = os.path.join(OUT, name + ".png")
+    size = render(frame, path)
+    print(f"  {name}.png  {size[0]}x{size[1]}  from `fknrtd {' '.join(arguments)}`")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
-    wanted = sys.argv[1:] or list(FRAMES)
-    unknown = [name for name in wanted if name not in FRAMES]
+    known = list(FRAMES) + list(COMMANDS)
+    wanted = sys.argv[1:] or known
+    unknown = [name for name in wanted if name not in known]
     if unknown:
-        raise SystemExit(f"unknown frame(s): {', '.join(unknown)}\nknown: {', '.join(FRAMES)}")
+        raise SystemExit(f"unknown frame(s): {', '.join(unknown)}\nknown: {', '.join(known)}")
     print(f"Capturing {len(wanted)} frame(s) into docs/screenshots:")
     for name in wanted:
-        capture(name, *FRAMES[name])
+        if name in COMMANDS:
+            capture_command(name, COMMANDS[name])
+        else:
+            capture(name, *FRAMES[name])
 
 
 if __name__ == "__main__":

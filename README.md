@@ -226,7 +226,9 @@ The statusline inside Claude Code, with no remote call while rendering:
 ![The FKNRTD.CLI statusline](docs/screenshots/statusline.png)
 
 > **Reproduce these.** `python scripts/capture-frames.py` regenerates every frame above, or name
-> one to redo just that. Underneath, each is `fknrtd dashboard -once -color -width W -height H`:
+> one to redo just that. The dashboard frames come from the real renderer through the self-test
+> harness; the two command frames run the real binary against a throwaway workspace the script
+> creates. Underneath, each dashboard frame is `fknrtd dashboard -once -color -width W -height H`:
 > `-color` forces ANSI through a redirect, which is what makes capture possible, and `-width` and
 > `-height` make the result deterministic regardless of your terminal.
 >
