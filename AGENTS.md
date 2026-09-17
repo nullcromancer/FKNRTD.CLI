@@ -61,3 +61,49 @@ framework — follow its existing `Check(...)` style.
 - Never assume one `char` equals one terminal column: emoji, CJK and surrogate pairs break
   that assumption and shift every box border on the row.
 - Colour must degrade cleanly: `-no-color` and redirected output must emit no ANSI escapes.
+- **Colour is only ever an enhancement.** Stripping the escapes from a coloured frame must leave
+  exactly the colourless frame, character for character — so nothing is ever distinguished by
+  colour alone. A self-test asserts this for every scene; if you add a surface, it covers yours too.
+- **Only draw glyphs the common terminal fonts have.** Every non-ASCII character was measured
+  against Cascadia Mono (the Windows Terminal default), Consolas and Lucida Console. Four had been
+  missing from all three — including the failure marker, which rendered as an empty box on a
+  default Windows Terminal. Before introducing a new glyph, check it renders in at least Cascadia
+  Mono and Consolas.
+
+## The product explains itself
+
+This is the property most easily broken by accident, so it is enforced by tests rather than by
+convention.
+
+- **Four tables in `src/FKNRTD.Cli/Help/` are the single source of every explanation.**
+  `Glossary.cs` defines each concept, `CommandCatalog.cs` each command, `Keymap.cs` each dashboard
+  key, `SettingsCatalog.cs` each configuration field. The dashboard's inline hints, the in-app
+  reference, `fknrtd help`, `fknrtd explain` and the generated portal all read from them. Never
+  write explanatory prose into a screen; add a row and point at it.
+- Self-tests fail if a marker the dashboard can draw, a field a guided form asks for, a key the
+  dispatcher handles, or a field on `FknrtdConfig` or `AgentDefinition` has no entry.
+- **A key that does something must be in `Keymap.cs`.** No undocumented aliases.
+- **An entry must be true.** Two independent reviews found twenty-six factual errors in these
+  tables, every one written by the seat that also wrote the code it described. When you change
+  behaviour, re-read the entry that describes it. Documentation that is confidently wrong is worse
+  than documentation that is missing.
+- **Every question carries its own explanation.** A `WizardStep` is required to name a glossary
+  term, which is what stops a form asking for a "brief" or an "auditor" with nothing on screen
+  saying what those are.
+- **Say what to do next, phrased for the surface asking.** `Reference.NextStep` is shared between
+  the dashboard and `fknrtd task show` so the two cannot disagree, and takes `onDashboard` so that
+  a shell is never told to press a key.
+- **A refusal states its reason.** An action that cannot be taken is listed with why, not hidden
+  and not silently inert. An error says what happened, why it matters, and the next command.
+- **Every event type belongs in `EventTypes.cs`.** A literal is how an event becomes silently
+  unsearchable.
+
+## Generated artifacts
+
+Regenerate these after changing anything they describe; both are committed.
+
+- `fknrtd-portal.html` — `fknrtd portal`. Built from the four tables plus `Milestones.cs`, so it
+  cannot describe a command that was removed. Deterministic: the same version produces the same
+  bytes, so the diff is reviewable.
+- `docs/screenshots/*.png` — `python scripts/capture-frames.py`. Rendered from the real renderer
+  and the real binary, never hand-made.
