@@ -1490,6 +1490,26 @@ static Task TestPortalAsync()
     Equal(1, System.Text.RegularExpressions.Regex.Matches(attacked, "</script>").Count,
         "Portal escapes an injected script terminator");
 
+    // A guide whose own navigation is broken is worse than no guide: every internal link has to
+    // point at an element that exists, and the structural tags have to balance.
+    var identifiers = System.Text.RegularExpressions.Regex.Matches(html, """\bid=(?:"([^"]+)"|([A-Za-z0-9_-]+))""")
+        .Select(match => match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value)
+        .ToHashSet(StringComparer.Ordinal);
+    foreach (var link in System.Text.RegularExpressions.Regex
+                 .Matches(html, "href=(?:\"#([^\"]+)\"|#([A-Za-z0-9_-]+))")
+                 .Select(match => match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value))
+    {
+        True(identifiers.Contains(link), $"Portal link #{link} points at an element that exists");
+    }
+
+    foreach (var tag in new[] { "section", "article", "div", "main", "aside", "nav", "style", "script", "svg" })
+    {
+        Equal(
+            System.Text.RegularExpressions.Regex.Matches(html, $@"<{tag}\b").Count,
+            System.Text.RegularExpressions.Regex.Matches(html, $"</{tag}>").Count,
+            $"Portal balances its <{tag}> elements");
+    }
+
     // Empty input must still produce a valid page rather than throwing.
     var empty = PortalWriter.Render(new PortalModel([], [], [], "0.0.0", generatedAt));
     True(empty.Contains("</html>", StringComparison.Ordinal), "Portal renders with nothing to say");
