@@ -121,6 +121,46 @@ public sealed class DoctorService
             });
         }
 
+        // A task names an auditor at creation and is refused if that agent cannot return a verdict.
+        // Without this check the workspace looks healthy right up until the first task is refused.
+        // Note the null-safe access: an unreadable configuration is already reported above, and
+        // doctor's entire contract is that it reports rather than throws.
+        var auditors = (config?.Agents ?? [])
+            .Where(agent => agent.Enabled)
+            .Where(agent =>
+            {
+                var profile = agent.Profiles.TryGetValue("audit", out var audit)
+                    ? audit
+                    : agent.Profiles.GetValueOrDefault("default");
+                return profile is not null &&
+                       !string.IsNullOrWhiteSpace(profile.SuccessMarker) &&
+                       !string.IsNullOrWhiteSpace(profile.FailureMarker);
+            })
+            .Select(agent => agent.Id)
+            .ToArray();
+        checks.Add(new DoctorCheck
+        {
+            Name = "An agent can audit",
+            Passed = auditors.Length > 0,
+            Detail = auditors.Length > 0
+                ? string.Join(", ", auditors)
+                : "No enabled agent has successMarker and failureMarker in its audit profile, so no " +
+                  "task can be created — the auditor is required and must be able to return a verdict."
+        });
+
+        // Not an error: a workspace can legitimately have none. But it means the audit is the only
+        // gate on every new task, and that is worth knowing before the first one rather than after.
+        checks.Add(new DoctorCheck
+        {
+            Name = "Work gets verified",
+            Passed = config?.DefaultVerificationCommands.Count > 0,
+            Required = false,
+            Detail = config?.DefaultVerificationCommands.Count > 0
+                ? string.Join("; ", config.DefaultVerificationCommands)
+                : "No default verification commands. New tasks start with nothing checking them, " +
+                  "leaving the audit as the only gate — and an audit is a judgement, not a measurement."
+        });
+
         var writable = false;
         var probe = Path.Combine(_store.Paths.Runtime, $"write-probe-{Guid.NewGuid():N}.tmp");
         try

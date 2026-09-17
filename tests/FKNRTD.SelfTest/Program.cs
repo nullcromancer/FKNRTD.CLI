@@ -68,7 +68,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Scrolling back through a log lands on the right lines", TestLogScrollbackAsync),
     ("Overlay review regressions stay fixed", TestOverlayReviewRegressionsAsync),
     ("The diff view keeps a diff readable", TestDiffViewAsync),
-    ("Advice is phrased for the surface asking", TestNextStepIsSurfaceAwareAsync)
+    ("Advice is phrased for the surface asking", TestNextStepIsSurfaceAwareAsync),
+    ("Doctor reports rather than throws on a broken workspace", TestDoctorSurvivesABrokenWorkspaceAsync)
 };
 
 var failures = new List<string>();
@@ -1969,4 +1970,59 @@ static Task TestDiffViewAsync()
     True(frame.Contains("larger than this view will hold", StringComparison.Ordinal),
         "A truncated diff says it was cut off");
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// Doctor's contract is that it reports rather than throws. A workspace whose configuration cannot
+/// be read is exactly when an operator needs it most, and exactly when a check that assumes the
+/// configuration loaded would take the whole diagnostic down with it.
+/// </summary>
+static async Task TestDoctorSurvivesABrokenWorkspaceAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Directory.CreateDirectory(Path.Combine(root, ".fknrtd"));
+        await File.WriteAllTextAsync(Path.Combine(root, ".fknrtd", "config.json"), "not json at all")
+            .ConfigureAwait(false);
+
+        var checks = await new DoctorService(
+                new StateStore(WorkspaceLocator.ForRoot(root)),
+                new GitService(new ProcessRunner()),
+                new ProcessRunner())
+            .RunAsync()
+            .ConfigureAwait(false);
+
+        True(checks.Count > 5, "Doctor reports every check even with an unreadable configuration");
+        True(checks.Any(check => check.Name == "Configuration" && !check.Passed),
+            "Doctor reports the unreadable configuration as a failure");
+        True(checks.Any(check => check.Name == "An agent can audit"),
+            "Doctor still reaches the auditor check");
+        True(checks.Any(check => check.Name == "Work gets verified"),
+            "Doctor still reaches the verification check");
+        True(checks.All(check => check.Detail.Length > 0), "Every check carries a detail");
+    }).ConfigureAwait(false);
+
+    // And in a healthy workspace the two new checks answer the questions they exist for.
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        var store = new StateStore(paths);
+        await store.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "doctor-test",
+            Mode = WorkspaceMode.Standalone,
+            DefaultVerificationCommands = ["dotnet build"],
+            Agents = BuiltInAgents.CreateDefaults().ToList()
+        }).ConfigureAwait(false);
+
+        var checks = await new DoctorService(store, new GitService(new ProcessRunner()), new ProcessRunner())
+            .RunAsync()
+            .ConfigureAwait(false);
+        True(checks.Single(check => check.Name == "An agent can audit").Passed,
+            "The built-in agents can audit");
+        True(checks.Single(check => check.Name == "Work gets verified").Passed,
+            "Configured verification commands satisfy the verification check");
+        True(!checks.Single(check => check.Name == "Work gets verified").Required,
+            "The verification check is advisory, not required");
+    }).ConfigureAwait(false);
 }
