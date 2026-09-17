@@ -72,6 +72,43 @@ internal sealed class InfoPanel : IOverlay
 
     public string Mode => _title;
 
+    /// <summary>
+    /// The width of a list marker at the start of a paragraph — "1. ", "10. ", "- ", "* " — or
+    /// zero when the paragraph does not begin with one. Continuation lines are indented by it, so a
+    /// wrapped list item stays visibly inside its own item.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the text rather than declared alongside it. A hanging indent that has to be
+    /// passed at every call site is one that will be correct on the paragraphs somebody remembered
+    /// and wrong on the rest, and this product has numbered lists written months apart.
+    /// </remarks>
+    internal static int MarkerWidth(string text)
+    {
+        if (text.Length < 2)
+        {
+            return 0;
+        }
+
+        if ((text[0] is '-' or '*' or '•') && text[1] == ' ')
+        {
+            return 2;
+        }
+
+        var digits = 0;
+        while (digits < text.Length && char.IsAsciiDigit(text[digits]))
+        {
+            digits++;
+        }
+
+        // "1. " and "1) " both count; a bare number opening a sentence does not.
+        return digits > 0 &&
+               digits + 1 < text.Length &&
+               text[digits] is '.' or ')' &&
+               text[digits + 1] == ' '
+            ? digits + 2
+            : 0;
+    }
+
     private static bool IsFunctionKey(ConsoleKey key) => key is >= ConsoleKey.F1 and <= ConsoleKey.F12;
 
     /// <summary>
@@ -241,12 +278,27 @@ internal sealed class InfoPanel : IOverlay
                     break;
                 }
                 case InfoParagraph paragraph:
-                    foreach (var wrapped in Text.Wrap(paragraph.Text, Math.Max(1, width - paragraph.Indent)))
+                {
+                    // A numbered or bulleted paragraph hangs its continuation lines under its text
+                    // rather than under its marker. Wrapping them all to the same column put
+                    // "edit." and "while the repair budget lasts." hard against the left margin,
+                    // in the column the numbers were in, where they read as further steps.
+                    var hanging = MarkerWidth(paragraph.Text);
+                    var first = true;
+                    foreach (var wrapped in Text.Wrap(
+                                 paragraph.Text,
+                                 Math.Max(1, width - paragraph.Indent - hanging)))
                     {
-                        rows.Add(new Row(wrapped, paragraph.Indent, paragraph.Colour ?? Theme.Foreground, false));
+                        rows.Add(new Row(
+                            wrapped,
+                            paragraph.Indent + (first ? 0 : hanging),
+                            paragraph.Colour ?? Theme.Foreground,
+                            false));
+                        first = false;
                     }
 
                     break;
+                }
                 case InfoRaw raw:
                     rows.Add(new Row(Text.Truncate(raw.Text, width), 0, raw.Colour ?? Theme.Foreground, false));
                     break;

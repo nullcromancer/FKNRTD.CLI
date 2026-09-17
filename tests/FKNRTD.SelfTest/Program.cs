@@ -290,7 +290,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Documented examples survive the option check", TestDocumentedExamplesSurviveTheOptionCheckAsync),
     ("A failed creation hands the form back", TestAFailedCreationHandsTheFormBackAsync),
     ("A hand-edited config is checked", TestAHandEditedConfigIsCheckedAsync),
-    ("Looking up a word leads with the answer", TestLookingUpAWordLeadsWithTheAnswerAsync)
+    ("Looking up a word leads with the answer", TestLookingUpAWordLeadsWithTheAnswerAsync),
+    ("A wrapped list item stays inside its item", TestAWrappedListItemStaysInsideItsItemAsync)
 };
 
 var failures = new List<string>();
@@ -2785,31 +2786,33 @@ static Task TestOverlayHostFrameAsync()
 /// a sentence without caring where the renderer happened to break it. Searching a raw frame for a
 /// phrase silently stops working the moment the phrase grows past the panel width.
 /// </summary>
+/// <summary>
+/// Whether a character is frame decoration rather than something the product is saying.
+/// </summary>
+/// <remarks>
+/// Classified rather than listed: a list stops at the first character it does not know, and the
+/// panel behind a modal leaves its own truncation ellipsis in the right margin, so trimming stopped
+/// there and left a box character glued to the end of a sentence. The carriage return belongs here
+/// too, because frames are split on the line feed and each line still ends with one - a classifier
+/// that does not know it stops the right-hand trim before it reaches the border.
+/// </remarks>
+static bool Decoration(char character) =>
+    character is ' ' or (char)13 or '…' or '›' or '·' ||
+    character is >= '─' and <= '╿';
+
+/// <summary>A line's first non-decoration column, and the line with decoration trimmed off both ends.</summary>
+static (int Column, string Body) Content(string line)
+{
+    var start = 0;
+    var end = line.Length;
+    while (start < end && Decoration(line[start])) { start++; }
+    while (end > start && Decoration(line[end - 1])) { end--; }
+    return (start, line[start..end]);
+}
+
 static string Prose(string frame)
 {
-    // Trimmed by character class rather than by a list. A list stops at the first character it does
-    // not know, and the panel behind a modal leaves its own truncation ellipsis in the right margin
-    // - so trimming stopped there and left a box character glued to the end of the sentence.
-    static bool Decoration(char character) =>
-        character is ' ' or '…' or '›' or '·' ||
-        character is >= '─' and <= '╿';
-
-    static string Strip(string line)
-    {
-        var start = 0;
-        var end = line.Length;
-        while (start < end && Decoration(line[start]))
-        {
-            start++;
-        }
-
-        while (end > start && Decoration(line[end - 1]))
-        {
-            end--;
-        }
-
-        return line[start..end];
-    }
+    static string Strip(string line) => Content(line).Body;
 
     // A modal is drawn over the frame, so a row can hold the panel behind it as well - the pipeline
     // panel's "Stages" label sits immediately left of the modal's border and would otherwise be
@@ -5527,4 +5530,64 @@ static async Task TestLookingUpAWordLeadsWithTheAnswerAsync()
         var answer = await ExplainAsync(heading).ConfigureAwait(false);
         Equal(0, answer.Exit, $"'{heading}' is drawn on the main screen, so it must lead somewhere");
     }
+}
+
+/// <summary>
+/// A wrapped list item stays inside its own item.
+/// </summary>
+/// <remarks>
+/// Every line of a paragraph was wrapped to the same column, so the second line of step 2 put
+/// "edit." at the left margin — the column the step numbers are in — and the six-step summary
+/// of how the product works read as eight or nine steps, several of them fragments. It is the
+/// first screen a new workspace opens.
+/// </remarks>
+static Task TestAWrappedListItemStaysInsideItsItemAsync()
+{
+    // The marker widths themselves, including what is deliberately not a marker.
+    Equal(3, InfoPanel.MarkerWidth("1. You write a brief."), "'1. ' is three columns");
+    Equal(4, InfoPanel.MarkerWidth("10. Ten things."), "'10. ' is four");
+    Equal(3, InfoPanel.MarkerWidth("2) Or a bracket."), "'2) ' counts too");
+    Equal(2, InfoPanel.MarkerWidth("- A dash."), "'- ' is two");
+    Equal(2, InfoPanel.MarkerWidth("* A star."), "'* ' is two");
+    Equal(0, InfoPanel.MarkerWidth("5 agents are configured."), "A bare number is not a marker");
+    Equal(0, InfoPanel.MarkerWidth("Ordinary prose."), "nor is ordinary prose");
+    Equal(0, InfoPanel.MarkerWidth("1."), "nor a marker with nothing after it");
+    Equal(0, InfoPanel.MarkerWidth(""), "and an empty paragraph does not throw");
+    Equal(0, InfoPanel.MarkerWidth("-"), "nor a single character");
+
+    // The screen itself, at a width narrow enough to force every step to wrap. Each continuation
+    // is compared against the column of its own step, so the test never needs to know where the
+    // panel's interior begins.
+    var lines = Scenes.Render("welcome", 74, 44, colour: false).Split((char)10);
+    var numbered = 0;
+    var wrapped = 0;
+    var stepColumn = -1;
+    var inside = false;
+
+    foreach (var line in lines)
+    {
+        if (line.Contains("HOW A PIECE OF WORK", StringComparison.Ordinal)) { inside = true; continue; }
+        if (line.Contains("START HERE", StringComparison.Ordinal)) { inside = false; }
+        if (!inside) { continue; }
+
+        var (column, body) = Content(line);
+        if (body.Length == 0) { continue; }
+
+        if (body.Length > 2 && char.IsAsciiDigit(body[0]) && body[1] is '.' or ')')
+        {
+            numbered++;
+            stepColumn = column;
+            continue;
+        }
+
+        if (stepColumn < 0) { continue; }
+
+        wrapped++;
+        True(column > stepColumn,
+            $"A continuation sits past its step's number (column {column} vs {stepColumn}): '{body}'");
+    }
+
+    Equal(6, numbered, "The summary is six steps, however narrow the window");
+    True(wrapped >= 3, $"The screen was narrow enough for steps to wrap ({wrapped} continuations)");
+    return Task.CompletedTask;
 }

@@ -527,6 +527,22 @@ public static class Milestones
             "list is longer than the page, because claiming 33 and printing 8 reads as a miscount. " +
             "A word that matches nothing is still refused and still exits 2, since a script that " +
             "looked something up and found nothing has to be able to tell."),
+
+        new("2026-09-17",
+            "Six steps that read as nine",
+            "The first screen a new workspace opens explains how work moves through the product as " +
+            "six numbered steps. Every line of a paragraph was wrapped to the same column, and the " +
+            "column the text starts in is the column the numbers are in.",
+            "So the second line of step 2 put 'edit.' hard against the left margin, level with the " +
+            "numbers, and step 4 put 'while the repair budget lasts.' there. At a narrow window the " +
+            "six-step summary read as eight or nine, several of them fragments - on the screen " +
+            "somebody sees before they have done anything at all.",
+            "A paragraph that begins with a list marker now indents its continuation lines past it. " +
+            "The marker is measured from the text rather than declared at the call site, because a " +
+            "hanging indent that has to be passed by hand is one that will be right on the " +
+            "paragraphs somebody remembered and wrong on the rest. The test compares each " +
+            "continuation against its own step's column, so it never needs to know where the panel " +
+            "begins."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;
