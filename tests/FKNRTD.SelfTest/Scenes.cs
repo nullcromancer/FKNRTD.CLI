@@ -13,14 +13,14 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
     {
         var snapshot = name == "empty" ? EmptySnapshot() : Populated();
         var renderer = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
-            WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!);
+            WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
         if (name == "logs")
         {
             // Index 2 is the failed task, which is the state the log view exists to serve.
@@ -104,6 +104,13 @@ internal static class Scenes
                 return Reference.Coordination(Populated());
             case "settings":
                 return Reference.Settings(SampleConfig(), "/src/aurora-api/.fknrtd/config.json");
+            case "diff":
+                return Reference.Diff(FailedTask(), config, SampleDiff(), truncated: false);
+            case "diff-empty":
+                return Reference.Diff(FailedTask(), config, [], truncated: false);
+            case "diff-standalone":
+                return Reference.Diff(FailedTask(), config with { Mode = WorkspaceMode.Standalone },
+                    SampleDiff(), truncated: false);
             case "find":
                 return Picker.Tasks(Populated());
             case "find-search":
@@ -295,6 +302,30 @@ internal static class Scenes
             CapturedAt = captured
         };
     }
+
+    /// <summary>A small but realistic diff, in the shape git actually produces.</summary>
+    public static IReadOnlyList<string> SampleDiff() =>
+    [
+        "diff --git a/src/Reports/Schedule.cs b/src/Reports/Schedule.cs",
+        "index 4e1a9c2..b7d3f08 100644",
+        "--- a/src/Reports/Schedule.cs",
+        "+++ b/src/Reports/Schedule.cs",
+        "@@ -14,7 +14,7 @@ public sealed class Schedule",
+        "     public DateTimeOffset NextRun(DateTimeOffset after)",
+        "     {",
+        "-        var local = after.ToLocalTime();",
+        "+        var local = TimeZoneInfo.ConvertTime(after, _workspaceZone);",
+        "         return local.Date.AddDays(1).Add(_timeOfDay);",
+        "     }",
+        "diff --git a/tests/Reports/ScheduleTests.cs b/tests/Reports/ScheduleTests.cs",
+        "@@ -3,6 +3,14 @@ public class ScheduleTests",
+        "+    [Fact]",
+        "+    public void NextRunUsesTheWorkspaceZone()",
+        "+    {",
+        "+        Assert.Equal(expected, new Schedule(Utc).NextRun(midnight));",
+        "+    }",
+        "+"
+    ];
 
     /// <summary>A task mid-pipeline with a real failure on it, for the inspection scene.</summary>
     private static WorkflowTask FailedTask()

@@ -14,6 +14,7 @@ internal sealed class DashboardApp
     private readonly UsageService _usage;
     private readonly StateStore _store;
     private readonly WorktreeService _worktrees;
+    private readonly GitService _git;
     private readonly DoctorService _doctor;
     private readonly Dictionary<string, Task> _running = new(StringComparer.OrdinalIgnoreCase);
     private int _selectedTask;
@@ -59,7 +60,8 @@ internal sealed class DashboardApp
         UsageService usage,
         StateStore store,
         WorktreeService worktrees,
-        DoctorService doctor)
+        DoctorService doctor,
+        GitService git)
     {
         _snapshots = snapshots;
         _orchestrator = orchestrator;
@@ -69,6 +71,7 @@ internal sealed class DashboardApp
         _store = store;
         _worktrees = worktrees;
         _doctor = doctor;
+        _git = git;
     }
 
     public async Task RunAsync(
@@ -905,6 +908,7 @@ internal sealed class DashboardApp
             ConsoleKey.K => "K",
             ConsoleKey.S => "S",
             ConsoleKey.F => "F",
+            ConsoleKey.V => "V",
             ConsoleKey.Tab => "Tab",
             ConsoleKey.PageUp => "log-up",
             ConsoleKey.PageDown => "log-down",
@@ -1029,12 +1033,55 @@ internal sealed class DashboardApp
             case "F":
                 OpenTaskPicker(snapshot);
                 break;
+            case "V":
+                await ShowDiffAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
             case "?":
                 _overlay = Reference.Help();
                 break;
             case "/":
                 OpenPalette(snapshot);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Reads the highlighted task's finished change and shows it. Every other surface tells the
+    /// operator to read the diff before landing; this is the one that actually produces it.
+    /// </summary>
+    private async Task ShowDiffAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        var task = SelectedTask(snapshot);
+        if (task is null)
+        {
+            _toast = "No task is selected.";
+            return;
+        }
+
+        if (snapshot.Config.Mode == WorkspaceMode.Standalone)
+        {
+            _overlay = Reference.Diff(task, snapshot.Config, [], truncated: false);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(task.WorktreePath) || !Directory.Exists(task.WorktreePath))
+        {
+            _toast = $"{task.Id} has no worktree yet — it has not reached its worktree stage.";
+            return;
+        }
+
+        _toast = "Reading the change…";
+        try
+        {
+            var (lines, truncated) = await _git
+                .GetDiffAsync(task.WorktreePath, task.BaseRef, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            _overlay = Reference.Diff(task, snapshot.Config, lines, truncated);
+            _toast = "Ready";
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _toast = "Could not read the change: " + exception.Message;
         }
     }
 

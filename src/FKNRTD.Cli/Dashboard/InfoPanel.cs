@@ -16,6 +16,12 @@ internal sealed record InfoParagraph(string Text, Rgb? Colour = null, int Indent
 internal sealed record InfoGap : InfoBlock;
 
 /// <summary>
+/// One row rendered verbatim and truncated rather than wrapped. Diff and log lines lose their
+/// meaning when a wrap moves a leading + or - away from the start of the row.
+/// </summary>
+internal sealed record InfoRaw(string Text, Rgb? Colour = null) : InfoBlock;
+
+/// <summary>
 /// A scrollable — and optionally filterable — read-only panel. The dashboard's reference surfaces
 /// are all one of these: the key and glossary reference behind <c>?</c>, the task record behind
 /// <c>I</c>, the pre-flight checks behind <c>D</c>, the agent roster behind <c>A</c>. Building them
@@ -198,6 +204,9 @@ internal sealed class InfoPanel : IOverlay
                         rows.Add(new Row(wrapped, paragraph.Indent, paragraph.Colour ?? Theme.Foreground, false));
                     }
 
+                    break;
+                case InfoRaw raw:
+                    rows.Add(new Row(Text.Truncate(raw.Text, width), 0, raw.Colour ?? Theme.Foreground, false));
                     break;
                 case InfoGap:
                     rows.Add(new Row(string.Empty, 0, Theme.Muted, false));

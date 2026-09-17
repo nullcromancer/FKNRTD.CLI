@@ -37,6 +37,11 @@ public static class Keymap
             "Searches every task in the workspace by title, status or id and selects the one you " +
             "pick. The overview shows a handful of rows at a time, which stops being a way to find " +
             "anything once a workspace has a history."),
+        new("V", "view the change",
+            "Shows the finished diff for the highlighted task — everything it committed on top of " +
+            "the base branch, plus anything still uncommitted in its worktree — searchable by file " +
+            "or by any text in it. This is the reading that landing asks you to have done.",
+            InFooter: true),
         new("I", "inspect",
             "Opens the full record of the highlighted task: every stage and its outcome, the agents " +
             "assigned to it, where its worktree is on disk, and what to do next."),

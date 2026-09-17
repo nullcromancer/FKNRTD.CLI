@@ -115,6 +115,61 @@ public sealed class GitService
             .ToArray();
     }
 
+    /// <summary>
+    /// The finished change for a task: everything committed on top of the base branch, plus anything
+    /// still uncommitted in the worktree. Both halves matter — a workspace that does not commit agent
+    /// changes automatically has the entire change sitting uncommitted, and showing only the
+    /// committed half would report an empty diff for work that is plainly there.
+    /// </summary>
+    /// <param name="maximumLines">
+    /// A ceiling on what is returned. A diff is unbounded and the caller is a terminal; a very large
+    /// change is reported as truncated rather than read entirely into memory.
+    /// </param>
+    public async Task<(IReadOnlyList<string> Lines, bool Truncated)> GetDiffAsync(
+        string directory,
+        string baseRef,
+        int maximumLines = 4000,
+        CancellationToken cancellationToken = default)
+    {
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(baseRef))
+        {
+            var committed = await GitAsync(
+                    directory,
+                    ["diff", "--no-color", $"{baseRef}...HEAD"],
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (committed.Success)
+            {
+                lines.AddRange(SplitLines(committed.StandardOutput));
+            }
+        }
+
+        var pending = await GitAsync(directory, ["diff", "--no-color", "HEAD"], cancellationToken)
+            .ConfigureAwait(false);
+        if (pending.Success)
+        {
+            var uncommitted = SplitLines(pending.StandardOutput);
+            if (uncommitted.Count > 0)
+            {
+                if (lines.Count > 0)
+                {
+                    lines.Add(string.Empty);
+                }
+
+                lines.Add("--- uncommitted in the worktree ---");
+                lines.AddRange(uncommitted);
+            }
+        }
+
+        return lines.Count > maximumLines
+            ? (lines.Take(maximumLines).ToArray(), true)
+            : (lines, false);
+    }
+
+    private static List<string> SplitLines(string output) =>
+        output.Split([(char)13, (char)10], StringSplitOptions.RemoveEmptyEntries).ToList();
+
     public async Task<string> GetHeadAsync(string directory, CancellationToken cancellationToken = default)
     {
         var result = await GitAsync(directory, ["rev-parse", "HEAD"], cancellationToken).ConfigureAwait(false);

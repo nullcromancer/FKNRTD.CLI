@@ -66,7 +66,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Help and explain render every entry they claim", TestHelpSurfacesAsync),
     ("The palette says why an action cannot be run", TestPaletteExplainsRefusalsAsync),
     ("Scrolling back through a log lands on the right lines", TestLogScrollbackAsync),
-    ("Overlay review regressions stay fixed", TestOverlayReviewRegressionsAsync)
+    ("Overlay review regressions stay fixed", TestOverlayReviewRegressionsAsync),
+    ("The diff view keeps a diff readable", TestDiffViewAsync)
 };
 
 var failures = new List<string>();
@@ -197,7 +198,7 @@ static Task TestDashboardRendererAsync()
         Tasks = tasks,
         CapturedAt = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)
     };
-    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
     var widths = new[] { 60, 72, 84, 100, 119, 120, 140, 200 };
     var heights = new[] { 20, 32, 48 };
 
@@ -263,7 +264,7 @@ static Task TestDashboardRendererAsync()
             textWriter.WriteLine("active agent log line");
         }
 
-        var logRenderer = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!);
+        var logRenderer = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
         var logFrame = logRenderer.RenderLog(snapshot, 72, 20, selectedTaskIndex: 10);
         True(logFrame.Contains("active agent log line", StringComparison.Ordinal), "Shared active task log rendering");
     }
@@ -1119,7 +1120,7 @@ static Task TestWizardStepsAreExplainedAsync()
         // Walk the whole form by accepting each default, and require an explanation at every step.
         for (var guard = 0; guard < 20; guard++)
         {
-            var frame = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!)
+            var frame = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!)
                 .Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, wizard);
             True(frame.Contains("WHAT THIS IS", StringComparison.Ordinal),
                 "Every wizard step shows an explanation");
@@ -1269,7 +1270,7 @@ static Task TestOverlayFramesAsync()
 static Task TestWizardValidationExplainsItselfAsync()
 {
     var wizard = TaskWizard.Create(Scenes.SampleConfig());
-    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
 
     // An empty title cannot advance the form.
     Equal(OverlayResult.Continue, Scenes.Press(wizard, ConsoleKey.Enter), "Empty title does not advance");
@@ -1310,7 +1311,7 @@ static Task TestConfirmationRequiresTheWordAsync()
 {
     var confirmation = new Confirmation("LAND THIS TASK", Theme.Green, "FKN-1 — Subject",
         "This merges the task branch into main and cannot be undone from here.", "LAND", "land");
-    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
 
     Equal(OverlayResult.Continue, Scenes.Press(confirmation, ConsoleKey.Enter), "Bare Enter does not confirm");
     Scenes.Type(confirmation, "y");
@@ -1663,7 +1664,7 @@ static Task TestPaletteExplainsRefusalsAsync()
     var snapshot = Scenes.PopulatedSnapshot();
     var ready = snapshot.Tasks.First(task => task.Status == WorkflowStatus.ReadyToLand);
     var running = snapshot.Tasks.First(task => task.Status == WorkflowStatus.Running);
-    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
 
     // With nothing selected, an action that needs a task is listed rather than hidden, marked so
     // that it reads as unavailable even with colour off.
@@ -1684,13 +1685,19 @@ static Task TestPaletteExplainsRefusalsAsync()
     Equal(OverlayResult.Continue, Scenes.Press(empty, ConsoleKey.Enter), "An unavailable action does not run");
     True(empty.Chosen is null, "An unavailable action is never chosen");
 
-    // A running task cannot be landed, and the palette says so in those words.
+    // A running task cannot be landed, and the palette says so in those words. The action is found
+    // by its identifier rather than by filtering: more than one action's description can legitimately
+    // mention landing, and row order is not what is under test here.
     var mid = new Palette(() => Palette.Build(snapshot, running, running: 1));
-    Scenes.Type(mid, "land");
-    frame = renderer.Render(snapshot, 110, 40, useColor: false, mid);
-    True(frame.Contains("verified, audited", StringComparison.Ordinal),
+    True(mid.Actions.Single(action => action.Id == "G").Unavailable?
+            .Contains("verified, audited", StringComparison.Ordinal) == true,
         "The palette explains why a running task cannot land");
-    Equal(OverlayResult.Continue, Scenes.Press(mid, ConsoleKey.Enter), "Landing a running task is refused");
+
+    // Selecting that action and pressing Enter must not submit; the refusal stays on screen.
+    Scenes.Type(mid, "Land");
+    Equal(OverlayResult.Continue, Scenes.Press(mid, ConsoleKey.Enter),
+        "Landing a running task is refused");
+    True(mid.Chosen is null, "A refused action is never chosen");
 
     // The same action on a ready task is available and returns the identifier the dashboard routes on.
     var landable = new Palette(() => Palette.Build(snapshot, ready, running: 0));
@@ -1884,3 +1891,48 @@ static Task TestOverlayReviewRegressionsAsync()
 
 /// <summary>Newlines are consumed by the wrap rather than kept in a span, so they are counted back.</summary>
 static int CountBreaks(string value) => value.Count(character => character == (char)10);
+
+/// <summary>
+/// Every surface in this product tells the operator to read the diff before landing. The view that
+/// finally shows it has to keep a diff readable: lines rendered verbatim rather than wrapped, and a
+/// search that keeps the file and hunk headers a match belongs to.
+/// </summary>
+static Task TestDiffViewAsync()
+{
+    var config = Scenes.SampleConfig();
+    var task = Scenes.PopulatedSnapshot().Tasks.First(item => item.Status == WorkflowStatus.Failed);
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
+
+    // A diff line must survive verbatim: a wrap that moves a leading + or - off the start of the
+    // row turns an addition into a removal at a glance.
+    var frame = Scenes.Render("diff", 104, 30, colour: false);
+    True(frame.Contains("+        var local = TimeZoneInfo.ConvertTime", StringComparison.Ordinal),
+        "An added line is rendered with its marker at the start of the row");
+    True(frame.Contains("-        var local = after.ToLocalTime();", StringComparison.Ordinal),
+        "A removed line is rendered with its marker at the start of the row");
+
+    // Filtering keeps the file and hunk a match came from, or the operator is reading a line with
+    // no idea which file it is in.
+    var filtered = Reference.Diff(task, config, Scenes.SampleDiff(), truncated: false);
+    Scenes.Type(filtered, "ScheduleTests");
+    frame = renderer.Render(Scenes.PopulatedSnapshot(), 104, 30, useColor: false, filtered);
+    True(frame.Contains("tests/Reports/ScheduleTests.cs", StringComparison.Ordinal),
+        "A filtered diff keeps the file the match came from");
+    True(!frame.Contains("after.ToLocalTime", StringComparison.Ordinal),
+        "A filtered diff drops the files that do not match");
+
+    // The two states that are not a diff each explain themselves.
+    True(Scenes.Render("diff-empty", 104, 24, colour: false)
+            .Contains("Nothing has changed against", StringComparison.Ordinal),
+        "An empty diff says so, and says what that might mean");
+    True(Scenes.Render("diff-standalone", 104, 24, colour: false)
+            .Contains("no branch to compare against", StringComparison.Ordinal),
+        "A standalone workspace explains why there is no diff");
+
+    // A change too large to show says so rather than quietly ending.
+    var big = Reference.Diff(task, config, Scenes.SampleDiff(), truncated: true);
+    frame = renderer.Render(Scenes.PopulatedSnapshot(), 104, 40, useColor: false, big);
+    True(frame.Contains("larger than this view will hold", StringComparison.Ordinal),
+        "A truncated diff says it was cut off");
+    return Task.CompletedTask;
+}

@@ -57,10 +57,15 @@ internal sealed class Palette : IOverlay
                 return actions;
             }
 
+            // Ranked, not merely filtered. Searching the descriptions is what lets someone who does
+            // not know an action's name still find it, but an action whose own name matches has to
+            // come first — otherwise typing "land" offers to show you the diff, because that
+            // description happens to mention landing.
             return actions
-                .Where(action => action.Title.Contains(needle, StringComparison.OrdinalIgnoreCase) ||
-                                 action.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase) ||
-                                 action.Id.Equals(needle, StringComparison.OrdinalIgnoreCase))
+                .Select(action => (action, rank: Rank(action, needle)))
+                .Where(item => item.rank > 0)
+                .OrderByDescending(item => item.rank)
+                .Select(item => item.action)
                 .ToArray();
         }
     }
@@ -164,6 +169,30 @@ internal sealed class Palette : IOverlay
 
         Overlays.Footer(canvas, panel, Theme.Blue,
             ("↑↓", "choose"), ("Enter", "do it"), ("type", "to filter"), ("Esc", "close"));
+    }
+
+    /// <summary>
+    /// How well an action answers what was typed. Zero means it does not. The order matters more
+    /// than the exact numbers: the key, then the name, then the description.
+    /// </summary>
+    private static int Rank(PaletteAction action, string needle)
+    {
+        if (action.Id.Equals(needle, StringComparison.OrdinalIgnoreCase))
+        {
+            return 100;
+        }
+
+        if (action.Title.StartsWith(needle, StringComparison.OrdinalIgnoreCase))
+        {
+            return 80;
+        }
+
+        if (action.Title.Contains(needle, StringComparison.OrdinalIgnoreCase))
+        {
+            return 60;
+        }
+
+        return action.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase) ? 20 : 0;
     }
 
     private static string Describe(PaletteAction action) =>

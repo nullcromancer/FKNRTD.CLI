@@ -485,6 +485,151 @@ internal static class Reference
         _ => Theme.Red
     };
 
+    /// <summary>
+    /// The finished change behind <c>V</c>. Every surface in this product tells the operator to read
+    /// the diff before landing it, and until now none of them would show it: they named a directory
+    /// and left them to go and look. Searchable, because the question is usually about one file.
+    /// </summary>
+    public static InfoPanel Diff(
+        WorkflowTask task,
+        FknrtdConfig config,
+        IReadOnlyList<string> lines,
+        bool truncated) => new(
+        "THE FINISHED CHANGE",
+        Theme.Blue,
+        filter =>
+        {
+            var blocks = new List<InfoBlock>
+            {
+                new InfoLine("Task", $"{task.Id} — {task.Title}", Theme.Muted)
+            };
+
+            if (config.Mode == WorkspaceMode.Standalone)
+            {
+                blocks.Add(new InfoParagraph(
+                    "This is a standalone workspace, so there is no branch to compare against and no " +
+                    "diff to show. Agents edited this folder directly; whatever changed is simply " +
+                    "what is here now.", Theme.Amber));
+                return blocks;
+            }
+
+            if (lines.Count == 0)
+            {
+                blocks.Add(new InfoParagraph(
+                    $"Nothing has changed against {Blank(task.BaseRef)}. Either the task has not " +
+                    "reached its implement stage yet, or the implementer finished without editing " +
+                    "anything — which is itself worth knowing before you land it.", Theme.Amber));
+                return blocks;
+            }
+
+            blocks.Add(new InfoLine("Against", Blank(task.BaseRef), Theme.Muted));
+            var matching = filter.Length == 0
+                ? lines
+                : Relevant(lines, filter);
+            if (matching.Count == 0)
+            {
+                blocks.Add(new InfoParagraph("No file or line in this change matches that.", Theme.Muted));
+                return blocks;
+            }
+
+            blocks.Add(new InfoGap());
+            foreach (var line in matching)
+            {
+                blocks.Add(new InfoRaw(line, DiffColour(line)));
+            }
+
+            if (truncated && filter.Length == 0)
+            {
+                blocks.Add(new InfoGap());
+                blocks.Add(new InfoParagraph(
+                    "The change is larger than this view will hold and has been cut off. Read the " +
+                    $"rest with git in {Blank(task.WorktreePath)}.", Theme.Amber));
+            }
+
+            return blocks;
+        },
+        filterHint: "a file name, or any text in the change");
+
+    /// <summary>
+    /// Filtering a diff by line would strip the file headers that say what you are looking at, so a
+    /// match keeps the hunk it belongs to and the file it came from.
+    /// </summary>
+    private static IReadOnlyList<string> Relevant(IReadOnlyList<string> lines, string filter)
+    {
+        var kept = new List<string>();
+        var file = string.Empty;
+        var hunk = string.Empty;
+        var shownFile = string.Empty;
+        var shownHunk = string.Empty;
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("diff --git ", StringComparison.Ordinal))
+            {
+                file = line;
+                hunk = string.Empty;
+                continue;
+            }
+
+            if (line.StartsWith("@@", StringComparison.Ordinal))
+            {
+                hunk = line;
+                continue;
+            }
+
+            if (!line.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
+                !file.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (file.Length > 0 && file != shownFile)
+            {
+                kept.Add(file);
+                shownFile = file;
+                shownHunk = string.Empty;
+            }
+
+            if (hunk.Length > 0 && hunk != shownHunk)
+            {
+                kept.Add(hunk);
+                shownHunk = hunk;
+            }
+
+            kept.Add(line);
+        }
+
+        return kept;
+    }
+
+    /// <summary>
+    /// Added and removed lines are the two things the eye needs to separate, and the leading + and -
+    /// already do that without colour — this only makes it faster, never the only signal.
+    /// </summary>
+    private static Rgb DiffColour(string line)
+    {
+        if (line.StartsWith("+++", StringComparison.Ordinal) ||
+            line.StartsWith("---", StringComparison.Ordinal) ||
+            line.StartsWith("diff --git ", StringComparison.Ordinal) ||
+            line.StartsWith("index ", StringComparison.Ordinal) ||
+            line.StartsWith("new file", StringComparison.Ordinal) ||
+            line.StartsWith("deleted file", StringComparison.Ordinal))
+        {
+            return Theme.Violet;
+        }
+
+        if (line.StartsWith("@@", StringComparison.Ordinal))
+        {
+            return Theme.Cyan;
+        }
+
+        if (line.StartsWith('+'))
+        {
+            return Theme.Green;
+        }
+
+        return line.StartsWith('-') ? Theme.Red : Theme.Muted;
+    }
+
     /// <summary>The pre-flight checks behind <c>D</c>, with what a failure would actually cost.</summary>
     public static InfoPanel Doctor(IReadOnlyList<DoctorCheck> checks)
     {
