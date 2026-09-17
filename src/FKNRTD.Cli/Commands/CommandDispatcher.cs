@@ -217,19 +217,19 @@ internal static class CommandDispatcher
             Console.WriteLine($"  The previous configuration was kept at {backup}");
         }
 
-        Console.WriteLine(config.Mode == WorkspaceMode.Git
-            ? $"  Tasks start from and merge back into: {config.DefaultBaseRef}"
-            : "  No branch. Agents edit this folder directly and landing records completion.");
-        Console.WriteLine(config.DefaultVerificationCommands.Count == 0
-            ? "  Nothing verifies agent work yet. Add a build or test command when a task asks."
-            : "  New tasks are verified by: " + string.Join("; ", config.DefaultVerificationCommands));
-        Console.WriteLine($"  Agents configured: {string.Join(", ", config.Agents.Select(agent => agent.Id))}");
+        WriteParagraph(config.Mode == WorkspaceMode.Git
+            ? $"Tasks start from and merge back into: {config.DefaultBaseRef}"
+            : "No branch. Agents edit this folder directly and landing records completion.");
+        WriteParagraph(config.DefaultVerificationCommands.Count == 0
+            ? "Nothing verifies agent work yet. Add a build or test command when a task asks."
+            : "New tasks are verified by: " + string.Join("; ", config.DefaultVerificationCommands));
+        WriteParagraph($"Agents configured: {string.Join(", ", config.Agents.Select(agent => agent.Id))}");
         if (config.Mode == WorkspaceMode.Git)
         {
             // The first thing a Git user sees after this is an untracked .fknrtd in git status, and
             // nothing anywhere told them which half of it is meant to be committed.
-            Console.WriteLine(
-                "  Git will now show .fknrtd as untracked. Commit .fknrtd/config.json and " +
+            WriteParagraph(
+                "Git will now show .fknrtd as untracked. Commit .fknrtd/config.json and " +
                 ".fknrtd/.gitignore to share this setup with your team; everything else in there is " +
                 "already ignored, because it is this machine's state rather than the project's.");
         }
@@ -602,10 +602,11 @@ internal static class CommandDispatcher
         {
             Console.WriteLine("No tasks exist in this workspace yet.");
             Console.WriteLine();
-            Console.WriteLine("  A task is one piece of work: a brief you write, three agents, and the");
-            Console.WriteLine("  commands that decide whether the result is correct.");
+            WriteParagraph("A task is one piece of work: a brief you write, three agents, and the " +
+                           "commands that decide whether the result is correct.");
             Console.WriteLine();
-            Console.WriteLine("  Describe one:  fknrtd task new        (a guided form that explains each field)");
+            Console.WriteLine("  Describe one:      fknrtd task new");
+            Console.WriteLine("                     a guided form that explains every field as you reach it");
             Console.WriteLine("  Or from a script:  fknrtd task create \"Title\" -brief \"What to build\"");
             return 0;
         }
@@ -1177,9 +1178,10 @@ internal static class CommandDispatcher
                 {
                     Console.WriteLine("Nothing is on the message bus.");
                     Console.WriteLine();
-                    Console.WriteLine("  The bus is where one agent leaves a note for another - a hand-off, or a");
-                    Console.WriteLine("  reason something was done the way it was. Nothing writes to it on your");
-                    Console.WriteLine("  behalf, so an empty bus means nobody has recorded anything.");
+                    WriteParagraph("The bus is where one agent leaves a note for another - a " +
+                                   "hand-off, or a reason something was done the way it was. " +
+                                   "Nothing writes to it on your behalf, so an empty bus means " +
+                                   "nobody has recorded anything.");
                     Console.WriteLine();
                     Console.WriteLine("  Record one:  fknrtd message send -from <id> -to <id> -text \"...\"");
                 }
@@ -1260,9 +1262,10 @@ internal static class CommandDispatcher
                 {
                     Console.WriteLine("No paths are reserved in this workspace.");
                     Console.WriteLine();
-                    Console.WriteLine("  A reservation declares which files an agent is about to touch, so an");
-                    Console.WriteLine("  overlap with another agent can be reported before either one writes.");
-                    Console.WriteLine("  They are advisory: nothing is locked, and nothing waits for one.");
+                    WriteParagraph("A reservation declares which files an agent is about to touch, " +
+                                   "so an overlap with another agent can be reported before either " +
+                                   "one writes. They are advisory: nothing is locked, and nothing " +
+                                   "waits for one.");
                     Console.WriteLine();
                     Console.WriteLine("  Declare one:  fknrtd claim add -agent <id> -path <pattern> -mode write");
                 }
@@ -1331,8 +1334,9 @@ internal static class CommandDispatcher
                 {
                     Console.WriteLine("No capacity measurements have been recorded.");
                     Console.WriteLine();
-                    Console.WriteLine("  FKNRTD.CLI does not ask a provider how much budget you have left; it");
-                    Console.WriteLine("  shows what has been reported to it. Nothing has been yet.");
+                    WriteParagraph("FKNRTD.CLI does not ask a provider how much budget you have " +
+                                   "left; it shows what has been reported to it. Nothing has been " +
+                                   "yet.");
                     Console.WriteLine();
                     Console.WriteLine("  From Claude Code:  fknrtd integration install-claude-statusline");
                     Console.WriteLine("  From Codex:        fknrtd usage refresh");
@@ -1490,6 +1494,20 @@ internal static class CommandDispatcher
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Writes a paragraph wrapped to the terminal, indented. Long explanations used to be single
+    /// WriteLine calls, or hand-wrapped to whatever width the source file was written at, and both
+    /// break the moment the window is narrower than the author assumed.
+    /// </summary>
+    private static void WriteParagraph(string text, string indent = "  ")
+    {
+        var width = Math.Clamp(Screen.Width(88) - indent.Length, 30, 96);
+        foreach (var line in Text.Wrap(text, width))
+        {
+            Console.WriteLine(indent + line);
+        }
     }
 
     private static void ValidateAgentDefinition(AgentDefinition agent)
