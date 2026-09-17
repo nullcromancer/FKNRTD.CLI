@@ -147,7 +147,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The agent builder can describe a piped agent", TestAgentBuilderAsync),
     ("Setup explains why there is no choice of mode", TestSetupExplainsWhyThereIsNoChoiceAsync),
     ("A confirmation finishes its sentences at any width", TestConfirmationFinishesItsSentencesAsync),
-    ("Doctor says where it got to", TestDoctorReadsWellAsync)
+    ("Doctor says where it got to", TestDoctorReadsWellAsync),
+    ("Corrected claims stay corrected", TestCorrectedClaimsStayCorrectedAsync)
 };
 
 var failures = new List<string>();
@@ -3796,4 +3797,61 @@ static async Task TestDoctorReadsWellAsync()
         True(!payload.Contains("Everything required passed", StringComparison.Ordinal),
             "and no prose summary leaks into it");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// Claims that were found to be false and corrected, checked against everything the product says.
+/// </summary>
+/// <remarks>
+/// Three times in one session a claim was corrected in one place and left standing in another: the
+/// branch-is-kept promise survived in the confirmation dialog that asks permission to delete it and
+/// again in the shell command's refusal message, and the every-field-has-a-default claim survived
+/// in the README and the changelog. Each copy read perfectly well on its own, which is why reading
+/// them did not help. This is the list, and it is checked against the generated guide - which
+/// carries the glossary, the command catalog, the keymap and the settings table - and against every
+/// rendered scene.
+/// </remarks>
+static Task TestCorrectedClaimsStayCorrectedAsync()
+{
+    var retired = new (string Claim, string Why)[]
+    {
+        ("Claims expire on their own",
+            "expiring marks a claim stale; nothing deletes the record"),
+        // "its Git branch are all kept" is deliberately not here: it is true of a task that has not
+        // landed and false of one that has, so a blanket ban would be as wrong as the claim was.
+        // TestConfirmationFinishesItsSentences checks each case says the right one.
+        ("cannot write to the worktree",
+            "the shipped profiles ask an agent not to edit; nothing enforces it"),
+        ("the only agent allowed to write",
+            "the same - it is the agent whose profile asks it to"),
+        ("no single agent both writes",
+            "nothing stops one agent filling all three roles"),
+        ("Safe means no overlap at all",
+            "same-agent and read/read overlaps are not conflicts"),
+        ("only after verification passed",
+            "a task with no verification commands skips that stage and lands on the audit"),
+        ("Stale runtime state",
+            "it names an internal condition rather than what happened")
+    };
+
+    var page = PortalCommand.Render(DateTimeOffset.UnixEpoch);
+    foreach (var (claim, why) in retired)
+    {
+        True(!page.Contains(claim, StringComparison.OrdinalIgnoreCase),
+            $"The guide no longer says '{claim}' - {why}");
+    }
+
+    // And no screen says it either. Searched through Prose, because a claim that came back wrapped
+    // would otherwise slip past exactly the check meant to catch it.
+    foreach (var scene in Scenes.Names)
+    {
+        var prose = Prose(Scenes.Render(scene, 120, 44, colour: false));
+        foreach (var (claim, why) in retired)
+        {
+            True(!prose.Contains(claim, StringComparison.OrdinalIgnoreCase),
+                $"The {scene} scene no longer says '{claim}' - {why}");
+        }
+    }
+
+    return Task.CompletedTask;
 }

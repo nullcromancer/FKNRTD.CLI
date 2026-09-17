@@ -14,9 +14,9 @@
 - **Guided, explained forms in place of blind prompts.** Pressing `N` used to leave the alternate
   screen and ask six bare questions — "Task brief:", "Lead agent [claude]:" — with nothing on
   screen to say what those words meant. Questions are now modal panels drawn over the still-visible
-  dashboard: each step carries its own definition and example, each field has a working default so
-  Enter produces a valid task, a refused answer says what was wrong, and stepping back keeps what
-  was typed. The same forms back `fknrtd task new`, `fknrtd agent new` and an interactive
+  dashboard: each step carries its own definition and example, the title and the brief are yours to
+  write and everything after them already holds the right answer for this workspace, a refused
+  answer says what was wrong, and stepping back keeps what was typed. The same forms back `fknrtd task new`, `fknrtd agent new` and an interactive
   `fknrtd init`.
 - **Consequences before confirmations.** Landing and worktree removal state what they are about to
   do, and where to read the diff first, above the typed confirmation they still require.

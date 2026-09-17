@@ -950,8 +950,10 @@ internal static class CommandDispatcher
         if (!string.Equals(arguments.Get("confirm"), "REMOVE", StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "Removing a worktree needs -confirm REMOVE spelled out. Only the worktree directory " +
-                "goes; the task record, its logs and its Git branch are all kept.");
+                "Removing a worktree needs -confirm REMOVE spelled out. The task record and its logs " +
+                "are kept either way. The branch is kept too, unless this task has landed: a landed " +
+                "branch goes with its worktree, deleted by 'git branch -d', which refuses to remove " +
+                "anything not already merged.");
         }
 
         var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
