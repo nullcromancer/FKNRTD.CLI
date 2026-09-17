@@ -543,25 +543,33 @@ internal static class Text
         }
     }
 
+    /// <summary>
+    /// How long ago something happened, in the largest unit that still has a whole number in it.
+    /// </summary>
+    /// <remarks>
+    /// Truncated rather than rounded, for two reasons. Rounding reaches values nobody writes: at
+    /// 59.6 seconds it said "60s", at 59.5 minutes "60m", and at 23.9 hours "24h" — each of which
+    /// reads as a bug rather than as a time. And rounding up makes things look older than they are:
+    /// something ninety seconds old was reported as "2m ago". An age is a floor, the way an age in
+    /// years is.
+    ///
+    /// A timestamp in the future — clock skew, or a record written by another machine — reads as
+    /// "0s" rather than as a negative number.
+    /// </remarks>
     public static string Age(DateTimeOffset timestamp, DateTimeOffset now)
     {
-        var age = now - timestamp;
-        if (age.TotalSeconds < 60)
+        var seconds = (long)Math.Max(0, (now - timestamp).TotalSeconds);
+        if (seconds < 60)
         {
-            return $"{Math.Max(0, age.TotalSeconds):0}s";
+            return seconds + "s";
         }
 
-        if (age.TotalMinutes < 60)
+        if (seconds < 3600)
         {
-            return $"{age.TotalMinutes:0}m";
+            return seconds / 60 + "m";
         }
 
-        if (age.TotalHours < 24)
-        {
-            return $"{age.TotalHours:0}h";
-        }
-
-        return $"{age.TotalDays:0}d";
+        return seconds < 86400 ? seconds / 3600 + "h" : seconds / 86400 + "d";
     }
 
     private static int RuneWidth(Rune rune)

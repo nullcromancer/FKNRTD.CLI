@@ -162,7 +162,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The statusline survives whatever it is sent", TestStatusLineSurvivesBadInputAsync),
     ("A supplied name cannot reach outside the workspace", TestSuppliedNamesStayInsideTheWorkspaceAsync),
     ("Installing the statusline keeps existing settings", TestStatusLineInstallKeepsExistingSettingsAsync),
-    ("The output observer survives anything an agent prints", TestAgentOutputObserverSurvivesAnythingAsync)
+    ("The output observer survives anything an agent prints", TestAgentOutputObserverSurvivesAnythingAsync),
+    ("An age reads like a time", TestAgeReadsLikeATimeAsync)
 };
 
 var failures = new List<string>();
@@ -4835,4 +4836,60 @@ static async Task TestAgentOutputObserverSurvivesAnythingAsync()
         True(fresh.TouchedPaths.Any(path => path.Contains("A.cs", StringComparison.Ordinal)),
             "and the file it touched is collected");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// How long ago something happened. The message bus and the event feed both show it, and it was
+/// rounded rather than truncated - which reaches values nobody writes ("60s", "60m", "24h") and
+/// makes everything look older than it is, reporting something ninety seconds old as "2m ago".
+/// </summary>
+static Task TestAgeReadsLikeATimeAsync()
+{
+    var now = new DateTimeOffset(2026, 9, 17, 12, 0, 0, TimeSpan.Zero);
+    static DateTimeOffset Ago(DateTimeOffset now, double seconds) => now.AddSeconds(-seconds);
+
+    var cases = new (double Seconds, string Expected)[]
+    {
+        (0, "0s"),
+        (0.4, "0s"),
+        (1, "1s"),
+        (59, "59s"),
+        (59.6, "59s"),          // was "60s"
+        (60, "1m"),
+        (90, "1m"),             // was "2m": an age is a floor, not a rounding
+        (3540, "59m"),
+        (3570, "59m"),          // was "60m"
+        (3599, "59m"),
+        (3600, "1h"),
+        (5400, "1h"),
+        (86000, "23h"),         // was "24h"
+        (86399, "23h"),
+        (86400, "1d"),
+        (172800, "2d"),
+        (864000, "10d")
+    };
+
+    foreach (var (seconds, expected) in cases)
+    {
+        Equal(expected, Text.Age(Ago(now, seconds), now), $"{seconds} seconds ago");
+    }
+
+    // A timestamp in the future - clock skew, or a record written by another machine - reads as a
+    // time rather than as a negative number.
+    foreach (var ahead in new[] { 1.0, 60.0, 7200.0, 1_000_000.0 })
+    {
+        Equal("0s", Text.Age(now.AddSeconds(ahead), now), $"{ahead} seconds in the future");
+    }
+
+    // Nothing it produces is a unit nobody writes.
+    for (var seconds = 0; seconds < 200_000; seconds += 37)
+    {
+        var text = Text.Age(Ago(now, seconds), now);
+        True(!text.StartsWith("60m", StringComparison.Ordinal) &&
+             !text.StartsWith("60s", StringComparison.Ordinal) &&
+             !text.StartsWith("24h", StringComparison.Ordinal),
+            $"{seconds} seconds ago reads as a time, not as a boundary: {text}");
+    }
+
+    return Task.CompletedTask;
 }
