@@ -370,7 +370,7 @@ internal static class CommandDispatcher
         await store.AppendEventAsync(new FknrtdEvent
         {
             Severity = EventSeverity.Success,
-            Type = "project.initialized",
+            Type = EventTypes.ProjectInitialized,
             Message = $"Initialized a {DescribeMode(mode)} FKNRTD.CLI workspace for {config.ProjectName}."
         }, cancellationToken).ConfigureAwait(false);
         return config;

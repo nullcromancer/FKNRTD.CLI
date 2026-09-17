@@ -37,7 +37,7 @@ public sealed class MessageService
         await _store.AppendMessageAsync(message, cancellationToken).ConfigureAwait(false);
         await _store.AppendEventAsync(new FknrtdEvent
         {
-            Type = "message.sent",
+            Type = EventTypes.MessageSent,
             AgentId = fromAgentId,
             TaskId = taskId,
             Message = $"{fromAgentId} sent a message to {toAgentId}: {Preview(text, 80)}"

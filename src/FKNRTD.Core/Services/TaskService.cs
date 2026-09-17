@@ -73,7 +73,7 @@ public sealed class TaskService
         await _store.AppendEventAsync(new FknrtdEvent
         {
             Severity = EventSeverity.Success,
-            Type = "task.created",
+            Type = EventTypes.TaskCreated,
             TaskId = task.Id,
             Message = $"Created task {task.Id}: {task.Title}"
         }, cancellationToken).ConfigureAwait(false);
@@ -99,7 +99,7 @@ public sealed class TaskService
             await _store.AppendEventAsync(new FknrtdEvent
             {
                 Severity = EventSeverity.Warning,
-                Type = "task.cancelled",
+                Type = EventTypes.TaskCancelled,
                 TaskId = taskId,
                 Message = $"Cancelled queued task {taskId}."
             }, cancellationToken).ConfigureAwait(false);
@@ -115,7 +115,7 @@ public sealed class TaskService
         await _store.AppendEventAsync(new FknrtdEvent
         {
             Severity = EventSeverity.Warning,
-            Type = "task.cancel.requested",
+            Type = EventTypes.TaskCancelRequested,
             TaskId = taskId,
             Message = $"Cancellation requested for {taskId}."
         }, cancellationToken).ConfigureAwait(false);

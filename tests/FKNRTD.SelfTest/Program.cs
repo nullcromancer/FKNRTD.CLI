@@ -73,7 +73,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The prompt preview shows what is actually sent", TestPromptPreviewAsync),
     ("A failing key becomes a message, not an exit", TestAFailingActionDoesNotCrashAsync),
     ("The task-reading commands work end to end", TestTaskReadingCommandsAsync),
-    ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync)
+    ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync),
+    ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync)
 };
 
 var failures = new List<string>();
@@ -2336,4 +2337,54 @@ static async Task TestTaskReadingCommandsAsync()
         True(!prompts.ToString().Contains("branch .", StringComparison.Ordinal),
             "The prompt preview never shows an empty branch name");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// The recorded event vocabulary, pinned. It used to be string literals in four files, and the
+/// history's own description drifted twice — claiming per-stage events and agent check-ins that this
+/// product does not record at all. A description can only be checked against a list that exists.
+/// </summary>
+static Task TestEventVocabularyAsync()
+{
+    Equal(EventTypes.All.Count, EventTypes.All.Distinct(StringComparer.Ordinal).Count(),
+        "Event types are unique");
+    foreach (var type in EventTypes.All)
+    {
+        True(type.Contains('.', StringComparison.Ordinal), $"'{type}' is namespaced");
+        True(type.ToLowerInvariant() == type, $"'{type}' is lower case");
+    }
+
+    // Nothing may record a type outside the vocabulary. A literal here is how an event becomes
+    // silently unsearchable, because nothing else in the product spells it that way.
+    foreach (var path in Directory.EnumerateFiles(
+                 Path.Combine(RepositoryRoot(), "src"), "*.cs", SearchOption.AllDirectories))
+    {
+        if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal) ||
+            path.EndsWith("EventTypes.cs", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        foreach (var literal in System.Text.RegularExpressions.Regex
+                     .Matches(File.ReadAllText(path), "Type = " + (char)34 + "([^" + (char)34 + "]+)" + (char)34)
+                     .Select(match => match.Groups[1].Value))
+        {
+            True(false, $"{Path.GetFileName(path)} records the event type '{literal}' as a literal");
+        }
+    }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>Walks up to the repository root, so the test works from any build output location.</summary>
+static string RepositoryRoot()
+{
+    var directory = new DirectoryInfo(AppContext.BaseDirectory);
+    while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "FKNRTD.CLI.sln")))
+    {
+        directory = directory.Parent;
+    }
+
+    return directory?.FullName ?? Directory.GetCurrentDirectory();
 }

@@ -448,10 +448,11 @@ public static class Glossary
 
         new("event", "Event", Coordination,
             "An append-only log line of something that happened, with a severity.",
-            "Events are the workspace's history: tasks created, stages started and finished, " +
-            "conflicts raised, agents reporting in. The file is append-only and rotated, so it is " +
-            "the first place to look when you want to know what actually happened rather than what " +
-            "the current state implies.",
+            "Events are the workspace's history: the workspace being set up, tasks created and " +
+            "cancelled, workflows started, sent back for repair, failed, made ready and landed, and " +
+            "messages sent between agents. Per-stage detail is kept on the task record rather than " +
+            "here. The file is append-only and rotated, so it is the first place to look when you " +
+            "want the sequence of what happened rather than the state it left behind.",
             "fknrtd events -limit 100"),
 
         new("telemetry", "Telemetry report", Coordination,

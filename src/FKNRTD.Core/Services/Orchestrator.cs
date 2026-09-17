@@ -54,7 +54,7 @@ public sealed class Orchestrator
         task.Status = WorkflowStatus.Running;
         task.LastError = null;
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-        await EventAsync(task, EventSeverity.Information, "workflow.started", "Workflow started.", cancellationToken)
+        await EventAsync(task, EventSeverity.Information, EventTypes.WorkflowStarted, "Workflow started.", cancellationToken)
             .ConfigureAwait(false);
         using var workflowCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var cancellationWatcher = WatchCancellationAsync(task.Id, workflowCancellation);
@@ -105,7 +105,7 @@ public sealed class Orchestrator
             await EventAsync(
                     task,
                     EventSeverity.Success,
-                    "workflow.ready",
+                    EventTypes.WorkflowReady,
                     "Task is verified, audited, and ready to land.",
                     workflowToken)
                 .ConfigureAwait(false);
@@ -120,7 +120,7 @@ public sealed class Orchestrator
             await EventAsync(
                     task,
                     EventSeverity.Warning,
-                    "workflow.cancelled",
+                    EventTypes.WorkflowCancelled,
                     "Workflow cancelled.",
                     CancellationToken.None)
                 .ConfigureAwait(false);
@@ -181,7 +181,7 @@ public sealed class Orchestrator
         task.Status = WorkflowStatus.Landed;
         task.CompletedAt = DateTimeOffset.UtcNow;
         await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-        await EventAsync(task, EventSeverity.Success, "workflow.landed", "Task branch landed.", cancellationToken)
+        await EventAsync(task, EventSeverity.Success, EventTypes.WorkflowLanded, "Task branch landed.", cancellationToken)
             .ConfigureAwait(false);
         return task;
     }
@@ -480,7 +480,7 @@ public sealed class Orchestrator
         await EventAsync(
                 task,
                 EventSeverity.Warning,
-                "workflow.repair",
+                EventTypes.WorkflowRepair,
                 $"{reason} Starting repair round {task.RepairRound} of {task.MaxRepairRounds}.",
                 cancellationToken)
             .ConfigureAwait(false);
@@ -641,7 +641,7 @@ public sealed class Orchestrator
         task.LastError = error;
         task.UpdatedAt = DateTimeOffset.UtcNow;
         await _store.SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-        await EventAsync(task, EventSeverity.Error, "workflow.failed", error, cancellationToken)
+        await EventAsync(task, EventSeverity.Error, EventTypes.WorkflowFailed, error, cancellationToken)
             .ConfigureAwait(false);
         return task;
     }

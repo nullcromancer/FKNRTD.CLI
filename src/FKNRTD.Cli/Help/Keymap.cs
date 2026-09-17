@@ -96,9 +96,10 @@ public static class Keymap
             "something the pipeline is already waiting out."),
         new("E", "events",
             "Opens the workspace history — the most recent five hundred recorded events, newest " +
-            "first and searchable: tasks created, stages that passed or failed, landings, agent " +
-            "check-ins. This is where you look when you want to know what actually happened rather " +
-            "than what the current state implies."),
+            "first and searchable: the workspace being set up, tasks created and cancelled, " +
+            "workflows started, repaired, failed, made ready and landed, and messages sent. Stage " +
+            "detail is not here; press I on a task for that. This is where you look when you want " +
+            "the sequence of what happened rather than the state it left behind."),
         new("/", "commands",
             "Opens the command palette: every action the dashboard can take, searchable by name, " +
             "with the reason stated for any it can tell is unavailable. Moving around — the arrow " +
