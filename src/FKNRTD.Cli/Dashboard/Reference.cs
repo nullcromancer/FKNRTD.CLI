@@ -92,9 +92,9 @@ internal static class Reference
         blocks.Add(new InfoParagraph(task.Brief));
 
         blocks.Add(new InfoHeading("Who is on it"));
-        Role("Lead", task.LeadAgentId, "reads the code and writes the plan");
-        Role("Implementer", task.ImplementerAgentId, "the agent asked to change files");
-        Role("Auditor", task.AuditorAgentId, "judges the finished work and must return PASS");
+        Role("Lead", task.LeadAgentId, RoleNotes.LeadShort);
+        Role("Implementer", task.ImplementerAgentId, RoleNotes.ImplementerShort);
+        Role("Auditor", task.AuditorAgentId, RoleNotes.AuditorShort);
 
         // A task keeps the agent names it was created with, and an agent can be disabled or removed
         // afterwards. The roster warns about that when you do it; this is where you find out
@@ -728,11 +728,12 @@ internal static class Reference
                 }
             }
 
-            Section($"Sent to {task.LeadAgentId} — the plan stage", "Read-only. It proposes; it changes nothing.",
+            Section($"Sent to {task.LeadAgentId} — the plan stage",
+                RoleNotes.Lead,
                 AgentPrompts.Plan(task));
 
             Section($"Sent to {task.ImplementerAgentId} — the implement stage",
-                "The only agent that may write files. This prompt carries the lead's plan.",
+                RoleNotes.Implementer,
                 AgentPrompts.Implement(
                     task,
                     config.Mode,
@@ -742,7 +743,7 @@ internal static class Reference
                         : "[on a repair round, the failing verification output is added here]"));
 
             Section($"Sent to {task.AuditorAgentId} — the audit stage",
-                "Read-only. It must end with a PASS or FAIL verdict.",
+                RoleNotes.Auditor,
                 AgentPrompts.Audit(
                     task,
                     config.Mode,

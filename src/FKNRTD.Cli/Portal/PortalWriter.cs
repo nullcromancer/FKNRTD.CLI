@@ -205,7 +205,7 @@ public static class PortalWriter
             ("1 / Brief", "You define the task", "Goal, roles and verification", ""),
             ("2 / Worktree", "FKNRTD.CLI prepares isolation", "Git checkout; skipped in standalone", ""),
             ("3 / Plan", "LEAD / read-only", "Reads the brief and proposes a plan", "read"),
-            ("4 / Implement", "IMPLEMENTER / write access", "The only agent stage allowed to edit", "write"),
+            ("4 / Implement", "IMPLEMENTER / write access", "The one stage whose agent is asked to edit", "write"),
             ("5 / Verify", "Your build and test commands", "Every command must exit 0", ""),
             ("6 / Audit", "AUDITOR / read-only", "An explicit PASS is required", "read"),
             ("7 / Ready to land", "YOU / inspect the finished diff", "Nothing merges while you review", "human"),

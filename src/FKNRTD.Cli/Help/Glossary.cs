@@ -290,7 +290,7 @@ public static class Glossary
             "standalone task shows a skip marker here rather than a failure."),
 
         new("stage.plan", "Stage 3 — Plan", Stages,
-            "The lead agent reads the code and the brief, and writes the plan. Read-only.",
+            "The lead agent reads the code and the brief, and writes the plan.",
             "The lead is launched against the worktree with its plan profile, which for the shipped " +
             "agents asks them not to edit. Its whole output stream goes to the task's log. What is " +
             "carried forward is not that stream: the final answer is extracted from it, saved as " +

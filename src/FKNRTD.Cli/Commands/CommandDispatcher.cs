@@ -689,9 +689,9 @@ internal static class CommandDispatcher
 
         Console.WriteLine();
         Console.WriteLine("WHO IS ON IT");
-        Console.WriteLine($"  Lead         {task.LeadAgentId}  —  reads the code and writes the plan, read-only");
-        Console.WriteLine($"  Implementer  {task.ImplementerAgentId}  —  the only agent that may change files");
-        Console.WriteLine($"  Auditor      {task.AuditorAgentId}  —  judges the finished work read-only, must return PASS");
+        Console.WriteLine($"  Lead         {task.LeadAgentId}  —  {RoleNotes.LeadShort}");
+        Console.WriteLine($"  Implementer  {task.ImplementerAgentId}  —  {RoleNotes.ImplementerShort}");
+        Console.WriteLine($"  Auditor      {task.AuditorAgentId}  —  {RoleNotes.AuditorShort}");
 
         Console.WriteLine();
         Console.WriteLine("WHERE THE WORK HAPPENS");
@@ -788,16 +788,16 @@ internal static class CommandDispatcher
             "This is the text each agent receives, composed from your brief. Nothing else is sent.");
         Console.WriteLine();
         Section($"--- sent to {task.LeadAgentId} for the plan stage ---",
-            "Read-only. It proposes; it changes nothing.",
+            RoleNotes.Lead,
             AgentPrompts.Plan(task));
         Section($"--- sent to {task.ImplementerAgentId} for the implement stage ---",
-            "The only agent that may write files.",
+            RoleNotes.Implementer,
             AgentPrompts.Implement(task, config.Mode, plan,
                 task.RepairRound == 0
                     ? string.Empty
                     : "[on a repair round, the failing verification output is added here]"));
         Section($"--- sent to {task.AuditorAgentId} for the audit stage ---",
-            "Read-only. It must end with a PASS or FAIL verdict.",
+            RoleNotes.Auditor,
             AgentPrompts.Audit(task, config.Mode,
                 "[the verification results are inserted here once the verify stage has run]"));
         return 0;
