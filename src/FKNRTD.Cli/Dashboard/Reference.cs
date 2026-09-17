@@ -823,6 +823,13 @@ internal static class Reference
                 "strictly safer.",
                 Theme.Amber));
         }
+        else if (Glossary.Find("what-to-commit") is { } committing)
+        {
+            // Setting up prints this too, but a bare `fknrtd` goes straight into the dashboard and
+            // that line scrolls away into the alternate screen before anyone reads it.
+            blocks.Add(new InfoHeading("About that untracked .fknrtd"));
+            blocks.Add(new InfoParagraph(committing.Detail, Theme.Muted));
+        }
 
         if (config.DefaultVerificationCommands.Count == 0)
         {
