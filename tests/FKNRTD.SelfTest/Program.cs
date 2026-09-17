@@ -1202,11 +1202,17 @@ static Task TestGlossaryIsCompleteAsync()
         }
     }
 
-    // Every scalar field on the configuration record has to be documented, or the file keeps a key
-    // the operator has no way to understand.
+    // Every field the configuration file can carry has to be documented, nested ones included — an
+    // independent review found three on AgentDefinition that a top-level-only check had missed.
     foreach (var property in typeof(FknrtdConfig).GetProperties())
     {
         var name = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
+        True(SettingsCatalog.Find(name) is not null, $"The settings catalog documents '{name}'");
+    }
+
+    foreach (var property in typeof(AgentDefinition).GetProperties())
+    {
+        var name = "agents[]." + char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
         True(SettingsCatalog.Find(name) is not null, $"The settings catalog documents '{name}'");
     }
 

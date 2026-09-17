@@ -157,3 +157,38 @@ Every one has a regression test. The wrap bug was found by the test written for 
 finding, which is the argument for writing them rather than fixing and moving on.
 
 Local suite: 36/36 passing, Release build clean.
+
+## 2026-09-17 — claude (second Codex audit: the tables were wrong)
+
+The read-only seat fact-checked `Keymap.cs` and `SettingsCatalog.cs` against the code that
+implements each claim. **Neither table was accurate**, and every mismatch it reported was
+confirmed by reading the code directly. Twenty-six corrections in `Keymap` and
+`SettingsCatalog`, plus three nested fields that were undocumented.
+
+The ones worth naming, because they were confidently wrong rather than merely vague:
+
+- `claimStaleAfterSeconds` was documented as the safety valve that releases a crashed agent's
+  paths. **Nothing reads it.** Claims carry their own expiry from `-ttl`. The entry now says so.
+- `autoCommitAgentChanges` was documented as committing when the implement stage ends. It
+  commits after verification *and* the audit have passed, immediately before ready-to-land — and
+  turning it off blocks landing rather than losing the diff, which is the opposite of what the
+  entry claimed you would lose.
+- `requireCleanTreeForLanding` was documented as checking the task's worktree. It checks the
+  workspace root — your own checkout, the one being merged into.
+- Verdict markers were documented as exact. The match is case-insensitive and tolerates
+  quoting, bullets and Markdown emphasis, and only the success marker's presence is required.
+- `{prompt}` was documented as required in a profile's arguments. It is optional; the prompt is
+  appended when absent.
+- `schemaVersion` was documented as driving migration. There is no migration.
+- Two enum defaults were written as `"Git"` and `"Argument"`; the serializer writes them
+  camel-cased.
+- `R` was documented as resetting *and* running. It only resets.
+
+The self-test now walks `AgentDefinition` as well as `FknrtdConfig` by reflection, so a nested
+field cannot go undocumented again — that check is what would have caught three of these.
+
+**This is the second time the review found something the author could not.** Wrong
+documentation is worse than missing documentation, and all of it was written by the seat that
+also wrote the code it describes. That is the product's own argument, demonstrated on itself.
+
+Local suite: 36/36 passing, Release build clean.

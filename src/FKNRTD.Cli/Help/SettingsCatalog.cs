@@ -39,26 +39,30 @@ public static class SettingsCatalog
     private static readonly SettingEntry[] Entries =
     [
         new("schemaVersion", "Schema version", Workspace, "1",
-            "Which shape of this file FKNRTD.CLI is reading.",
-            "Set when the workspace is created and used to apply defaults to a configuration written " +
-            "by an older version. Missing fields are filled in on load rather than rejected.",
-            "Do not edit it by hand. Lowering it will not roll anything back, and raising it claims " +
-            "a shape the file does not have."),
+            "Records which shape of this file the workspace was written with.",
+            "Written when the workspace is created. Nothing currently reads it: a configuration " +
+            "missing a field gets that field's default regardless of the version recorded here. It " +
+            "exists so that a future version has something to branch on if the shape ever changes " +
+            "in a way defaults cannot absorb.",
+            "Nothing, today. Changing it neither migrates anything nor breaks anything, which is " +
+            "worth knowing before you spend time on it."),
 
         new("projectName", "Project name", Workspace, "the repository or folder name",
-            "What this workspace is called in the dashboard header and in event messages.",
+            "What this workspace is called in the introduction and in setup output.",
             "Detected from the Git repository name, or the folder name outside one. Cosmetic: nothing " +
-            "resolves paths or branches through it.",
+            "resolves paths or branches through it. The dashboard header shows the repository's own " +
+            "name rather than this, so the two can differ if you change it.",
             "Safe to change to anything readable. It affects only what is displayed.",
             "workspace"),
 
-        new("mode", "Workspace mode", Workspace, "\"Git\" when the folder is a repository",
+        new("mode", "Workspace mode", Workspace, "\"git\" when the folder is a repository",
             "Whether tasks are isolated in a worktree or edit this folder directly.",
             "Git mode gives every task its own branch and checkout. Standalone mode has neither: " +
             "agents edit the folder in place.",
-            "Switching to Standalone in a repository gives up all isolation — agent edits land " +
-            "directly in your working copy with nothing to roll back to. Switching to Git in a " +
-            "folder that is not a repository will fail every task at the worktree stage.",
+            "Switching to standalone in a repository gives up all isolation — agent edits land " +
+            "directly in your working copy with nothing to roll back to. Switching to git in a " +
+            "folder that is not a repository makes every new task fail as it is created, when the " +
+            "base branch cannot be resolved.",
             "mode"),
 
         new("defaultBaseRef", "Default base branch", Workspace, "the branch the repository was on",
@@ -89,8 +93,9 @@ public static class SettingsCatalog
 
         new("maxParallelAgents", "Maximum parallel agents", Limits, "4",
             "How many tasks may run at once from the dashboard.",
-            "The dashboard refuses to start another task past this number and says so. Each running " +
-            "task means a live agent process and, in Git mode, its own checkout on disk.",
+            "The dashboard refuses to start another task past this number and says so. It counts " +
+            "tasks it is running, not processes: a task waiting for the agent lease, or running your " +
+            "verification commands, counts against the limit without an agent being live.",
             "The practical ceiling is your machine and your rate-limit budget rather than this " +
             "number. Raising it past what your budget supports converts a queue into a set of " +
             "simultaneous rate-limit failures."),
@@ -112,19 +117,21 @@ public static class SettingsCatalog
             "timeouts"),
 
         new("agentStaleAfterSeconds", "Agent staleness window", Limits, "120",
-            "How long an agent's reported state is trusted before it is treated as offline.",
-            "Agents report what they are doing; a report older than this stops counting towards the " +
-            "agent radar and towards conflict detection.",
+            "How long an agent's claim to be working is trusted before it is marked stale.",
+            "Agents report what they are doing. A report older than this that still claims the agent " +
+            "is running, planning or reviewing is downgraded to unknown, and the radar marks it as " +
+            "stale rather than hiding it. States that are not claims of activity are left alone.",
             "Setting it too high leaves a crashed agent looking busy and its paths looking contested. " +
-            "Setting it too low makes a working agent flicker offline between reports.",
+            "Setting it too low makes a working agent flicker to stale between reports.",
             "telemetry"),
 
         new("claimStaleAfterSeconds", "Claim staleness window", Limits, "300",
-            "How long a path reservation survives without being renewed.",
-            "A claim past this age is reported as stale and stops blocking other agents.",
-            "This is the safety valve that stops a crashed agent holding a file forever. Raising it " +
-            "lengthens how long the workspace stays blocked after a crash; lowering it makes a slow " +
-            "but healthy agent lose its reservation mid-edit.",
+            "Recorded but not currently read by anything.",
+            "Each claim carries its own expiry, set from the -ttl given when it was registered and " +
+            "defaulting to five minutes, and staleness is judged against that expiry rather than " +
+            "against this setting. Nothing in the product reads this value.",
+            "Nothing. Change the lifetime of a claim with -ttl when you register it. This entry says " +
+            "so rather than describing behaviour the setting does not have.",
             "ttl"),
 
         new("dashboardRefreshMilliseconds", "Dashboard refresh interval", DashboardFields, "1000",
@@ -134,19 +141,23 @@ public static class SettingsCatalog
             "activity. Raising it is worth doing over a slow network filesystem."),
 
         new("requireCleanTreeForLanding", "Require a clean tree to land", Safety, "true",
-            "Whether landing refuses to merge while the worktree has uncommitted changes.",
-            "Checked immediately before the merge, after verification and the audit have already " +
-            "passed. Uncommitted changes at that point are work no stage ever looked at.",
-            "Turning it off lets a task land on top of uncommitted work, which is how a change that " +
-            "passed verification merges alongside one that was never checked at all. There is no " +
-            "good reason to turn this off.",
+            "Whether landing refuses while your own checkout has uncommitted changes.",
+            "Checked immediately before the merge, against the workspace root — the checkout being " +
+            "merged into, not the task's worktree. Uncommitted changes there are work no stage ever " +
+            "looked at, sitting exactly where the verified work is about to land.",
+            "Turning it off lets a task merge on top of unchecked work, which is how a change that " +
+            "passed verification ends up indistinguishable from one that was never checked at all. " +
+            "There is no good reason to turn this off.",
             "land"),
 
         new("autoCommitAgentChanges", "Commit agent changes automatically", Safety, "true in Git mode",
-            "Whether the implementer's work is committed to the task branch as its stage ends.",
-            "Unavailable in a standalone workspace, where there is no repository to commit to.",
-            "Turning it off means a task that fails after the implement stage leaves no inspectable " +
-            "diff, so the most useful evidence about what went wrong is exactly what you lose.",
+            "Whether verified, audited work is committed to the task branch before it becomes landable.",
+            "The commit is made once verification and the audit have both passed, immediately before " +
+            "the task reaches ready-to-land — not when the implementer finishes. Unavailable in a " +
+            "standalone workspace, where there is no repository to commit to.",
+            "Turning it off means a task that passes everything still cannot become landable while " +
+            "its worktree is dirty, because there is no commit to merge. You then have to commit in " +
+            "the worktree yourself. The work is never lost either way; it is the landing that stops.",
             "auto-commit"),
 
         new("agents", "Agents", AgentFields, "Claude and Codex",
@@ -181,11 +192,34 @@ public static class SettingsCatalog
             "installation. Removing it loses the profiles.",
             "agent"),
 
+        new("agents[].displayName", "Agent display name", AgentFields, "the id, capitalised",
+            "What the agent is called on screen, where the id would read as a shell token.",
+            "Shown in the agent radar, the roster and the role pickers. Nothing resolves anything " +
+            "through it; assignments are always by id.",
+            "Safe to change to anything readable. It affects only what is displayed.",
+            "agent"),
+
+        new("agents[].kind", "Agent kind", AgentFields, "\"claude\", \"codex\", or \"generic\"",
+            "A family label used to pick the colour the agent is drawn in.",
+            "Recognised values get a distinct colour in the dashboard; anything else falls back to " +
+            "blue. It carries no behaviour beyond that — it does not change how the agent is launched.",
+            "Setting it to an unrecognised value only loses the colour. It cannot break a task.",
+            "agent"),
+
+        new("agents[].color", "Agent colour", AgentFields, "\"cyan\"",
+            "Recorded per agent, but the dashboard colours agents by kind rather than by this.",
+            "Written when an agent is registered and kept in the file. Nothing currently reads it; " +
+            "the colour an agent is drawn in comes from its kind.",
+            "Nothing. Change agents[].kind if you want a different colour.",
+            "agent"),
+
         new("agents[].profiles", "Command profiles", AgentFields, "plan, implement, audit, default",
-            "The argument list used to launch the agent for each stage.",
-            "Each profile is an array of arguments containing the placeholder {prompt}, which is " +
-            "substituted without any shell interpolation — that is what lets a multi-paragraph brief " +
-            "containing quotes and newlines be passed safely.",
+            "How the agent is launched for each stage.",
+            "A profile is an object holding an argument array, a prompt delivery mode and, for an " +
+            "auditor, its verdict markers. Arguments may contain {prompt}, {taskId}, {workspace} and " +
+            "{branch}, substituted without any shell interpolation — that is what lets a " +
+            "multi-paragraph brief containing quotes and newlines be passed safely. If an argument " +
+            "profile contains no {prompt} at all, the prompt is appended as a final argument.",
             "This is where an agent's sandbox flags live, and therefore where the read-only guarantee " +
             "for the lead and auditor actually comes from. Removing a read-only flag from a plan or " +
             "audit profile silently gives that stage write access to the worktree.",
@@ -193,17 +227,24 @@ public static class SettingsCatalog
 
         new("agents[].profiles.audit.successMarker", "Audit verdict markers", Safety,
             "\"FKNRTD_VERDICT: PASS\" and \"FKNRTD_VERDICT: FAIL\"",
-            "The exact lines an auditor prints to pass or fail work.",
-            "Both markers are required before an agent may be assigned as an auditor. A missing " +
-            "verdict is treated as a failure, never as consent.",
-            "Changing them without changing what the agent actually prints means every audit is read " +
-            "as a failure, and no task can ever become landable.",
+            "The lines an auditor prints to pass or fail work.",
+            "Both markers must be configured before an agent may be assigned as an auditor. An audit " +
+            "passes only when the success marker appears on exactly one line and the failure marker " +
+            "on none. The match ignores case and tolerates a line wrapped in quoting, list bullets " +
+            "or Markdown emphasis, so an agent that writes **FKNRTD_VERDICT: PASS.** still counts. A " +
+            "missing verdict is a failure, never consent.",
+            "Change the success marker without changing what the agent prints and no task can ever " +
+            "become landable. Change only the failure marker and an audit that should have failed " +
+            "can pass, because the old failure line no longer matches anything.",
             "verdict"),
 
-        new("agents[].profiles.*.promptDelivery", "Prompt delivery", AgentFields, "\"Argument\"",
-            "Whether the prompt arrives as a command-line argument or on standard input.",
-            "Most agents take an argument. Some cap argument length or mishandle newlines.",
-            "Switch to StandardInput if an agent truncates long briefs or fails on multi-line ones.",
+        new("agents[].profiles.*.promptDelivery", "Prompt delivery", AgentFields, "\"argument\"",
+            "Whether the prompt is written to the agent's standard input as well as built into its arguments.",
+            "With \"argument\", the prompt is substituted into {prompt} or appended as a final " +
+            "argument. With \"standardInput\", it is also written to the process's standard input.",
+            "Switching to standardInput does not by itself take the prompt off the command line: an " +
+            "argument list that still contains {prompt} still carries the whole thing. Remove " +
+            "{prompt} from the arguments as well if the point was to keep a long brief out of them.",
             "prompt-delivery"),
 
         new("agents[].environment", "Agent environment", AgentFields, "{}",

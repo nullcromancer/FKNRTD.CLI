@@ -16,15 +16,18 @@ public static class Keymap
     private static readonly KeyBinding[] Bindings =
     [
         new("↑↓", "select",
-            "Moves the highlight through the task list. Every other key acts on the highlighted task.",
+            "Moves the highlight through the task list. The keys that act on a task — Enter, I, L, " +
+            "R, C, G, X — all act on the highlighted one.",
             InFooter: true),
         new("Enter", "run",
-            "Starts the highlighted task, or restarts it from the first stage that has not passed. " +
-            "Nothing is merged; the work happens in the task's own worktree.",
+            "Starts the highlighted task, or resumes it from the first stage that has not passed. " +
+            "Nothing is merged. In a Git workspace the work happens in the task's own worktree; in a " +
+            "standalone one it happens in this folder.",
             InFooter: true),
         new("N", "new task",
-            "Opens the guided task builder. Every field explains itself as you reach it, and every " +
-            "field has a working default, so Enter through it produces a valid task.",
+            "Opens the guided task builder. Every field explains itself as you reach it. The title " +
+            "and the brief are yours to write; everything after them is already filled in for this " +
+            "workspace, so the rest of the form is Enter.",
             InFooter: true),
         new("L", "logs",
             "Switches between the overview and the live output of the highlighted task's current " +
@@ -38,14 +41,18 @@ public static class Keymap
             "Opens the full record of the highlighted task: every stage and its outcome, the agents " +
             "assigned to it, where its worktree is on disk, and what to do next."),
         new("R", "retry",
-            "Resets the highlighted task's failed stages and runs it again from there. It does not " +
-            "start over from the beginning, and it does not discard the work already done."),
+            "Resets the highlighted task's failed stages so it can run again, then leaves it queued " +
+            "— press Enter to actually start it. It does not discard the work already done, and a " +
+            "resumed run picks up at the first stage that has not passed."),
         new("C", "cancel",
-            "Asks the highlighted task to stop. A running stage finishes its current external " +
-            "process first, so cancelling is not instant. Whatever was written stays in the worktree."),
+            "Asks the highlighted task to stop. The request is noticed within about half a second " +
+            "and the running agent's process tree is killed, so cancelling is quick but not " +
+            "instantaneous. Whatever the agent had already written stays where it wrote it."),
         new("G", "land",
-            "Merges the highlighted task into its base branch, after asking you to type LAND in " +
-            "full. Only offered for a task that verified and passed its audit."),
+            "Finishes the highlighted task, after asking you to type LAND in full. In a Git " +
+            "workspace that merges its branch into the base branch; in a standalone one it records " +
+            "that the verified work already in the folder is final. Only offered for a task that " +
+            "verified and passed its audit."),
         new("X", "clean up",
             "Removes the highlighted task's worktree directory after asking you to type REMOVE. The " +
             "task record, its logs and its Git branch are all kept."),
@@ -61,21 +68,25 @@ public static class Keymap
             "Lists the configured agents: which are enabled, which can actually be found on PATH, " +
             "and which are equipped to act as an auditor."),
         new("S", "settings",
-            "Shows every setting in this workspace's configuration with its current value, what it " +
-            "controls and what changing it would cost. The file is plain JSON meant to be edited by " +
-            "hand; this is the explanation that was missing from it."),
+            "Explains every setting in this workspace's configuration: what it controls and what " +
+            "changing it would cost, with the current value shown for each top-level one. The file " +
+            "is plain JSON meant to be edited by hand; this is the explanation that was missing."),
         new("K", "coordination",
-            "Shows what the agents have reserved and where they overlap: every live file claim, " +
-            "every conflict the sentinel has raised, and the message bus. This is the surface that " +
-            "answers why a task is waiting rather than working."),
+            "Shows what the agents have reserved and where they overlap right now: every live file " +
+            "claim, every conflict the sentinel currently sees, and the message bus. Claims warn; " +
+            "they do not block, so an overlap here is something for you to act on rather than " +
+            "something the pipeline is already waiting out."),
         new("E", "events",
-            "Opens the workspace history: every task created, stage started and finished, conflict " +
-            "raised and agent check-in, newest first and searchable. This is where you look when " +
-            "you want to know what actually happened rather than what the current state implies."),
+            "Opens the workspace history — the most recent five hundred recorded events, newest " +
+            "first and searchable: tasks created, stages that passed or failed, landings, agent " +
+            "check-ins. This is where you look when you want to know what actually happened rather " +
+            "than what the current state implies."),
         new("/", "commands",
             "Opens the command palette: every action the dashboard can take, searchable by name, " +
-            "with the reason stated for any that cannot be taken right now. ':' does the same, " +
-            "for layouts where that is the same physical key.",
+            "with the reason stated for any it can tell is unavailable. Moving around — the arrow " +
+            "keys, Tab, and scrolling the log — is left out, because those are ways to navigate " +
+            "rather than things to do. ':' does the same, for layouts where that is the same " +
+            "physical key.",
             InFooter: true),
         new("?", "help",
             "Opens the key reference and the searchable glossary of every term the product uses.",
@@ -93,7 +104,8 @@ public static class Keymap
             "nothing is merged and nothing is lost.",
             InFooter: true),
         new("Esc", "back",
-            "Closes whatever is open. From the overview it quits, the same as Q.")
+            "Closes whatever overlay is open. With nothing open it quits, the same as Q, from the " +
+            "log view as well as the overview.")
     ];
 
     public static IReadOnlyList<KeyBinding> All => Bindings;
