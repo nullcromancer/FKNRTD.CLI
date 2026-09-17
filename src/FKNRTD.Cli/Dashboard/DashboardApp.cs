@@ -1330,8 +1330,15 @@ internal sealed class DashboardApp
         {
             try
             {
-                await _orchestrator.LandAsync(task.Id, token).ConfigureAwait(false);
-                _toast = $"Landed {task.Id}. Press X to remove its worktree when you are done with it.";
+                var landed = await _orchestrator.LandAsync(task.Id, token).ConfigureAwait(false);
+
+                // A refused merge is recorded on the task and returned, not thrown. Announcing a
+                // landing without reading that back said the work was on the base branch when Git
+                // had declined to put it there.
+                _toast = landed.Status == WorkflowStatus.Landed
+                    ? $"Landed {task.Id}. Press X to remove its worktree when you are done with it."
+                    : $"{task.Id} was NOT landed. Nothing was merged into {landed.BaseRef}. " +
+                      "Press I to read the land stage's output.";
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {

@@ -130,7 +130,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync),
     ("The agent roster lists and changes the roster", TestAgentManagerAsync),
     ("The settings screen can change what it explains", TestSettingsBrowserAsync),
-    ("Coordination can clear the reservations it reports", TestCoordinationReleaseAsync)
+    ("Coordination can clear the reservations it reports", TestCoordinationReleaseAsync),
+    ("A landing Git refuses is reported as a refusal", TestRefusedLandingAsync)
 };
 
 var failures = new List<string>();
@@ -2733,4 +2734,86 @@ static Task TestCoordinationReleaseAsync()
     True(!quiet.ActionRequested, "And the panel does not claim it was asked");
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// A landing that Git refuses. LandAsync records the refusal on the task and returns it, the same
+/// way a failed run does, rather than throwing - and both callers used to ignore that and announce
+/// a success. The operator was told their work was on the base branch when Git had declined to put
+/// it there, and the command exited 0, so a script would have believed it too.
+/// </summary>
+static async Task TestRefusedLandingAsync()
+{
+    if (ExecutableLocator.Find("git") is null)
+    {
+        throw new InvalidOperationException("Git is required for the refused-landing self-test.");
+    }
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var process = new ProcessRunner();
+        var git = new GitService(process);
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]).ConfigureAwait(false), "git init");
+        MustSucceed(await git.GitAsync(root, ["config", "user.email", "fknrtd-self-test@example.invalid"])
+            .ConfigureAwait(false), "git config email");
+        MustSucceed(await git.GitAsync(root, ["config", "user.name", "FKNRTD.CLI Self Test"])
+            .ConfigureAwait(false), "git config name");
+        await File.WriteAllTextAsync(Path.Combine(root, "README.md"), "# Test" + (char)10,
+            new UTF8Encoding(false)).ConfigureAwait(false);
+
+        var paths = WorkspaceLocator.ForRoot(root);
+        var store = new StateStore(paths);
+        await store.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "refused-landing",
+            Agents = [CreateFakeAgent()]
+        }).ConfigureAwait(false);
+        MustSucceed(await git.GitAsync(root, ["add", "README.md", ".fknrtd/config.json", ".fknrtd/.gitignore"])
+            .ConfigureAwait(false), "git add");
+        MustSucceed(await git.GitAsync(root, ["commit", "-m", "initial"]).ConfigureAwait(false),
+            "initial commit");
+
+        var worktrees = new WorktreeService(git, store);
+        var tasks = new TaskService(store, git);
+        var orchestrator = new Orchestrator(store, git, worktrees, new AgentRunner(store, process), process);
+        var verification = OperatingSystem.IsWindows()
+            ? "if exist feature.txt (exit /b 0) else (exit /b 1)"
+            : "test -f feature.txt";
+        var task = await tasks.CreateAsync(
+                "Create a feature marker",
+                "Create feature.txt with a short marker.",
+                "fake", "fake", "fake",
+                [verification])
+            .ConfigureAwait(false);
+
+        task = await orchestrator.RunAsync(task.Id).ConfigureAwait(false);
+        Equal(WorkflowStatus.ReadyToLand, task.Status, "The task reached ready-to-land");
+
+        // Now put a different feature.txt on main, so merging the task branch cannot succeed.
+        await File.WriteAllTextAsync(Path.Combine(root, "feature.txt"),
+            "a different marker, written on main" + (char)10, new UTF8Encoding(false)).ConfigureAwait(false);
+        MustSucceed(await git.GitAsync(root, ["add", "feature.txt"]).ConfigureAwait(false),
+            "stage the conflicting file");
+        MustSucceed(await git.GitAsync(root, ["commit", "-m", "conflicting change on main"])
+            .ConfigureAwait(false), "commit the conflicting change");
+
+        var landed = await orchestrator.LandAsync(task.Id).ConfigureAwait(false);
+
+        // The contract: a refused merge comes back as a failed task, not an exception.
+        Equal(WorkflowStatus.Failed, landed.Status, "A refused merge leaves the task failed");
+        Equal(StageState.Failed, landed.Stage(WorkflowStage.Land).State, "The land stage records it");
+        True(!string.IsNullOrWhiteSpace(landed.LastError), "And it says why");
+
+        // And nothing reached the base branch.
+        var head = await git.GitAsync(root, ["log", "-1", "--pretty=%s"]).ConfigureAwait(false);
+        MustSucceed(head, "read the base branch tip");
+        Equal("conflicting change on main", head.StandardOutput.Trim(),
+            "The base branch is exactly where it was");
+
+        var merged = await File.ReadAllTextAsync(Path.Combine(root, "feature.txt")).ConfigureAwait(false);
+        True(merged.Contains("written on main", StringComparison.Ordinal),
+            "The base branch's own file was not overwritten");
+        True(!merged.Contains("<<<<<<<", StringComparison.Ordinal),
+            "No conflict markers were left in the working copy");
+    }).ConfigureAwait(false);
 }

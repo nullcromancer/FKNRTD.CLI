@@ -870,6 +870,19 @@ internal static class CommandDispatcher
         }
 
         var task = await runtime.Orchestrator.LandAsync(id, cancellationToken).ConfigureAwait(false);
+
+        // LandAsync records a refused merge on the task and returns it, the same way a failed run
+        // does, rather than throwing. Reporting success without reading that back told the operator
+        // their work was on the base branch when Git had declined to put it there.
+        if (task.Status != WorkflowStatus.Landed)
+        {
+            Console.Error.WriteLine(
+                $"× {task.Id} was NOT landed. {task.LastError}".TrimEnd() + Environment.NewLine +
+                $"  Nothing was merged into {task.BaseRef}. Run 'fknrtd task show {task.Id}' for the " +
+                "land stage's output, then 'fknrtd task retry " + task.Id + "' once the cause is fixed.");
+            return 1;
+        }
+
         Console.WriteLine($"√ Landed {task.Id} on {task.BaseRef}");
         return 0;
     }
