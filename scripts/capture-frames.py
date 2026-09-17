@@ -41,6 +41,8 @@ FRAMES = {
     "diff": ("diff", 112, 30),
     "prompts": ("prompts", 112, 32),
     "settings": ("settings", 112, 32),
+    "agents": ("agents", 112, 30),
+    "agent-log": ("logs-json", 112, 26),
     "welcome": ("welcome", 118, 32),
 }
 

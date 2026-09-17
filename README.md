@@ -22,11 +22,15 @@ first, keeps the paperwork, and refuses to merge anything until you personally s
 
 You are not expected to arrive knowing what a *brief*, a *lead* or an *auditor* is.
 
-- Every field the task builder asks for arrives with its own definition and a worked example.
-  Every field has a working default, so pressing Enter through the form produces a valid task.
+- Every field the task builder asks for arrives with its own definition and a worked example. The
+  title and the brief are yours to write; everything after them already holds the right answer for
+  this workspace, so the rest of the form is Enter.
 - `?` opens the key reference and a searchable glossary of every word the product uses. `/` opens
   a command palette listing every action — including the ones you cannot take right now, each with
   the reason why.
+- The screens that explain things can also change them. `A` enables, disables, repoints, adds and
+  removes agents; `S` edits any setting with its consequence stated beside it; `K` clears the stale
+  reservations it reports. Nothing tells you to quit and run a command for something a key does.
 - Destructive steps state what they are about to do, and where to read the diff first, before
   asking for the typed confirmation.
 - From the shell, `fknrtd explain <word>` defines anything, `fknrtd help <command>` says what a
@@ -161,8 +165,9 @@ the borders.
 ![The FKNRTD.CLI dashboard at 150 columns](docs/screenshots/dash-wide.png)
 
 **Nothing asks you a question it has not explained.** Pressing `N` opens the task builder; every
-field arrives with its own definition and a worked example, and every field has a default that is
-already correct for this workspace.
+field arrives with its own definition and a worked example. The title and the brief are the two you
+write yourself — an empty title is refused, and so is a brief too short to act on — and
+everything after them already holds the right answer for this workspace.
 
 ![The guided task builder](docs/screenshots/new-task.png)
 
@@ -175,6 +180,20 @@ Choosing who does the work says what each role may touch, and warns about an age
 do the job — one that is not on `PATH`, or that cannot return a verdict and so cannot audit.
 
 ![Choosing an auditor](docs/screenshots/choose-agent.png)
+
+Pressing `A` opens the agent roster. It says which agents can actually be launched on this machine
+and which can return a verdict, and it changes the list rather than telling you to go elsewhere:
+`Space` enables or disables one, `E` points one at a different program — which is the fix for the
+commonest fault it reports — `N` adds one, and `Del` removes one after a typed confirmation.
+
+![The agent roster](docs/screenshots/agents.png)
+
+`L` follows the current stage. The shipped agents are launched with machine-readable output so
+their progress can be tracked, which makes the file on disk a stream of JSON; what is shown is a
+reading of it. Anything it does not recognise is printed exactly as it arrived, so plain build
+output keeps its indentation and an agent whose format nobody has taught it about is no worse off.
+
+![Following an agent at work](docs/screenshots/agent-log.png)
 
 `?` opens the key reference and the glossary, searched together, because someone who does not know
 a word does not know which list it is in.
