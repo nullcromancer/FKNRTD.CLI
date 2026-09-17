@@ -23,7 +23,7 @@ with no Git at all, had never once been tested.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 84/84 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 86/86 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -50,6 +50,8 @@ with no Git at all, had never once been tested.
 | `fknrtd init -yes` outside any Git repository | Exit 0; workspace created in standalone mode. |
 | `fknrtd doctor` in a standalone workspace | Exit 0. |
 | `fknrtd dashboard -once` in a standalone workspace | Exit 0; one frame. |
+| `fknrtd config validate` on a hand-edited config | Exit 1; named each setting, its value and its range. |
+| `fknrtd doctor` on a hand-edited config | Exit 2; the settings check failed rather than passing. |
 
 The exit codes documented but never observed were checked directly, because writing one down
 is not the same as having seen it:

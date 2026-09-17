@@ -510,12 +510,77 @@ internal static class CommandDispatcher
         return snapshot.Conflicts.Any(conflict => conflict.Kind == ConflictKind.Collision) ? 3 : 0;
     }
 
+    /// <summary>Where the settings check belongs: immediately after the file it is about.</summary>
+    private static int IndexAfterConfiguration(IReadOnlyList<DoctorCheck> checks)
+    {
+        for (var index = 0; index < checks.Count; index++)
+        {
+            if (checks[index].Name == "Configuration")
+            {
+                return index + 1;
+            }
+        }
+
+        return checks.Count;
+    }
+
+    /// <summary>
+    /// Whether every setting holds a value its own editor would accept.
+    /// </summary>
+    /// <remarks>
+    /// The configuration is plain JSON meant to be edited by hand, which walks past the checking the
+    /// settings screen does. A file with dashboardRefreshMilliseconds of 0 and maxParallelAgents of
+    /// 0 - a workspace where nothing can ever run and the dashboard would spin - opened without
+    /// comment, and doctor called it healthy while `fknrtd config validate` refused it. Two commands
+    /// disagreeing about whether a workspace works is worse than either answer alone, and doctor is
+    /// the one people are told to run.
+    /// </remarks>
+    private static async Task<DoctorCheck> SettingsCheckAsync(
+        FknrtdRuntime runtime,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+            var problems = SettingsBrowser.Problems(config);
+            return new DoctorCheck
+            {
+                Name = "Settings are usable",
+                Passed = problems.Count == 0,
+                Detail = problems.Count == 0
+                    ? "Every value is within the range its own editor accepts."
+                    : string.Join(
+                          "  ",
+                          problems.Select(item => $"{item.Key} is {item.Value}: {item.Problem}")) +
+                      "  Press S in the dashboard to change them, or edit " +
+                      runtime.Paths.Config + " directly."
+            };
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            // The Configuration check above already reports an unreadable file, and saying it twice
+            // would imply two faults.
+            return new DoctorCheck
+            {
+                Name = "Settings are usable",
+                Required = false,
+                Passed = true,
+                Detail = "Not checked: the configuration could not be read."
+            };
+        }
+    }
+
     private static async Task<int> DoctorAsync(
         FknrtdRuntime runtime,
         CliArguments arguments,
         CancellationToken cancellationToken)
     {
-        var checks = await runtime.Doctor.RunAsync(cancellationToken).ConfigureAwait(false);
+        var checks = (await runtime.Doctor.RunAsync(cancellationToken).ConfigureAwait(false)).ToList();
+        checks.Insert(
+            Math.Min(checks.Count, IndexAfterConfiguration(checks)),
+            await SettingsCheckAsync(runtime, cancellationToken).ConfigureAwait(false));
+
         if (arguments.Has("json"))
         {
             PrintJson(checks);
@@ -1585,10 +1650,30 @@ internal static class CommandDispatcher
             case "validate":
             {
                 var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
-                if (config.MaxParallelAgents <= 0 || config.DashboardRefreshMilliseconds < 100)
+
+                // Every setting is asked about the value it is holding, using the same rule its own
+                // editor applies. The two hand-written rules this replaces knew about two fields and
+                // named both of them whichever one was wrong.
+                if (SettingsBrowser.Problems(config) is { Count: > 0 } problems)
                 {
-                    throw new InvalidDataException(
-                        "maxParallelAgents must be positive and dashboardRefreshMilliseconds must be at least 100.");
+                    // Printed rather than thrown: the error path wraps one sentence, and running
+                    // four of them together produced a paragraph where each rule began mid-line.
+                    Console.Error.WriteLine(problems.Count == 1
+                        ? "One setting holds a value this workspace cannot use:"
+                        : $"{problems.Count} settings hold values this workspace cannot use:");
+                    Console.Error.WriteLine();
+                    foreach (var (key, value, problem) in problems)
+                    {
+                        Console.Error.WriteLine($"  {key} is {value}");
+                        foreach (var line in Text.Wrap(problem, Math.Clamp(Screen.Width(88), 50, 110) - 6))
+                        {
+                            Console.Error.WriteLine("      " + line);
+                        }
+                    }
+
+                    Console.Error.WriteLine();
+                    Console.Error.WriteLine($"Edit {runtime.Paths.Config}, or press S in the dashboard.");
+                    return 1;
                 }
 
                 var duplicate = config.Agents

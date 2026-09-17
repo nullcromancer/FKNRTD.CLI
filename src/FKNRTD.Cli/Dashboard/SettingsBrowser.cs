@@ -377,6 +377,42 @@ internal sealed class SettingsBrowser : IOverlay
     };
 
     /// <summary>A whole-number validator that says the range and the usual answer, not just "invalid".</summary>
+    /// <summary>
+    /// Every setting in a configuration whose current value its own editor would refuse, as the
+    /// JSON key and the reason.
+    /// </summary>
+    /// <remarks>
+    /// The file is plain JSON and meant to be edited by hand, which walks straight past the
+    /// checking the settings screen does. A config with dashboardRefreshMilliseconds of 0 and
+    /// maxParallelAgents of 0 — a workspace where nothing can ever run — opened the dashboard
+    /// without comment and was called healthy by doctor, because the only checking outside this
+    /// screen was a separate pair of rules in `config validate` that knew about two fields.
+    /// Asking each setting about the value it already holds means there is one answer to what is
+    /// valid rather than three, and adding a setting cannot leave the check behind.
+    /// </remarks>
+    public static IReadOnlyList<(string Key, string Value, string Problem)> Problems(FknrtdConfig config)
+    {
+        var found = new List<(string, string, string)>();
+        foreach (var setting in Editable)
+        {
+            if (setting.Validate is not { } validate)
+            {
+                continue;
+            }
+
+            // The value is carried out with the complaint. The rule alone says what a good value
+            // would be and leaves the reader to go and look up what the bad one is, which is one
+            // more trip to the file than the answer needs.
+            var value = setting.Read(config);
+            if (validate(value) is { } problem)
+            {
+                found.Add((setting.Key, value, problem));
+            }
+        }
+
+        return found;
+    }
+
     private static Func<string, string?> Whole(int minimum, int maximum, string advice) =>
         value => int.TryParse(value, out var parsed) && parsed >= minimum && parsed <= maximum
             ? null

@@ -495,6 +495,23 @@ public static class Milestones
             "step that holds it, so a mistyped branch reopens on the branch question with the " +
             "value still in the field. Only a quoted answer counts, or a title of 'main' would " +
             "claim an error about a branch."),
+
+        new("2026-09-17",
+            "Two commands disagreeing about whether a workspace works",
+            "The configuration is plain JSON, meant to be edited by hand, and editing it by hand " +
+            "walks straight past the checking the settings screen does. Nothing else looked at the " +
+            "result except two rules written out longhand in 'config validate', which knew about " +
+            "two of the fifteen fields.",
+            "A workspace with dashboardRefreshMilliseconds of 0 and maxParallelAgents of 0 - one " +
+            "where nothing can ever run and the dashboard would spin - opened without comment. " +
+            "'config validate' refused it. 'doctor' called it healthy, and doctor is the command " +
+            "people are told to run.",
+            "Both now ask each setting about the value it is holding, using the rule that setting's " +
+            "own editor applies, so there is one answer to what is valid rather than three and a " +
+            "setting added later cannot be left behind. Two more faults became visible immediately: " +
+            "a negative repair budget and a zero agent timeout, neither of which anything had ever " +
+            "checked. The complaint carries the current value, because a rule that says what a good " +
+            "value would be still leaves the reader to go and look up the bad one."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

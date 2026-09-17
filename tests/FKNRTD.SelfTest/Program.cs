@@ -288,7 +288,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every label on the main screen leads somewhere", TestEveryLabelOnTheMainScreenLeadsSomewhereAsync),
     ("The log window is right at scale and at its edges", TestLogWindowAtScaleAsync),
     ("Documented examples survive the option check", TestDocumentedExamplesSurviveTheOptionCheckAsync),
-    ("A failed creation hands the form back", TestAFailedCreationHandsTheFormBackAsync)
+    ("A failed creation hands the form back", TestAFailedCreationHandsTheFormBackAsync),
+    ("A hand-edited config is checked", TestAHandEditedConfigIsCheckedAsync)
 };
 
 var failures = new List<string>();
@@ -5371,6 +5372,72 @@ static Task TestAFailedCreationHandsTheFormBackAsync()
     Scenes.Type(wrong, "mian");                          // base: a typo the form cannot catch
     Equal(OverlayResult.Continue, Scenes.Press(wrong, ConsoleKey.Enter),
         "A branch that does not exist is accepted by the form, because only Git can say");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// A hand-edited configuration is checked against the same rules the settings screen applies.
+/// </summary>
+/// <remarks>
+/// The file is plain JSON and meant to be edited by hand, which walks straight past the settings
+/// screen. A workspace with dashboardRefreshMilliseconds of 0 and maxParallelAgents of 0 — one
+/// where nothing can ever run and the dashboard would spin — opened without comment, and
+/// `fknrtd doctor` called it healthy while `fknrtd config validate` refused it. Two commands
+/// disagreeing about whether a workspace works is worse than either answer on its own.
+/// </remarks>
+static Task TestAHandEditedConfigIsCheckedAsync()
+{
+    var healthy = Scenes.SampleConfig();
+    Equal(0, SettingsBrowser.Problems(healthy).Count, "A shipped configuration has nothing wrong with it");
+
+    // The four values that prompted this. Two of them were checked by nothing at all before:
+    // the old rules knew about maxParallelAgents and dashboardRefreshMilliseconds only.
+    var broken = healthy with
+    {
+        DashboardRefreshMilliseconds = 0,
+        MaxParallelAgents = 0,
+        DefaultMaxRepairRounds = -3,
+        AgentTimeoutSeconds = 0
+    };
+
+    var problems = SettingsBrowser.Problems(broken);
+    Equal(4, problems.Count, "Every setting holding an unusable value is reported");
+
+    foreach (var key in new[]
+             {
+                 "dashboardRefreshMilliseconds", "maxParallelAgents",
+                 "defaultMaxRepairRounds", "agentTimeoutSeconds"
+             })
+    {
+        True(problems.Any(item => item.Key == key), $"{key} is among them");
+    }
+
+    // The complaint carries the value, so the reader is not sent back to the file to find out
+    // what it currently says.
+    var refresh = problems.First(item => item.Key == "dashboardRefreshMilliseconds");
+    Equal("0", refresh.Value, "The reported value is the one in the file");
+    True(refresh.Problem.Contains("100", StringComparison.Ordinal),
+        "and the rule says what would be acceptable");
+
+    // One setting at a time, so a single bad value does not implicate its neighbours. The rules
+    // this replaces named both of the fields they knew about whichever one was actually wrong.
+    var single = SettingsBrowser.Problems(healthy with { MaxParallelAgents = 99 });
+    Equal(1, single.Count, "One bad value produces one complaint");
+    Equal("maxParallelAgents", single[0].Key, "naming only the setting that is wrong");
+    Equal("99", single[0].Value, "and the value it holds");
+
+    // The boundaries themselves are acceptable: a rule that reads "between 1 and 16" has to mean it.
+    Equal(0, SettingsBrowser.Problems(healthy with { MaxParallelAgents = 1 }).Count, "1 is allowed");
+    Equal(0, SettingsBrowser.Problems(healthy with { MaxParallelAgents = 16 }).Count, "16 is allowed");
+    Equal(1, SettingsBrowser.Problems(healthy with { MaxParallelAgents = 17 }).Count, "17 is not");
+    Equal(0, SettingsBrowser.Problems(healthy with { DefaultMaxRepairRounds = 0 }).Count,
+        "No repair rounds is a choice, not a fault");
+
+    // Every editable setting has to be reachable by this check, or a setting added later is
+    // validated in the screen and nowhere else - which is the hole this closes.
+    var checkable = SettingsBrowser.Editable.Count(setting => setting.Validate is not null);
+    True(checkable >= 7, $"The check covers every validated setting ({checkable} of them)");
 
     return Task.CompletedTask;
 }

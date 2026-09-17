@@ -113,6 +113,25 @@ row "fknrtd init -yes (no Git)"      0 "$FKNRTD" init -yes
 row "fknrtd doctor (no Git)"         0 "$FKNRTD" doctor
 row "fknrtd dashboard -once (no Git)" 0 "$FKNRTD" dashboard -once -no-color -width 100 -height 30
 
+# A configuration edited by hand can hold values the settings screen would refuse. doctor and
+# config validate have to agree about that: they used to disagree, and doctor - the one people
+# are told to run - was the one saying everything was fine.
+BROKEN="$(mktemp -d)"
+trap 'cleanup; [ "$KEEP" = "1" ] || rm -rf "$PLAIN" "$BROKEN"' EXIT
+cd "$BROKEN" || exit 1
+"$FKNRTD" init -yes >/dev/null 2>&1
+python -c "
+import json, io
+p = '.fknrtd/config.json'
+c = json.load(io.open(p, encoding='utf-8'))
+c['dashboardRefreshMilliseconds'] = 0
+c['maxParallelAgents'] = 0
+json.dump(c, io.open(p, 'w', encoding='utf-8'), indent=2)
+" 2>/dev/null
+
+row "fknrtd config validate (bad values)" 1 "$FKNRTD" config validate
+row "fknrtd doctor (bad values)"          2 "$FKNRTD" doctor
+
 echo
 if [ "$FAILURES" = "0" ]; then
   echo "every command behaved as the record says"
