@@ -245,7 +245,15 @@ internal static class Scenes
             Task("FKN-20260916-221030-e5f6", "Fix the timezone drift in scheduled reports",
                 WorkflowStatus.Failed, WorkflowStage.Verify),
             Task("FKN-20260916-180422-g7h8", "Document the webhook retry policy",
-                WorkflowStatus.Landed, WorkflowStage.Land)
+                WorkflowStatus.Landed, WorkflowStage.Land),
+            // The remaining three statuses, so every marker the renderer can draw is drawn by a
+            // scene and therefore checked by the frame and colour-parity invariants.
+            Task("FKN-20260916-143355-i9j0", "Cache the currency conversion table",
+                WorkflowStatus.Queued, WorkflowStage.Brief),
+            Task("FKN-20260916-091807-k1l2", "Split the notification worker",
+                WorkflowStatus.Cancelled, WorkflowStage.Implement),
+            Task("FKN-20260915-234410-m3n4", "Retire the legacy export endpoint",
+                WorkflowStatus.Waiting, WorkflowStage.Verify)
         };
 
         return new DashboardSnapshot

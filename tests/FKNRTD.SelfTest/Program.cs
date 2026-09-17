@@ -2109,6 +2109,29 @@ static async Task TestDoctorSurvivesABrokenWorkspaceAsync()
         True(checks.All(check => check.Detail.Length > 0), "Every check carries a detail");
     }).ConfigureAwait(false);
 
+    // Every task status has a marker the renderer can draw, a glossary entry, and next-step advice
+    // on both surfaces. A status added without one of those is a task nobody can read.
+    var config = Scenes.SampleConfig();
+    foreach (var status in Enum.GetValues<WorkflowStatus>())
+    {
+        var task = Scenes.PopulatedSnapshot().Tasks[0] with { Status = status };
+        True(Glossary.Find("status." + status.ToString().ToLowerInvariant()) is not null,
+            $"Status {status} is in the glossary");
+        True(Reference.NextStep(task, config).Length > 25, $"Status {status} has dashboard advice");
+        True(Reference.NextStep(task, config, onDashboard: false).Length > 25,
+            $"Status {status} has shell advice");
+    }
+
+    // The sample workspace carries one task in each status, so the picker — which spells the status
+    // out in words rather than drawing a marker — has to name every one of them.
+    var listed = Scenes.Render("find", 120, 40, colour: false);
+    foreach (var status in Enum.GetValues<WorkflowStatus>())
+    {
+        var title = Glossary.Find("status." + status.ToString().ToLowerInvariant())!.Title;
+        True(listed.Contains(title, StringComparison.Ordinal),
+            $"The task picker names the {status} status as '{title}'");
+    }
+
     // And in a healthy workspace the two new checks answer the questions they exist for.
     await WithTemporaryDirectoryAsync(async root =>
     {
