@@ -148,7 +148,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Setup explains why there is no choice of mode", TestSetupExplainsWhyThereIsNoChoiceAsync),
     ("A confirmation finishes its sentences at any width", TestConfirmationFinishesItsSentencesAsync),
     ("Doctor says where it got to", TestDoctorReadsWellAsync),
-    ("Corrected claims stay corrected", TestCorrectedClaimsStayCorrectedAsync)
+    ("Corrected claims stay corrected", TestCorrectedClaimsStayCorrectedAsync),
+    ("The quieter commands work", TestTheQuieterCommandsWorkAsync)
 };
 
 var failures = new List<string>();
@@ -3854,4 +3855,78 @@ static Task TestCorrectedClaimsStayCorrectedAsync()
     }
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// The commands nothing in this suite had ever run. Several of them were only ever exercised by a
+/// person typing them, which is to say by nobody since they were written.
+/// </summary>
+static async Task TestTheQuieterCommandsWorkAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false), "init");
+
+        async Task<int> Run(params string[] arguments) =>
+            await QuietlyAsync([.. arguments, "-root", root]).ConfigureAwait(false);
+
+        // The agent lifecycle, end to end.
+        Equal(0, await Run("agent", "add", "-id", "gem", "-exe", "gemini", "-arg=-p", "-arg", "{prompt}"),
+            "agent add");
+        Equal(0, await Run("agent", "disable", "gem"), "agent disable");
+        Equal(0, await Run("agent", "enable", "gem"), "agent enable");
+        // ExecuteAsync throws on a refused command; it is Main that turns that into exit 1. At this
+        // level the contract is the exception, and what matters is that the message says the fix.
+        async Task<string> RefusedAsync(params string[] arguments)
+        {
+            try
+            {
+                await Run(arguments).ConfigureAwait(false);
+                return string.Empty;
+            }
+            catch (Exception exception)
+            {
+                return exception.Message;
+            }
+        }
+
+        var refused = await RefusedAsync("agent", "remove", "gem");
+        True(refused.Contains("-confirm REMOVE", StringComparison.Ordinal),
+            $"agent remove refuses without the confirmation and names it: {refused}");
+
+        Equal(0, await Run("agent", "remove", "gem", "-confirm", "REMOVE"), "agent remove");
+
+        var gone = await RefusedAsync("agent", "enable", "gem");
+        True(gone.Contains("not configured", StringComparison.Ordinal),
+            $"and it is really gone: {gone}");
+
+        // Reservations, and the message bus.
+        Equal(0, await Run("claim", "add", "-agent", "claude", "-path", "src/x.cs", "-mode", "write"),
+            "claim add");
+        Equal(0, await Run("message", "send", "-from", "claude", "-to", "codex", "-text", "over to you"),
+            "message send");
+        Equal(0, await Run("config", "show"), "config show");
+        Equal(0, await Run("config", "path"), "config path");
+
+        // usage set replaces the whole snapshot. That is right for the hooks, which report
+        // everything they know each time, and a trap for somebody correcting one number by hand -
+        // so it has to say what it dropped.
+        Equal(0, await Run("usage", "set", "claude", "-context", "70", "-five-hour", "80", "-weekly", "60"),
+            "usage set");
+        var writer = new StringWriter();
+        Equal(0, await QuietlyAsync(["usage", "set", "claude", "-five-hour", "55", "-root", root], writer)
+            .ConfigureAwait(false), "usage set with one figure");
+
+        var said = writer.ToString();
+        True(said.Contains("-context", StringComparison.Ordinal), "It names the figure it dropped");
+        True(said.Contains("-weekly", StringComparison.Ordinal), "and the other one");
+        True(said.Contains("replaced", StringComparison.Ordinal), "and says why they went");
+
+        // And it says nothing of the kind when nothing was dropped.
+        var quiet = new StringWriter();
+        await QuietlyAsync(["usage", "set", "claude", "-context", "9", "-five-hour", "9", "-weekly", "9",
+            "-root", root], quiet).ConfigureAwait(false);
+        True(!quiet.ToString().Contains("now unknown", StringComparison.Ordinal),
+            "A complete report says nothing about dropping anything");
+    }).ConfigureAwait(false);
 }

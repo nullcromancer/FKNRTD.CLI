@@ -467,7 +467,8 @@ public static class CommandCatalog
             "your subscription or grant more quota; report measured values rather than guesses. " +
             "It replaces that agent's snapshot outright: a percentage you leave out becomes " +
             "unknown rather than keeping its previous value, and any recorded reset times go with " +
-            "it. Pass everything you know each time.",
+            "it. Pass everything you know each time. It says afterwards which figures it dropped, " +
+            "so a hand-typed correction that lost the others does not do it quietly.",
             "Use fknrtd usage list to check the recorded values and source.",
             [new("agent", "<id>", "Agent the measurements describe.", true),
              new("-context", "<percent>", "Conversation context remaining."),

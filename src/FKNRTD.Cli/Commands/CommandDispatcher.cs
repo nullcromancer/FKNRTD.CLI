@@ -1354,8 +1354,17 @@ internal static class CommandDispatcher
             }
             case "set":
             {
+                var agentId = Required(arguments.Get("agent") ?? arguments.Positional(2), "agent ID");
+
+                // The write replaces the whole snapshot, so anything not named on this command line
+                // is cleared. That is fine for the hooks that report everything they know each
+                // time, and a trap for somebody correcting one number by hand - so what it is about
+                // to drop is read first and said afterwards.
+                var before = (await runtime.Store.LoadUsageAsync(cancellationToken).ConfigureAwait(false))
+                    .FirstOrDefault(item => item.AgentId.Equals(agentId, StringComparison.OrdinalIgnoreCase));
+
                 var snapshot = await runtime.Usage.SetAsync(
-                        Required(arguments.Get("agent") ?? arguments.Positional(2), "agent ID"),
+                        agentId,
                         arguments.GetDouble("context"),
                         arguments.GetDouble("five-hour"),
                         arguments.GetDouble("weekly"),
@@ -1363,6 +1372,33 @@ internal static class CommandDispatcher
                         cancellationToken)
                     .ConfigureAwait(false);
                 PrintUsage(snapshot);
+
+                var dropped = new List<string>();
+                if (before?.ContextRemainingPercent is not null && snapshot.ContextRemainingPercent is null)
+                {
+                    dropped.Add("-context");
+                }
+
+                if (before?.FiveHourRemainingPercent is not null && snapshot.FiveHourRemainingPercent is null)
+                {
+                    dropped.Add("-five-hour");
+                }
+
+                if (before?.WeeklyRemainingPercent is not null && snapshot.WeeklyRemainingPercent is null)
+                {
+                    dropped.Add("-weekly");
+                }
+
+                if (dropped.Count > 0)
+                {
+                    Console.WriteLine();
+                    WriteParagraph(
+                        $"This replaced {agentId}'s whole snapshot rather than updating part of it, " +
+                        $"so {string.Join(" and ", dropped)} " +
+                        (dropped.Count == 1 ? "is" : "are") + " now unknown. Pass every figure you " +
+                        "know each time.", string.Empty);
+                }
+
                 return 0;
             }
             case "list":
