@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FKNRTD.Dashboard;
+using FKNRTD.Help;
 using FKNRTD.Domain;
 using FKNRTD.Services;
 
@@ -458,6 +459,7 @@ internal static class CommandDispatcher
             "create" => await CreateTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "list" or "ls" or "" => await ListTasksAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "show" => await ShowTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
+            "diff" => await DiffTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "new" => await NewTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "run" => await RunTaskAsync(runtime,
                 Required(arguments.Get("id") ?? arguments.Positional(2), "task ID"), cancellationToken)
@@ -614,21 +616,140 @@ internal static class CommandDispatcher
             return 0;
         }
 
-        Console.WriteLine($"{task.Id}  {task.Status}  {task.Title}");
-        Console.WriteLine($"Base {task.BaseRef}  Branch {Blank(task.BranchName)}  Worktree {Blank(task.WorktreePath)}");
-        Console.WriteLine($"Lead {task.LeadAgentId}  Implementer {task.ImplementerAgentId}  Auditor {task.AuditorAgentId}");
-        Console.WriteLine($"Repair {task.RepairRound}/{task.MaxRepairRounds}");
+        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+        var width = Math.Clamp(Screen.Width(88) - 2, 40, 96);
+
+        Console.WriteLine(task.Title);
+        Console.WriteLine($"{task.Id}   {Glossary.Find("status." + task.Status.ToString().ToLowerInvariant())?.Title ?? task.Status.ToString()}");
+        Console.WriteLine();
+
+        Console.WriteLine("WHAT WAS ASKED FOR");
+        foreach (var line in Text.Wrap(task.Brief, width - 2))
+        {
+            Console.WriteLine("  " + line);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("WHO IS ON IT");
+        Console.WriteLine($"  Lead         {task.LeadAgentId}  —  reads the code and writes the plan, read-only");
+        Console.WriteLine($"  Implementer  {task.ImplementerAgentId}  —  the only agent that may change files");
+        Console.WriteLine($"  Auditor      {task.AuditorAgentId}  —  judges the finished work read-only, must return PASS");
+
+        Console.WriteLine();
+        Console.WriteLine("WHERE THE WORK HAPPENS");
+        if (config.Mode == WorkspaceMode.Git)
+        {
+            Console.WriteLine($"  Base branch  {Blank(task.BaseRef)}");
+            Console.WriteLine($"  Task branch  {Blank(task.BranchName)}");
+            Console.WriteLine($"  Worktree     {Blank(task.WorktreePath)}");
+        }
+        else
+        {
+            Console.WriteLine("  This is a standalone workspace: agents edit the project folder directly.");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("HOW CORRECTNESS IS DECIDED");
+        if (task.VerificationCommands.Count == 0)
+        {
+            foreach (var line in Text.Wrap(
+                         "Nothing verifies this work, so the audit is the only gate — and an audit is a " +
+                         "judgement rather than a measurement.", width - 2))
+            {
+                Console.WriteLine("  " + line);
+            }
+        }
+        else
+        {
+            foreach (var command in task.VerificationCommands)
+            {
+                Console.WriteLine($"  must exit 0  {command}");
+            }
+        }
+
+        Console.WriteLine($"  Repair       {task.RepairRound} used of {task.MaxRepairRounds} allowed");
+
+        Console.WriteLine();
+        Console.WriteLine("PIPELINE");
         foreach (var stage in task.Stages)
         {
-            Console.WriteLine($"  {StageIcon(stage.State)} {stage.Stage,-14} {stage.State,-9} {stage.Summary}");
+            var entry = Glossary.Find("stage." + stage.Stage.ToString().ToLowerInvariant());
+            var summary = string.IsNullOrWhiteSpace(stage.Summary) ? entry?.Summary ?? string.Empty : stage.Summary;
+            Console.WriteLine($"  {StageIcon(stage.State)} {stage.Stage,-13} {Text.Truncate(summary, Math.Max(20, width - 18))}");
         }
 
         if (!string.IsNullOrWhiteSpace(task.LastError))
         {
-            Console.WriteLine("Error: " + task.LastError);
+            Console.WriteLine();
+            Console.WriteLine("WHAT WENT WRONG");
+            foreach (var line in Text.Wrap(task.LastError, width - 2))
+            {
+                Console.WriteLine("  " + line);
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("WHAT TO DO NEXT");
+        foreach (var line in Text.Wrap(Reference.NextStep(task, config, onDashboard: false), width - 2))
+        {
+            Console.WriteLine("  " + line);
         }
 
         return task.Status == WorkflowStatus.Failed ? 3 : 0;
+    }
+
+    /// <summary>
+    /// <c>fknrtd task diff</c>. The command-line half of the dashboard's V: the finished change, so
+    /// the reading that landing asks for can be done without opening the dashboard at all.
+    /// </summary>
+    private static async Task<int> DiffTaskAsync(
+        FknrtdRuntime runtime,
+        CliArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var id = Required(arguments.Get("id") ?? arguments.Positional(2), "task ID");
+        var task = await runtime.Store.LoadTaskAsync(id, cancellationToken).ConfigureAwait(false);
+        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+
+        if (config.Mode == WorkspaceMode.Standalone)
+        {
+            Console.WriteLine(
+                "This is a standalone workspace, so there is no branch to compare against. Agents " +
+                "edited the project folder directly; whatever changed is simply what is there now.");
+            return 0;
+        }
+
+        if (string.IsNullOrWhiteSpace(task.WorktreePath) || !Directory.Exists(task.WorktreePath))
+        {
+            Console.WriteLine(
+                $"{task.Id} has no worktree yet, so there is nothing to compare. It has not reached " +
+                "its worktree stage.");
+            return 0;
+        }
+
+        var (lines, truncated) = await runtime.Git
+            .GetDiffAsync(task.WorktreePath, task.BaseRef, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (lines.Count == 0)
+        {
+            Console.WriteLine(
+                $"Nothing has changed against {Blank(task.BaseRef)}. Either the task has not reached " +
+                "its implement stage, or the implementer finished without editing anything.");
+            return 0;
+        }
+
+        foreach (var line in lines)
+        {
+            Console.WriteLine(line);
+        }
+
+        if (truncated)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"Cut off here. Read the rest with git in {task.WorktreePath}.");
+        }
+
+        return 0;
     }
 
     private static async Task<int> RunTaskAsync(

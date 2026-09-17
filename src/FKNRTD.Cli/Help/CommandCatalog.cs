@@ -143,6 +143,20 @@ public static class CommandCatalog
             "For a failed stage, read its output under .fknrtd/logs/<task-id>/ before retrying.",
             TaskId(), ["fknrtd task show FKN-<id>"], ["task", "status.failed", "verification"]),
 
+        Entry("fknrtd task diff <id>", "task diff", Tasks,
+            "Print the finished change a task made, so it can be read before it is landed.",
+            "Shows everything the task committed on top of its base branch, followed by anything " +
+            "still uncommitted in its worktree — both halves, because a workspace that does not " +
+            "commit agent changes automatically has the whole change sitting uncommitted. It reads " +
+            "the worktree and changes nothing. A task with no worktree yet, or a standalone " +
+            "workspace with no branch to compare against, says so rather than printing nothing. " +
+            "Output is plain diff text, so it pipes into a pager or a reviewer as it stands.",
+            "Once you have read it, land it with fknrtd task land <id> -confirm LAND.",
+            [new("<id>", "<task id>", "The task whose change to print.", Required: true)],
+            ["fknrtd task diff FKN-20260917-101500-a1b2",
+             "fknrtd task diff FKN-20260917-101500-a1b2 | less"],
+            ["worktree", "base-ref", "land", "auto-commit"]),
+
         Entry("fknrtd task run <id>", "task run", Tasks,
             "Run or resume the pipeline through verification and independent audit.",
             "Creates or uses the task worktree in Git mode, launches the assigned agents, " +

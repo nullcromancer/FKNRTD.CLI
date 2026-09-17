@@ -67,7 +67,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The palette says why an action cannot be run", TestPaletteExplainsRefusalsAsync),
     ("Scrolling back through a log lands on the right lines", TestLogScrollbackAsync),
     ("Overlay review regressions stay fixed", TestOverlayReviewRegressionsAsync),
-    ("The diff view keeps a diff readable", TestDiffViewAsync)
+    ("The diff view keeps a diff readable", TestDiffViewAsync),
+    ("Advice is phrased for the surface asking", TestNextStepIsSurfaceAwareAsync)
 };
 
 var failures = new List<string>();
@@ -1891,6 +1892,39 @@ static Task TestOverlayReviewRegressionsAsync()
 
 /// <summary>Newlines are consumed by the wrap rather than kept in a span, so they are counted back.</summary>
 static int CountBreaks(string value) => value.Count(character => character == (char)10);
+
+/// <summary>
+/// The dashboard and the command line must agree about what to do next, and must each say it in
+/// terms of the surface being used. "Press Enter" is no use in a shell, and naming a shell command
+/// is no use with the dashboard already open.
+/// </summary>
+static Task TestNextStepIsSurfaceAwareAsync()
+{
+    var config = Scenes.SampleConfig();
+    foreach (var task in Scenes.PopulatedSnapshot().Tasks)
+    {
+        var onDashboard = Reference.NextStep(task, config);
+        var inShell = Reference.NextStep(task, config, onDashboard: false);
+        True(onDashboard.Length > 30, $"The dashboard has advice for a {task.Status} task");
+        True(inShell.Length > 30, $"The shell has advice for a {task.Status} task");
+
+        // The shell is never told to press a dashboard key.
+        True(!inShell.Contains("Press ", StringComparison.Ordinal),
+            $"Shell advice for a {task.Status} task names no keystroke");
+
+        // And whatever command it does name has to be a real one.
+        foreach (var quoted in System.Text.RegularExpressions.Regex.Matches(inShell, "'(fknrtd [^']+)'")
+                     .Select(match => match.Groups[1].Value))
+        {
+            var name = string.Join(' ', quoted.Split(' ').Skip(1).TakeWhile(part => !part.StartsWith('-') &&
+                !part.StartsWith("FKN-", StringComparison.Ordinal)));
+            True(CommandCatalog.Find(name) is not null,
+                $"Shell advice for a {task.Status} task names the real command '{name}'");
+        }
+    }
+
+    return Task.CompletedTask;
+}
 
 /// <summary>
 /// Every surface in this product tells the operator to read the diff before landing. The view that

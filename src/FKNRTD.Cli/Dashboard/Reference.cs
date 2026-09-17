@@ -82,6 +82,9 @@ internal static class Reference
             blocks.Add(new InfoParagraph(status.Detail, Theme.Muted, Indent: 2));
         }
 
+        blocks.Add(new InfoHeading("What to do next"));
+        blocks.Add(new InfoParagraph(NextStep(task, config)));
+
         blocks.Add(new InfoHeading("What was asked for"));
         blocks.Add(new InfoParagraph(task.Brief));
 
@@ -144,8 +147,6 @@ internal static class Reference
             blocks.Add(new InfoParagraph(task.LastError, Theme.Red));
         }
 
-        blocks.Add(new InfoHeading("What to do next"));
-        blocks.Add(new InfoParagraph(NextStep(task, config)));
         return new InfoPanel("TASK", Theme.Blue, blocks);
     }
 
@@ -759,29 +760,65 @@ internal static class Reference
         return new InfoPanel("WELCOME TO FKNRTD.CLI", Theme.Cyan, blocks);
     }
 
-    private static string NextStep(WorkflowTask task, FknrtdConfig config) => task.Status switch
+    /// <summary>
+    /// The most useful thing to do with this task now. Shared between the dashboard and
+    /// <c>fknrtd task show</c>, because two surfaces that disagree about the next step are worse
+    /// than either alone — but phrased for the surface asking, since "press Enter" is no use in a
+    /// shell and "run fknrtd task run" is no use with the dashboard already open.
+    /// </summary>
+    public static string NextStep(WorkflowTask task, FknrtdConfig config, bool onDashboard = true)
     {
-        WorkflowStatus.Queued =>
-            "Press Enter to run it. The lead agent starts first and nothing is written until the " +
-            "implement stage.",
-        WorkflowStatus.Running =>
-            "Press L to watch the live output of the current stage. Press C if you want it to stop; " +
-            "the stage finishes its current external process first.",
-        WorkflowStatus.Failed =>
-            "Press L to read the failing output. Fix whatever caused it — often the brief was " +
-            "ambiguous or a verification command is wrong — then press R to reset the failed stages " +
-            "and Enter to run again.",
-        WorkflowStatus.ReadyToLand => config.Mode == WorkspaceMode.Git
-            ? $"Press V to read the finished change, then G and type LAND to merge it into " +
-              $"{Blank(task.BaseRef)}. Nothing moves until you do."
-            : "The verified work is already in this folder. Press G and type LAND to record it as final.",
-        WorkflowStatus.Landed =>
-            "This is done and merged. Press X to remove its worktree when you no longer need to read it.",
-        WorkflowStatus.Cancelled =>
-            "Press R to reset it, then Enter to run again. Anything the implementer had already " +
-            "written is still in the worktree.",
-        _ => "Press L to read the log for whatever this is waiting on."
-    };
+        var id = task.Id;
+        return task.Status switch
+        {
+            WorkflowStatus.Queued => onDashboard
+                ? "Press Enter to run it. The lead agent starts first and nothing is written until " +
+                  "the implement stage."
+                : $"Run it with 'fknrtd task run {id}'. The lead agent starts first and nothing is " +
+                  "written until the implement stage.",
+
+            WorkflowStatus.Running => onDashboard
+                ? "Press L to watch the live output of the current stage. Press C if you want it to " +
+                  "stop; the running agent is killed, so cancelling is quick but not instantaneous."
+                : $"It is running. Watch it with 'fknrtd dashboard', or stop it with " +
+                  $"'fknrtd task cancel {id}'.",
+
+            WorkflowStatus.Failed => onDashboard
+                ? "Press L to read the failing output. Fix whatever caused it — often the brief was " +
+                  "ambiguous or a verification command is wrong — then press R to reset the failed " +
+                  "stages and Enter to run again."
+                : $"Read the failing output in the task's log, fix the cause — often an ambiguous " +
+                  $"brief or a wrong verification command — then run 'fknrtd task retry {id}'.",
+
+            WorkflowStatus.ReadyToLand => config.Mode == WorkspaceMode.Git
+                ? onDashboard
+                    ? $"Press V to read the finished change, then G and type LAND to merge it into " +
+                      $"{Blank(task.BaseRef)}. Nothing moves until you do."
+                    : $"Read the finished change with 'fknrtd task diff {id}', then land it with " +
+                      $"'fknrtd task land {id} -confirm LAND'. Nothing moves until you do."
+                : onDashboard
+                    ? "The verified work is already in this folder. Press G and type LAND to record " +
+                      "it as final."
+                    : $"The verified work is already in this folder. Record it as final with " +
+                      $"'fknrtd task land {id} -confirm LAND'.",
+
+            WorkflowStatus.Landed => onDashboard
+                ? "This is done and merged. Press X to remove its worktree when you no longer need " +
+                  "to read it."
+                : $"This is done and merged. Reclaim its worktree with " +
+                  $"'fknrtd task cleanup {id} -confirm REMOVE' when you no longer need to read it.",
+
+            WorkflowStatus.Cancelled => onDashboard
+                ? "Press R to reset it, then Enter to run again. Anything the implementer had " +
+                  "already written is still in the worktree."
+                : $"Reset and run it again with 'fknrtd task retry {id}'. Anything the implementer " +
+                  "had already written is still in the worktree.",
+
+            _ => onDashboard
+                ? "Press L to read the log for whatever this is waiting on."
+                : "Read the task's log for whatever this is waiting on."
+        };
+    }
 
     private static string Describe(WorkflowStatus status) =>
         Glossary.Find("status." + status.ToString().ToLowerInvariant())?.Title ?? status.ToString();
