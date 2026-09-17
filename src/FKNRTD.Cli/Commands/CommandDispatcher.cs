@@ -174,7 +174,8 @@ internal static class CommandDispatcher
         if (File.Exists(paths.Config) && !arguments.Has("force"))
         {
             throw new InvalidOperationException(
-                $"FKNRTD.CLI is already initialized at {root}. Use -force to replace only its configuration.");
+                $"FKNRTD.CLI is already set up at {root}. Nothing was changed. " +
+                "Use -force to replace its configuration, keeping a backup of the old one.");
         }
 
         string? backup = null;
@@ -188,23 +189,117 @@ internal static class CommandDispatcher
             File.Copy(paths.Config, backup, overwrite: false);
         }
 
-        var config = await ProvisionAsync(paths, RequestedMode(arguments), cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"✓ FKNRTD.CLI initialized for {config.ProjectName} ({DescribeMode(config.Mode)})");
-        Console.WriteLine($"  Config: {paths.Config}");
+        // Scripts and the self-test suite pass -yes. An operator at a keyboard gets asked, because
+        // the mode and the verification commands are the two settings that most determine how safe
+        // this workspace is, and both were previously decided silently on their behalf.
+        var guided = !arguments.Has("yes") && !arguments.Has("quiet") && !NonInteractive;
+        Wizard? answers = null;
+        if (guided)
+        {
+            answers = await GuidedSetupAsync(paths, arguments, cancellationToken).ConfigureAwait(false);
+            if (answers is null)
+            {
+                Console.WriteLine("Cancelled. Nothing was set up.");
+                return 0;
+            }
+        }
+
+        var requested = answers is not null && answers.Value("mode") == "standalone"
+            ? WorkspaceMode.Standalone
+            : RequestedMode(arguments);
+        var config = await ProvisionAsync(paths, requested, cancellationToken, answers).ConfigureAwait(false);
+
+        Console.WriteLine($"✓ FKNRTD.CLI is set up for {config.ProjectName} ({DescribeMode(config.Mode)})");
+        Console.WriteLine($"  Configuration: {paths.Config}");
         if (backup is not null)
         {
-            Console.WriteLine($"  Previous config backup: {backup}");
+            Console.WriteLine($"  The previous configuration was kept at {backup}");
         }
 
         Console.WriteLine(config.Mode == WorkspaceMode.Git
-            ? $"  Base branch: {config.DefaultBaseRef}"
-            : "  Base branch: none. Agents work directly in the workspace.");
-        Console.WriteLine($"  Verification: {(config.DefaultVerificationCommands.Count == 0
-            ? "not configured"
-            : string.Join("; ", config.DefaultVerificationCommands))}");
-        Console.WriteLine("  Next: fknrtd doctor");
-        return 0;
+            ? $"  Tasks start from and merge back into: {config.DefaultBaseRef}"
+            : "  No branch. Agents edit this folder directly and landing records completion.");
+        Console.WriteLine(config.DefaultVerificationCommands.Count == 0
+            ? "  Nothing verifies agent work yet. Add a build or test command when a task asks."
+            : "  New tasks are verified by: " + string.Join("; ", config.DefaultVerificationCommands));
+        Console.WriteLine($"  Agents configured: {string.Join(", ", config.Agents.Select(agent => agent.Id))}");
+
+        if (answers?.Value("statusline") == "yes")
+        {
+            try
+            {
+                var installed = await new ClaudeIntegrationService()
+                    .InstallStatusLineAsync(projectScope: false, force: false, cancellationToken)
+                    .ConfigureAwait(false);
+                Console.WriteLine($"  Installed the Claude statusline in {installed}. Restart Claude Code to load it.");
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                              InvalidOperationException)
+            {
+                Console.WriteLine("  Could not install the Claude statusline: " + exception.Message);
+                Console.WriteLine("  Install it later with: fknrtd integration install-claude-statusline");
+            }
+        }
+
+        Console.WriteLine();
+        switch (answers?.Value("then"))
+        {
+            case "dashboard":
+                return await RunDashboardAsync(new FknrtdRuntime(paths), arguments, cancellationToken)
+                    .ConfigureAwait(false);
+            case "nothing":
+                Console.WriteLine("When you are ready: fknrtd doctor, then fknrtd task new.");
+                return 0;
+            default:
+                if (answers is null)
+                {
+                    Console.WriteLine("Next: fknrtd doctor");
+                    return 0;
+                }
+
+                Console.WriteLine("Checking that everything a task run depends on is installed...");
+                Console.WriteLine();
+                var code = await DoctorAsync(new FknrtdRuntime(paths), arguments, cancellationToken)
+                    .ConfigureAwait(false);
+                Console.WriteLine();
+                Console.WriteLine(code == 0
+                    ? "Everything is ready. Describe your first piece of work with: fknrtd task new"
+                    : "Fix the failing items above, then run 'fknrtd doctor' again.");
+                return 0;
+        }
     }
+
+    /// <summary>
+    /// Asks the setup questions on screen. Returns null when the operator backed out, so a cancelled
+    /// setup leaves the folder exactly as it was rather than half-configured.
+    /// </summary>
+    private static async Task<Wizard?> GuidedSetupAsync(
+        FknrtdPaths paths,
+        CliArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var git = new GitService(new ProcessRunner());
+        var isRepository = await git.IsRepositoryAsync(paths.Root, cancellationToken).ConfigureAwait(false);
+        var snapshot = isRepository
+            ? await git.GetSnapshotAsync(paths.Root, cancellationToken).ConfigureAwait(false)
+            : null;
+        var wizard = SetupWizard.Create(new SetupWizard.Detected(
+            paths.Root,
+            isRepository,
+            GitService.IsInstalled(),
+            snapshot is null || snapshot.Branch == "detached" ? string.Empty : snapshot.Branch,
+            DetectVerificationCommands(paths.Root),
+            HasClaude: BuiltInAgents.CreateDefaults()
+                .Any(agent => agent.Id.Equals("claude", StringComparison.OrdinalIgnoreCase))));
+
+        var completed = await OverlayHost
+            .RunAsync(wizard, $"Setting up {paths.Root}", UseColor(arguments), cancellationToken)
+            .ConfigureAwait(false);
+        return completed ? wizard : null;
+    }
+
+    /// <summary>Whether there is a terminal to ask questions in.</summary>
+    private static bool NonInteractive => Console.IsInputRedirected || Console.IsOutputRedirected;
 
     /// <summary>
     /// Writes a workspace at <paramref name="paths"/> using the default loading parameters. The
@@ -214,7 +309,8 @@ internal static class CommandDispatcher
     private static async Task<FknrtdConfig> ProvisionAsync(
         FknrtdPaths paths,
         WorkspaceMode? requestedMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Wizard? answers = null)
     {
         var root = paths.Root;
         var git = new GitService(new ProcessRunner());
@@ -244,6 +340,20 @@ internal static class CommandDispatcher
             DefaultVerificationCommands = DetectVerificationCommands(root),
             Agents = BuiltInAgents.CreateDefaults().ToList()
         };
+
+        // What the operator chose beats what the folder suggested.
+        if (answers is not null)
+        {
+            var chosenBase = answers.Value("base");
+            config = config with
+            {
+                DefaultBaseRef = mode == WorkspaceMode.Git && chosenBase.Length > 0
+                    ? chosenBase
+                    : config.DefaultBaseRef,
+                DefaultVerificationCommands = answers.Lines("verify").ToList()
+            };
+        }
+
         var store = new StateStore(paths);
         await store.InitializeAsync(config, cancellationToken).ConfigureAwait(false);
         await store.AppendEventAsync(new FknrtdEvent

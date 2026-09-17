@@ -12,7 +12,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -84,6 +84,8 @@ internal static class Scenes
                 ]);
             case "welcome":
                 return Reference.Welcome(config);
+            case "setup":
+                return SetupWizard.Create(SampleDetection());
             case "land":
                 return new Confirmation(
                     "LAND THIS TASK",
@@ -130,6 +132,15 @@ internal static class Scenes
             shift,
             alt,
             control: false));
+
+    /// <summary>What a typical .NET repository looks like to the setup wizard.</summary>
+    public static SetupWizard.Detected SampleDetection() => new(
+        "/src/aurora-api",
+        IsRepository: true,
+        GitInstalled: true,
+        "main",
+        ["dotnet build", "dotnet test --no-build"],
+        HasClaude: true);
 
     public static FknrtdConfig SampleConfig() => new()
     {

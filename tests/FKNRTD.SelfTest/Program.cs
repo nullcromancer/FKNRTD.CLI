@@ -913,7 +913,7 @@ static async Task TestStandaloneWorkflowAsync()
     {
         var paths = WorkspaceLocator.ForRoot(root);
         var store = new StateStore(paths);
-        Equal(0, await QuietlyAsync(["init", "-root", root]).ConfigureAwait(false), "Standalone init exit code");
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false), "Standalone init exit code");
 
         var config = await store.LoadConfigAsync().ConfigureAwait(false);
         Equal(WorkspaceMode.Standalone, config.Mode, "Standalone init mode outside a repository");
@@ -1105,7 +1105,12 @@ static async Task WithTemporaryDirectoryAsync(Func<string, Task> action)
 static Task TestWizardStepsAreExplainedAsync()
 {
     var config = Scenes.SampleConfig();
-    foreach (var wizard in new[] { TaskWizard.Create(config), TaskWizard.Message(config) })
+    foreach (var wizard in new[]
+             {
+                 TaskWizard.Create(config),
+                 TaskWizard.Message(config),
+                 SetupWizard.Create(Scenes.SampleDetection())
+             })
     {
         // Walk the whole form by accepting each default, and require an explanation at every step.
         for (var guard = 0; guard < 20; guard++)

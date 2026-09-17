@@ -58,8 +58,9 @@ public static class Glossary
 
         new("mode", "Workspace mode", Concepts,
             "Git mode isolates work in a worktree; standalone mode edits the folder directly.",
-            "A workspace is either Git-backed or standalone, and FKNRTD.CLI picks for you by " +
-            "looking at the folder. In Git mode every task gets its own branch and its own " +
+            "A workspace is either Git-backed or standalone. Setting one up interactively asks you " +
+            "which; anything non-interactive reads the folder and picks Git when it can. In Git " +
+            "mode every task gets its own branch and its own " +
             "worktree, so an agent's edits are invisible to your checkout until you land them. In " +
             "standalone mode there is no repository to isolate against: agents edit the folder in " +
             "place, and landing simply records that verified work is already there. Git mode is " +
