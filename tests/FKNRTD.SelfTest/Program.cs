@@ -1277,6 +1277,14 @@ static Task TestOverlayFramesAsync()
             True(!line.Contains('\u001b') || line.EndsWith("\u001b[0m", StringComparison.Ordinal),
                 $"Scene '{scene}' resets colour at the end of every row");
         }
+
+        // Colour may only ever be an enhancement. Stripping it has to leave exactly the frame the
+        // renderer produces with colour off — so nothing is distinguished by colour alone, and a
+        // monochrome terminal, a redirected pipe and a colour-blind reader all lose nothing.
+        Equal(
+            Scenes.Render(scene, 120, 34, colour: false),
+            Ansi.Sequence.Replace(coloured, string.Empty),
+            $"Scene '{scene}' carries no information in colour alone");
     }
 
     return Task.CompletedTask;

@@ -230,6 +230,11 @@ The statusline inside Claude Code, with no remote call while rendering:
 > `-color` forces ANSI through a redirect, which is what makes capture possible, and `-width` and
 > `-height` make the result deterministic regardless of your terminal.
 >
+> **Colour is only ever an enhancement.** A self-test renders every frame twice and asserts that
+> stripping the escapes from the coloured one leaves exactly the colourless one, character for
+> character. Nothing in this product is distinguished by colour alone, so a monochrome terminal, a
+> redirected pipe and a colour-blind reader all lose nothing.
+>
 > **Glyphs.** Every character the dashboard draws was checked against Cascadia Mono (the Windows
 > Terminal default), Consolas and Lucida Console. Four of the original markers were missing from
 > all three and rendered as empty boxes — including the failure marker — and were replaced.

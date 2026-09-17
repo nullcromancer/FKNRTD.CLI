@@ -147,6 +147,45 @@ public static class Milestones
             "this page is, so a screenshot cannot go on showing a keymap the product no longer has."),
 
         new("2026-09-17",
+            "Showing the diff, instead of naming a directory",
+            "Every surface said to read the change before landing it — the confirmation, the task " +
+            "record, the next-step hint — and not one of them would show it. They gave a filesystem " +
+            "path, which for most people means not looking.",
+            "V in the dashboard and `fknrtd task diff` print the finished change: everything the " +
+            "task committed on top of its base branch, plus anything still uncommitted in its " +
+            "worktree. Searchable by file or by any text in it.",
+            "Both halves matter. A workspace that does not commit agent changes automatically has " +
+            "the entire change sitting uncommitted, and showing only the committed half would report " +
+            "an empty diff for work that is plainly there. Lines render verbatim rather than " +
+            "wrapped, because a wrap that moves a leading plus or minus off the start of a row turns " +
+            "an addition into a removal at a glance."),
+
+        new("2026-09-17",
+            "Showing what the agents are told",
+            "The product asks you to authorise agents against your code, and the one thing it would " +
+            "not show was the instruction each agent receives. The prompts were written inline in " +
+            "the orchestrator, where nothing outside a live run could see them.",
+            "They are composed as pure functions of the task now, so the same text that reaches the " +
+            "agent can be previewed beforehand. P and `fknrtd task prompts` print all three, " +
+            "searchable.",
+            "This is the part of authorising an agent that no amount of sandboxing substitutes for: " +
+            "a read-only profile constrains what an agent can do, not what it has been asked to do. " +
+            "The extraction changed no behaviour — the end-to-end tests that run a real task through " +
+            "all eight stages passed unchanged, which is what made it safe to do at all."),
+
+        new("2026-09-17",
+            "Checking the things that only fail later",
+            "Doctor verified that agents could be launched but not that any of them could finish a " +
+            "task. A workspace with no agent able to return a verdict looked completely healthy " +
+            "right up until the first task was refused at creation.",
+            "Two checks added: that some enabled agent can audit, and — as advice rather than an " +
+            "error — that new tasks will have something verifying them.",
+            "Writing the first one I reached for a non-null assertion and would have thrown on a " +
+            "workspace whose configuration cannot be read, which is precisely when doctor is most " +
+            "needed and precisely what its contract forbids. A test now runs the whole diagnostic " +
+            "against a workspace containing unparseable JSON."),
+
+        new("2026-09-17",
             "A second pair of eyes, which is the whole argument",
             "This work was written by one agent. The product's entire premise is that the one who " +
             "wrote the change is not the one who should decide it is good.",
