@@ -26,6 +26,8 @@ dashboard|src/FKNRTD.Cli/Dashboard/DashboardApp.cs|src/FKNRTD.Core/Services/|Rep
 roster|src/FKNRTD.Cli/Dashboard/AgentManager.cs|src/FKNRTD.Core/Domain/Configuration.cs|Report ONLY defects: an index that can go out of range, a panel that can draw outside its rectangle or clip its own text, a key that does nothing or the wrong thing, or code that contradicts its own comment.
 settings|src/FKNRTD.Cli/Dashboard/SettingsBrowser.cs|src/FKNRTD.Core/Domain/Configuration.cs|Report ONLY defects: a value written back that could be invalid or lose data, a panel that can clip its own text, or code that contradicts its own comment.
 infopanel|src/FKNRTD.Cli/Dashboard/InfoPanel.cs|src/FKNRTD.Cli/Dashboard/Canvas.cs|Report ONLY defects: an index or size that can go out of range, or content drawn outside the panel's rectangle.
+options|src/FKNRTD.Cli/Commands/CliArguments.cs|src/FKNRTD.Cli/Help/CommandCatalog.cs|Report ONLY command lines that this parser would read differently from how the catalog documents them, or option spellings a user could reasonably write that it would mis-parse.
+wizard|src/FKNRTD.Cli/Dashboard/Wizard.cs|src/FKNRTD.Cli/Dashboard/TaskWizard.cs|Report ONLY defects: an index that can go out of range, a step that can be skipped or repeated wrongly, an answer that can be lost, or code that contradicts its own comment.
 logformat|src/FKNRTD.Cli/Dashboard/LogLine.cs|src/FKNRTD.Core/Services/AgentOutputObserver.cs|Report ONLY input that would make this throw, return something misleading, or lose the agent's message.
 ENTRIES
 )

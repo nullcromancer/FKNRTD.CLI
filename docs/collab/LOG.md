@@ -476,3 +476,70 @@ Output goes to `docs/collab/reviews/`, which is ignored by Git: a review is an i
 not a record of it. What comes out of it belongs in this log and in the code.
 
 Local suite: 78/78 passing, 11,440 renders across 52 scenes.
+
+---
+
+## 2026-09-17, later — Claude, solo stretch, and a correction about the queue
+
+**On the Codex seat's budget, and how to probe it.** This seat reported the seat exhausted until
+19 September, then re-tested with a one-line prompt, got an immediate reply, announced that the
+earlier report had been wrong, and dispatched the queue. The queue failed on the first entry with
+the same reset time as before: 19 September, 07:55.
+
+Both observations are real and the reconciliation is the useful part. A trivial dispatch costs
+about nineteen thousand tokens and fits under whatever headroom remains; a review that reads a
+source file and checks it against a directory does not. **So a cheap probe does not answer the
+question "can the other seat do a unit of work".** The only honest probe is a real dispatch, which
+is what the queue already is — and it fails safely, writing to `<name>.failed.log` and leaving the
+entry queued.
+
+The practical rule: do not test availability separately. Run `scripts/codex-review.sh`; if there is
+budget it produces reviews, and if there is not it costs one failed entry and says when to try
+again.
+
+The queue is now eight, not six, and all eight are still outstanding. Two entries were added for
+surfaces written since it was last touched, and both are in the script rather than in a paragraph
+here because the script is what actually runs:
+
+    options   CliArguments.cs    against CommandCatalog.cs
+    wizard    Wizard.cs          against TaskWizard.cs
+
+### What this seat changed with the queue blocked
+
+Four things, each found by breaking something on purpose rather than by reading code. The pattern
+that keeps working is worth stating plainly: **the suite stays green while the product is wrong,
+because the tests and the code were written by the same reader on the same day.** Every one of
+these was found by using the product, not by inspecting it.
+
+- **The log view read the whole file to show twenty-five lines of it, once a second.** 58 MB of
+  allocation per refresh against a 26 MB log, on the one screen somebody watches while they wait.
+  It seeks to the window now: 53 ms → 27 ms, 58 MB → nothing. The first attempt failed and is worth
+  recording — counting the lines and then reading forward discarding them saved 2 MB of 58, because
+  `ReadLine` builds the string whether or not the caller keeps it.
+
+- **A mistyped option was silently discarded.** `fknrtd task list -jsno` printed a human table and
+  exited 0: a script asking for JSON, one letter off, being told it succeeded. Every command line is
+  checked against its own help page now. Note for the other seat: the check **fails open** on
+  purpose, and the first strict version rejected `task create -title` and `task show -id`, which have
+  always worked — the catalog writes those without a dash because they are usually positional, while
+  the commands read every one as `Get(name) ?? Positional(n)`.
+
+- **A task that could not be created cost you the brief.** The base branch is only checked when Git
+  is asked, which is after the form closes, so a typo replaced ten answers with a toast. The form
+  now comes back holding all of them, aimed at the question the error names.
+
+- **Two commands disagreed about whether a workspace works.** `config validate` refused a config
+  with `maxParallelAgents: 0`; `doctor` called the same workspace healthy. Both consult the settings
+  table now, which immediately exposed two fields nothing had ever checked.
+
+### For the other seat
+
+`scripts/verify.sh` is new and is the thing to run before believing anything about the command
+surface. It executes every command the validation record claims a result for and compares exit
+codes. On its first run it found two faults in the record it replaced: `claim add` was listed with
+flags it does not have, and the standalone-workspace rows had been running inside a subdirectory of
+the temporary Git repository — so the case they existed to cover, a workspace with no Git at all,
+had never once been tested.
+
+Local suite: 86/86 passing, 11,660 renders across 53 scenes, and the command sweep reports every
+command behaving as the validation record says.
