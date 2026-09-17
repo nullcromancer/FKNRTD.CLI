@@ -160,7 +160,9 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A missing worktree is not a missing stage", TestMissingWorktreeIsDistinguishedAsync),
     ("A blank task field says what it is", TestBlankTaskFieldsAreExplainedAsync),
     ("The statusline survives whatever it is sent", TestStatusLineSurvivesBadInputAsync),
-    ("A supplied name cannot reach outside the workspace", TestSuppliedNamesStayInsideTheWorkspaceAsync)
+    ("A supplied name cannot reach outside the workspace", TestSuppliedNamesStayInsideTheWorkspaceAsync),
+    ("Installing the statusline keeps existing settings", TestStatusLineInstallKeepsExistingSettingsAsync),
+    ("The output observer survives anything an agent prints", TestAgentOutputObserverSurvivesAnythingAsync)
 };
 
 var failures = new List<string>();
@@ -4651,5 +4653,186 @@ static async Task TestSuppliedNamesStayInsideTheWorkspaceAsync()
                 True(false, $"A supplied name escaped the workspace: {stray}");
             }
         }
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// Installing the Claude statusline, which is the only code here that writes to a file outside the
+/// workspace - the user's own .claude/settings.json - and had no test at all. What matters is not
+/// that the statusline arrives but that everything already in that file survives.
+/// </summary>
+static async Task TestStatusLineInstallKeepsExistingSettingsAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var original = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = root;
+            var settingsPath = Path.Combine(root, ".claude", "settings.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+
+            // Somebody's real settings, with things this product knows nothing about.
+            var existing = """
+                {
+                  "theme": "dark",
+                  "permissions": { "allow": ["Bash(git:*)"] },
+                  "env": { "EDITOR": "vim" }
+                }
+                """;
+            await File.WriteAllTextAsync(settingsPath, existing, new UTF8Encoding(false))
+                .ConfigureAwait(false);
+
+            var service = new ClaudeIntegrationService();
+            var written = await service.InstallStatusLineAsync(projectScope: true, force: false)
+                .ConfigureAwait(false);
+            Equal(settingsPath, written, "It writes where it says it does");
+
+            using (var document = System.Text.Json.JsonDocument.Parse(
+                       await File.ReadAllTextAsync(settingsPath).ConfigureAwait(false)))
+            {
+                var settings = document.RootElement;
+                True(settings.TryGetProperty("statusLine", out var line), "The statusline is installed");
+                Equal("command", line.GetProperty("type").GetString(), "as a command");
+                True(line.GetProperty("command").GetString()!.Contains("claude-statusline",
+                        StringComparison.Ordinal),
+                    "that runs this product");
+
+                // The whole point: nothing else moved.
+                Equal("dark", settings.GetProperty("theme").GetString(), "An unrelated setting survives");
+                Equal("vim", settings.GetProperty("env").GetProperty("EDITOR").GetString(),
+                    "and a nested one");
+                Equal(1, settings.GetProperty("permissions").GetProperty("allow").GetArrayLength(),
+                    "and an array");
+            }
+
+            // Installing over an existing statusline is refused rather than done silently, because
+            // whatever was there belongs to somebody else.
+            var refused = string.Empty;
+            try
+            {
+                await service.InstallStatusLineAsync(projectScope: true, force: false).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException exception)
+            {
+                refused = exception.Message;
+            }
+
+            True(refused.Contains("-force", StringComparison.Ordinal),
+                $"A second install is refused and names the way through: {refused}");
+
+            // With -force it goes ahead, and the previous file is kept.
+            await service.InstallStatusLineAsync(projectScope: true, force: true).ConfigureAwait(false);
+            var backups = Directory.GetFiles(Path.GetDirectoryName(settingsPath)!, "*.fknrtd-backup-*");
+            True(backups.Length > 0, "Replacing it backs up what was there first");
+
+            using (var saved = System.Text.Json.JsonDocument.Parse(
+                       await File.ReadAllTextAsync(backups[0]).ConfigureAwait(false)))
+            {
+                Equal("dark", saved.RootElement.GetProperty("theme").GetString(),
+                    "and the backup is the real previous file");
+            }
+
+            // A settings file that is not an object is refused rather than overwritten.
+            await File.WriteAllTextAsync(settingsPath, "[1, 2, 3]", new UTF8Encoding(false))
+                .ConfigureAwait(false);
+            var rejected = string.Empty;
+            try
+            {
+                await service.InstallStatusLineAsync(projectScope: true, force: true).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                rejected = exception.Message;
+            }
+
+            True(rejected.Length > 0, "A settings file that is not an object is refused");
+            Equal("[1, 2, 3]", (await File.ReadAllTextAsync(settingsPath).ConfigureAwait(false)).Trim(),
+                "and is left exactly as it was");
+        }
+        finally
+        {
+            Environment.CurrentDirectory = original;
+        }
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// The observer that reads an agent's output stream to keep the radar honest. It is fed whatever
+/// the agent prints - arbitrary text from a program this product does not control - and it had no
+/// test at all. What matters is that nothing an agent can print makes it throw, because it runs on
+/// every line of every stage.
+/// </summary>
+static async Task TestAgentOutputObserverSurvivesAnythingAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { ProjectName = "observer" }).ConfigureAwait(false);
+
+        var state = new AgentRuntimeState { AgentId = "fake", State = AgentActivityState.Running };
+        var observer = new AgentOutputObserver(store, state);
+
+        var deep = string.Concat(Enumerable.Repeat("{\"a\":", 200)) + "1" +
+                   string.Concat(Enumerable.Repeat("}", 200));
+
+        var hostile = new[]
+        {
+            string.Empty,
+            "   ",
+            "not json at all",
+            "{",
+            "{}",
+            "[]",
+            "null",
+            "true",
+            "12345",
+            "{\"type\":\"assistant\"}",
+            "{\"type\":\"assistant\",\"message\":null}",
+            "{\"type\":\"assistant\",\"message\":{\"content\":\"a string\"}}",
+            "{\"type\":\"assistant\",\"message\":{\"content\":[]}}",
+            "{\"type\":\"assistant\",\"message\":{\"content\":[{}]}}",
+            "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\"}]}}",
+            "{\"item\":{}}",
+            "{\"item\":[1,2,3]}",
+            "{\"result\":42}",
+            "{\"result\":null}",
+            "{\"type\":12345}",
+            deep,
+            new string('x', 100_000),
+            "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"" +
+                new string('y', 50_000) + "\"}]}}"
+        };
+
+        foreach (var line in hostile)
+        {
+            // Never throws. It runs on every line of every stage, so one that does would take down
+            // a run over something an agent happened to print.
+            await observer.ObserveAsync(line, isError: false).ConfigureAwait(false);
+            await observer.ObserveAsync(line, isError: true).ConfigureAwait(false);
+        }
+
+        // And the intent it leaves behind fits a single row of the radar rather than fifty
+        // thousand characters of it.
+        True(state.Intent.Length <= 300,
+            $"The intent it records fits a row ({state.Intent.Length} characters)");
+
+        // Real output still moves it: this is the whole point of the observer.
+        var fresh = new AgentRuntimeState { AgentId = "fake2", State = AgentActivityState.Running };
+        var reader = new AgentOutputObserver(store, fresh);
+        await reader.ObserveAsync(
+            "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\"," +
+            "\"text\":\"Reading Schedule.cs.\"}]}}", isError: false).ConfigureAwait(false);
+        True(fresh.Intent.Contains("Schedule.cs", StringComparison.Ordinal),
+            $"What the agent said becomes what the radar shows: {fresh.Intent}");
+
+        await reader.ObserveAsync(
+            "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\"," +
+            "\"name\":\"Edit\",\"input\":{\"file_path\":\"src/A.cs\"}}]}}", isError: false)
+            .ConfigureAwait(false);
+        True(fresh.Intent.Contains("Edit", StringComparison.Ordinal),
+            $"and so does what it does: {fresh.Intent}");
+        True(fresh.TouchedPaths.Any(path => path.Contains("A.cs", StringComparison.Ordinal)),
+            "and the file it touched is collected");
     }).ConfigureAwait(false);
 }

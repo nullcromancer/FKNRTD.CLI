@@ -15,7 +15,7 @@ nothing is reported that was not run.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 76/76 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 80/80 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -90,6 +90,13 @@ gone unnoticed for the same reason — the situation was rendered nowhere:
 - **A roster with nothing installed.** What is on the machine running the suite is not something a
   test can arrange, so the state a first-time operator meets was unrenderable. The roster takes the
   resolved answer as an argument now, supplied only by the scene.
+- **The two services nothing had tested.** `ClaudeIntegrationService` is the only code here that
+  writes outside the workspace — it edits the user's own `.claude/settings.json` — and
+  `AgentOutputObserver` is fed whatever an agent prints. Both behave correctly and both now have
+  tests: unrelated settings survive an install, a second install is refused unless forced and backs
+  up first, a settings file that is not an object is left exactly as it was; and nothing an agent
+  can print makes the observer throw, including a hundred-kilobyte line and two hundred levels of
+  nesting.
 - **Wide characters, end to end.** The README claims a CJK or emoji task title does not shear the
   borders, because the renderer measures in terminal columns rather than characters. Two tasks were
   created through the real CLI — one Japanese, one with emoji — and every row of the resulting
