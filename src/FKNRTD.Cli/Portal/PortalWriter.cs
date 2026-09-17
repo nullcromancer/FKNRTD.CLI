@@ -11,7 +11,8 @@ public sealed record PortalModel(
     IReadOnlyList<CommandEntry> Commands,
     IReadOnlyList<KeyBinding> Keymap,
     string ProductVersion,
-    DateTimeOffset GeneratedAt);
+    DateTimeOffset GeneratedAt,
+    IReadOnlyList<Milestone>? Milestones = null);
 
 /// <summary>Renders an offline guide without reading files, launching processes or consulting the clock.</summary>
 public static class PortalWriter
@@ -35,6 +36,7 @@ public static class PortalWriter
         RenderCommands(html, model);
         RenderKeymap(html, model.Keymap);
         RenderGlossary(html, model.Glossary);
+        RenderMilestones(html, model.Milestones ?? []);
         html.Append(StateAndExitCodes);
         html.Append(Script);
         html.Append("</body></html>");
@@ -214,6 +216,34 @@ public static class PortalWriter
             """);
     }
 
+    /// <summary>
+    /// How the product came to work this way. It is here rather than in a changelog because the
+    /// parts only make sense together, and a record of what each piece was for shows that where a
+    /// list of features would not.
+    /// </summary>
+    private static void RenderMilestones(StringBuilder html, IReadOnlyList<Milestone> milestones)
+    {
+        if (milestones.Count == 0)
+        {
+            return;
+        }
+
+        html.Append("<section id=built aria-labelledby=built-title><h2 id=built-title>How this was built</h2>")
+            .Append("<p>Each step below names the thing that was wrong, what was done about it, and ")
+            .Append("why — including what was deliberately left alone.</p>");
+        foreach (var milestone in milestones)
+        {
+            html.Append("<article class=entry><h3>").Append(H(milestone.Title))
+                .Append("</h3><p class=term><time datetime=\"").Append(H(milestone.Date)).Append("\">")
+                .Append(H(milestone.Date)).Append("</time></p>")
+                .Append("<h5>The problem</h5><p>").Append(H(milestone.Problem))
+                .Append("</p><h5>What changed</h5><p>").Append(H(milestone.Change))
+                .Append("</p><h5>Why</h5><p class=next>").Append(H(milestone.Why)).Append("</p></article>");
+        }
+
+        html.Append("</section>");
+    }
+
     private static string H(string? value) => WebUtility.HtmlEncode(value) ?? string.Empty;
 
     // UTF-8 hex gives arbitrary caller-provided terms unique, attribute-safe fragment identifiers.
@@ -243,7 +273,7 @@ public static class PortalWriter
         @media print{aside,.skip{display:none}.shell{display:block;padding:0}body{background:white;color:black}.entry{break-inside:avoid}section{margin-bottom:2rem}}
         </style></head><body><a class=skip href=#main>Skip to guide</a><div class=shell>
         <aside aria-label="Guide navigation"><a class=brand href=#overview>FKNRTD.CLI</a>
-        <nav aria-label=Sections><a href=#overview>Start here</a><a href=#pipeline>Eight-stage pipeline</a><a href=#commands>Commands</a><a href=#keymap>Dashboard keys</a><a href=#glossary>Glossary</a><a href=#state>Files on disk</a><a href=#exit-codes>Exit codes</a></nav>
+        <nav aria-label=Sections><a href=#overview>Start here</a><a href=#pipeline>Eight-stage pipeline</a><a href=#commands>Commands</a><a href=#keymap>Dashboard keys</a><a href=#glossary>Glossary</a><a href=#built>How this was built</a><a href=#state>Files on disk</a><a href=#exit-codes>Exit codes</a></nav>
         <div id=filter-controls hidden><label for=filter>Find a command or concept</label><input id=filter type=search placeholder="Try brief, audit, task…" autocomplete=off aria-controls="commands glossary"><button id=clear-filter type=button>Clear filter</button><p id=filter-status class=filter-status role=status aria-live=polite></p></div>
         <noscript><p>All entries are shown. Use your browser's Find command to search.</p></noscript></aside>
         <main id=main><section id=overview aria-labelledby=overview-title><p class=eyebrow>Operator guide / offline edition</p><h1 id=overview-title>Your agents.<br>Your final say.</h1>

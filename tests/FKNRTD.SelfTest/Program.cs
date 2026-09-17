@@ -1446,6 +1446,18 @@ static Task TestPortalAsync()
             $"Portal includes key '{binding.Key}'");
     }
 
+    // The build log explains why the pieces fit together the way they do, which a list of features
+    // cannot. Every entry has to reach the page, and every entry has to actually say something.
+    foreach (var milestone in Milestones.All)
+    {
+        True(html.Contains(Escape(milestone.Title), StringComparison.Ordinal),
+            $"Portal includes milestone '{milestone.Title}'");
+        True(milestone.Problem.Length > 60, $"Milestone '{milestone.Title}' states a real problem");
+        True(milestone.Why.Length > 60, $"Milestone '{milestone.Title}' gives its reasoning");
+        True(System.DateOnly.TryParse(milestone.Date, System.Globalization.CultureInfo.InvariantCulture,
+            out _), $"Milestone '{milestone.Title}' has an ISO date");
+    }
+
     // Hostile content in any model field has to arrive as text, never as markup.
     const string hostile = "</script><img src=x onerror=alert(1)>\"'&";
     var attacked = PortalWriter.Render(new PortalModel(
@@ -1454,7 +1466,8 @@ static Task TestPortalAsync()
             [new CommandOption(hostile, hostile, hostile)], [hostile], [])],
         [new KeyBinding(hostile, hostile, hostile)],
         hostile,
-        generatedAt));
+        generatedAt,
+        [new Milestone(hostile, hostile, hostile, hostile, hostile)]));
     // The property that matters is that nothing supplied can become an element or an attribute.
     // The characters of the payload still appear — as visible text, which is the correct outcome.
     True(!attacked.Contains("<img", StringComparison.Ordinal), "Portal never emits an injected element");

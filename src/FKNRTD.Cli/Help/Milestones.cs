@@ -1,0 +1,126 @@
+namespace FKNRTD.Help;
+
+/// <summary>One step in how the product came to work the way it does.</summary>
+/// <param name="Date">ISO date, so the portal never has to format a clock.</param>
+/// <param name="Title">What was built.</param>
+/// <param name="Problem">The thing that was wrong, stated as an operator would have hit it.</param>
+/// <param name="Change">What was actually done about it.</param>
+/// <param name="Why">The reasoning, including what was deliberately not done.</param>
+public sealed record Milestone(string Date, string Title, string Problem, string Change, string Why);
+
+/// <summary>
+/// The build log. It exists because the parts of this product only make sense together: the glossary
+/// is why the task builder can explain itself, the keymap is why the palette cannot offer a key that
+/// does not exist, and both are why the guide you are reading cannot drift from the program. A list
+/// of features would not show any of that; a record of what each piece was for does.
+/// </summary>
+public static class Milestones
+{
+    private static readonly Milestone[] Entries =
+    [
+        new("2026-09-17",
+            "One explanation table behind every surface",
+            "Pressing N in the dashboard asked for a \"brief\", a \"lead\", an \"implementer\" and an " +
+            "\"auditor\". None of those words was defined anywhere in the product, so the first " +
+            "screen an operator met was one they could not answer.",
+            "Every concept the product exposes — each task field, each role, each of the eight " +
+            "stages, each status and state marker — became a row in one table, carrying a one-line " +
+            "summary, a full explanation and a worked example.",
+            "The alternative was writing help text into each screen that needed it, which is how " +
+            "documentation ends up disagreeing with itself. Because the dashboard's inline hints, " +
+            "the in-app reference, `fknrtd explain` and this page all read the same rows, an " +
+            "explanation cannot drift from the code that uses it. A self-test fails if any marker " +
+            "the dashboard can draw has no entry."),
+
+        new("2026-09-17",
+            "Questions that stay on screen and explain themselves",
+            "Answering anything meant dropping out of the dashboard to a bare prompt on an empty " +
+            "terminal. Six of them in a row for a new task, with no defaults shown, no way back, " +
+            "and no indication of what a wrong answer would cost.",
+            "A modal layer that draws on the same canvas as the dashboard: a raised panel over a " +
+            "dimmed but still readable frame. Text fields became real in-screen editors with a " +
+            "caret, word motion and wrapped multi-line input. Forms became steps that each name a " +
+            "glossary term, so the question arrives with its own definition and example.",
+            "Keeping the dashboard visible behind a question means the operator can still see the " +
+            "task they are acting on while they answer it. Every field has a working default, so " +
+            "pressing Enter through the form produces a valid task; a refused answer says what was " +
+            "wrong with it, and going back keeps what was already typed."),
+
+        new("2026-09-17",
+            "Consequences stated before confirmation is asked for",
+            "Landing a task asked for the word LAND with no statement of what was about to be " +
+            "merged into what, and no way to see the diff first.",
+            "Destructive actions open a panel that names the task, states the consequence in full, " +
+            "and says where the finished work is if you want to read it before deciding — then " +
+            "takes the typed word.",
+            "The typed word was already there and is kept: a stray keystroke should not be able to " +
+            "merge a branch. What was missing was the sentence above it. A confirmation whose " +
+            "explanation is cut off mid-sentence is asking someone to agree to something it did " +
+            "not finish telling them, so these panels size themselves to their text."),
+
+        new("2026-09-17",
+            "Reference surfaces, and a first screen that teaches",
+            "The dashboard could show state but never explain it. There was no key list, no " +
+            "glossary, no way to read a task's full record, and a brand new workspace opened on an " +
+            "empty grid that taught nothing about what the tool was for.",
+            "One scrollable, filterable panel, and four surfaces built on it: the key and glossary " +
+            "reference, a task's full record with every stage explained, the pre-flight checks, and " +
+            "the agent roster. A workspace with no tasks opens on an introduction that walks the " +
+            "pipeline and names the three keys worth pressing first.",
+            "Building them from one widget means they scroll, search and close identically, so " +
+            "learning one teaches all four. The key reference and the glossary are searched " +
+            "together, because someone who does not know a word also does not know which list it " +
+            "is in."),
+
+        new("2026-09-17",
+            "Actions that are discoverable, and refusals that explain",
+            "Keyboard shortcuts only help someone who already knows them, and a key that does " +
+            "nothing when the task is not ready teaches an operator that the tool is broken.",
+            "A command palette lists every action, filtered by typing part of its name. Actions " +
+            "that cannot be taken right now are listed anyway, marked, and accompanied by the " +
+            "reason — \"it is Running. Only a verified, audited task can be landed\".",
+            "Keys and palette entries route through one handler keyed by the same identifier, so " +
+            "they cannot drift apart and every action has exactly one implementation. " +
+            "Unavailability is marked in text rather than only in colour, so it survives a " +
+            "monochrome terminal and redirected output."),
+
+        new("2026-09-17",
+            "A command line that explains itself too",
+            "Help was a hand-maintained block of text free to drift from the dispatcher, there was " +
+            "no way to look a word up, and a mistyped command reported a missing workspace instead " +
+            "of the typo.",
+            "Every command became a row in a second table, with what it changes on disk, its " +
+            "options, examples and the single most useful next step. `fknrtd help` renders from it, " +
+            "`fknrtd explain` renders the glossary, and `fknrtd task new` runs the dashboard's own " +
+            "guided form outside the dashboard.",
+            "A mistyped command is now recognised before a workspace is located, so `fknrtd taks` " +
+            "outside a project reports the typo rather than sending the operator to fix the wrong " +
+            "problem. Suggestions use an edit distance that counts a transposition as one change, " +
+            "because swapping two letters is the mistake people actually make."),
+
+        new("2026-09-17",
+            "Setup that asks about the decisions that matter",
+            "Setting a workspace up chose the mode and guessed the verification commands silently, " +
+            "then printed what it had decided. Those two settings determine whether an agent can " +
+            "damage anything, and the operator met them as a summary they had no reason to read.",
+            "Interactive setup walks five explained steps and ends by running the pre-flight " +
+            "checks, saying in one line whether the workspace is ready or what to fix.",
+            "Scripts pass -yes for the previous detection-only behaviour. Backing out of setup " +
+            "leaves the folder untouched rather than half-configured."),
+
+        new("2026-09-17",
+            "This page",
+            "The only written guide was the repository's README, which nobody reads from the " +
+            "machine they are working on, and which is free to describe a command that no longer " +
+            "exists.",
+            "`fknrtd portal` generates this document from the same tables the running program " +
+            "reads: the glossary, the command catalog, the keymap and this log.",
+            "It is one self-contained file with no external references, so it opens correctly with " +
+            "no network from wherever you keep it. It is deterministic — the same version produces " +
+            "the same bytes — so it can be committed and reviewed like anything else. A self-test " +
+            "checks that every term, command and key reaches the page, and that nothing supplied " +
+            "to it can become markup."),
+    ];
+
+    public static IReadOnlyList<Milestone> All => Entries;
+}

@@ -7,10 +7,37 @@ report to: it isolates their work, runs the checks itself, makes a second machin
 first, keeps the paperwork, and refuses to merge anything until you personally say the word.
 
 `net10.0` &middot; **zero dependencies** &middot; command `fknrtd` &middot; 8 stages &middot;
-22/22 self-tests &middot; MIT
+34/34 self-tests &middot; MIT
 
-> A styled single-page version of this manual, with the same screenshots, is in
-> [`fknrtd-cli.html`](fknrtd-cli.html). Open it locally.
+> **The operator guide is [`fknrtd-portal.html`](fknrtd-portal.html)** — one self-contained page
+> covering the pipeline, every command, every dashboard key and the full glossary. It opens from
+> disk with no network. It is *generated* by `fknrtd portal` from the same tables the running
+> program reads, so it cannot describe a command that was removed or a key that never existed.
+> Regenerate it after upgrading.
+>
+> A styled single-page version of this README, with the same screenshots, is in
+> [`fknrtd-cli.html`](fknrtd-cli.html).
+
+## It explains itself
+
+You are not expected to arrive knowing what a *brief*, a *lead* or an *auditor* is.
+
+- Every field the task builder asks for arrives with its own definition and a worked example.
+  Every field has a working default, so pressing Enter through the form produces a valid task.
+- `?` opens the key reference and a searchable glossary of every word the product uses. `/` opens
+  a command palette listing every action — including the ones you cannot take right now, each with
+  the reason why.
+- Destructive steps state what they are about to do, and where to read the diff first, before
+  asking for the typed confirmation.
+- From the shell, `fknrtd explain <word>` defines anything, `fknrtd help <command>` says what a
+  command changes on disk and what to do next, and a mistyped command tells you which one you meant.
+
+```
+fknrtd                 open the command center here, setting the folder up if needed
+fknrtd task new        describe a piece of work through a guided, explained form
+fknrtd explain brief   what any word in this product means
+fknrtd portal          write the offline guide
+```
 
 ![The FKNRTD.CLI dashboard at 150 columns](docs/screenshots/dash-wide.png)
 

@@ -28,7 +28,7 @@ internal static class PortalCommand
         File.WriteAllText(destination, html, new System.Text.UTF8Encoding(false));
         Console.WriteLine($"✓ Wrote the FKNRTD.CLI portal to {destination}");
         Console.WriteLine($"  {Glossary.All.Count} explained terms, {CommandCatalog.All.Count} commands, " +
-                          $"{Keymap.All.Count} keys.");
+                          $"{Keymap.All.Count} keys, {Milestones.All.Count} build-log entries.");
         Console.WriteLine("  It is a single self-contained file. Open it from disk; it needs no network.");
         return 0;
     }
@@ -39,5 +39,6 @@ internal static class PortalCommand
         CommandCatalog.All,
         Keymap.All,
         CommandDispatcher.Version,
-        generatedAt));
+        generatedAt,
+        Milestones.All));
 }
