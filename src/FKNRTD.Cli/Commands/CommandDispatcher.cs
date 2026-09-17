@@ -846,11 +846,25 @@ internal static class CommandDispatcher
 
         if (string.IsNullOrWhiteSpace(task.WorktreePath) || !Directory.Exists(task.WorktreePath))
         {
-            Console.WriteLine(task.Status == WorkflowStatus.Landed
-                ? $"{task.Id} landed and its worktree has been removed. Its change is in " +
-                  $"{Blank(task.BaseRef)}; read it there with Git."
-                : $"{task.Id} has no worktree yet, so there is nothing to compare. It has not " +
-                  "reached its worktree stage.");
+            // Three cases, not two. A task record that names a worktree which is not there reached
+            // that stage and lost the directory afterwards - saying it "has not reached its
+            // worktree stage" told somebody their finished work had never started.
+            WriteParagraph(task.Status switch
+            {
+                WorkflowStatus.Landed =>
+                    $"{task.Id} landed and its worktree has been removed. Its change is in " +
+                    $"{Blank(task.BaseRef)}; read it there with Git.",
+                _ when !string.IsNullOrWhiteSpace(task.WorktreePath) =>
+                    $"{task.Id} is {task.Status} and names the worktree {task.WorktreePath}, which is " +
+                    $"not there. Something removed it outside FKNRTD.CLI — 'fknrtd task cleanup' " +
+                    "would have, and so would deleting it by hand. The branch " +
+                    $"{Blank(task.BranchName)} still has the work if it was committed; 'git log " +
+                    $"{Blank(task.BranchName)}' will say. Running the task again rebuilds the " +
+                    "worktree from that branch.",
+                _ =>
+                    $"{task.Id} has no worktree yet, so there is nothing to compare. It has not " +
+                    "reached its worktree stage."
+            }, string.Empty);
             return 0;
         }
 

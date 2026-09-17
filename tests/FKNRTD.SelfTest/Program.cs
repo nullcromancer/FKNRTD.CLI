@@ -156,7 +156,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every question can explain itself", TestEveryQuestionCanExplainItselfAsync),
     ("No retired claim survives anywhere in the source", TestNoRetiredClaimInAnySourceFileAsync),
     ("An unreadable task file is reported, not hidden", TestUnreadableTasksAreReportedAsync),
-    ("An unreadable configuration explains itself", TestUnreadableConfigExplainsItselfAsync)
+    ("An unreadable configuration explains itself", TestUnreadableConfigExplainsItselfAsync),
+    ("A missing worktree is not a missing stage", TestMissingWorktreeIsDistinguishedAsync)
 };
 
 var failures = new List<string>();
@@ -4392,5 +4393,79 @@ static async Task TestUnreadableConfigExplainsItselfAsync()
         // somebody who is going to open the file and fix it.
         True(message.Contains("LineNumber", StringComparison.Ordinal),
             "and keeps the parser's position");
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// A task whose worktree is gone is not a task that never had one. Both surfaces had two cases -
+/// landed, and everything else - so a task that was ready to land and had lost its directory was
+/// told it "has not reached its worktree stage", which reads as "your finished work never started".
+/// </summary>
+static async Task TestMissingWorktreeIsDistinguishedAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "worktree-test",
+            Mode = WorkspaceMode.Standalone,
+            Agents = [CreateFakeAgent()]
+        }).ConfigureAwait(false);
+
+        var tasks = new TaskService(store, new GitService(new ProcessRunner()));
+        var task = await tasks.CreateAsync("Worktree test",
+            "A brief long enough to be accepted by the validator.",
+            "fake", "fake", "fake", []).ConfigureAwait(false);
+
+        // Both tasks are created while the workspace is standalone, because creating one in Git
+        // mode resolves a base branch and this temporary folder is not a repository.
+        var fresh = await tasks.CreateAsync("Never run",
+            "Another brief long enough to be accepted by the validator.",
+            "fake", "fake", "fake", []).ConfigureAwait(false);
+
+        // What is left after somebody deletes the directory by hand, or after a cleanup: the record
+        // still names a path, and nothing is there.
+        task.Status = WorkflowStatus.ReadyToLand;
+        task.WorktreePath = Path.Combine(root, ".fknrtd", "worktrees", "gone");
+        task.BranchName = "fknrtd/gone";
+        await store.SaveTaskAsync(task).ConfigureAwait(false);
+
+        // The shell version has to be Git-mode to reach the branch, so the message is checked
+        // through a Git workspace's own wording rather than the standalone shortcut.
+        var saved = await store.LoadConfigAsync().ConfigureAwait(false);
+        await store.SaveConfigAsync(saved with { Mode = WorkspaceMode.Git }).ConfigureAwait(false);
+
+        var writer = new StringWriter();
+        Equal(0, await QuietlyAsync(["task", "diff", task.Id, "-root", root], writer).ConfigureAwait(false),
+            "task diff exits 0");
+        var said = writer.ToString().Replace((char)10, ' ').Replace((char)13, ' ');
+        while (said.Contains("  ", StringComparison.Ordinal))
+        {
+            said = said.Replace("  ", " ", StringComparison.Ordinal);
+        }
+
+        True(!said.Contains("has not reached its worktree stage", StringComparison.Ordinal),
+            $"A ready-to-land task is not told it never started: {said}");
+        True(said.Contains("which is not there", StringComparison.Ordinal),
+            "It says the directory is missing");
+        True(said.Contains("fknrtd/gone", StringComparison.Ordinal),
+            "and names the branch that may still have the work");
+        True(said.Contains("rebuilds the worktree", StringComparison.Ordinal),
+            "and says what running it again would do");
+
+        // A task that genuinely never got one still gets the original wording.
+        var second = new StringWriter();
+        await QuietlyAsync(["task", "diff", fresh.Id, "-root", root], second).ConfigureAwait(false);
+        // De-wrapped, like the assertion above: WriteParagraph breaks at the window width, and a
+        // phrase that straddles the break is invisible to a raw Contains.
+        var freshSaid = second.ToString().Replace((char)10, ' ').Replace((char)13, ' ');
+        while (freshSaid.Contains("  ", StringComparison.Ordinal))
+        {
+            freshSaid = freshSaid.Replace("  ", " ", StringComparison.Ordinal);
+        }
+
+        True(freshSaid.Contains("has not reached its worktree stage", StringComparison.Ordinal),
+            $"A task that never had a worktree is told exactly that: {freshSaid.Trim()}");
     }).ConfigureAwait(false);
 }
