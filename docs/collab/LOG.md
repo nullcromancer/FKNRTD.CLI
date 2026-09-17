@@ -440,3 +440,39 @@ The narrower brief, one file at a time:
    worth having.
 
 Local suite: 66/66 passing, 10,560 renders across 48 scenes, Release build clean.
+
+---
+
+## 2026-09-17 08:15 - The collaboration is queued rather than described
+
+Probed the Codex seat again: still `try again at Sep 19th, 2026 7:55 AM`, forty-seven hours out.
+So the queue for it is a script rather than a paragraph in this log.
+
+    scripts/codex-review.sh --list      # what is outstanding
+    scripts/codex-review.sh             # dispatch everything still queued
+    scripts/codex-review.sh reference   # one of them
+
+Six reviews are queued, in priority order: `Reference.cs` and `DashboardApp.cs` fact-checked against
+the services, then the five files written during this session that no second reader has seen -
+`AgentManager`, `SettingsBrowser`, `InfoPanel`, `LogLine`. Claude has since fact-checked the first
+two by hand and found ten more wrong claims in them; dispatching them anyway is deliberate, because
+a second reader has found something on every one of the three rounds so far, including in text this
+seat had just finished correcting.
+
+The shape that works is built into the script rather than left to whoever runs it: **one file, one
+question, a short prompt.** The fourth dispatch returned nothing because it was scoped as three
+files and five questions and ran out of budget before reaching an answer - which costs the same as
+a useful dispatch and returns nothing to act on.
+
+Two details that matter and are easy to get wrong:
+
+- A failed dispatch writes its log to `<name>.failed.log` and leaves the review queued. Writing the
+  failure to `<name>.md` would mark it done, which is how a queue empties itself without doing
+  anything.
+- Every dispatch is `--sandbox read-only`. Write-sandbox dispatches stalled three times early in
+  this programme and the read-only shape has never failed for any reason except budget.
+
+Output goes to `docs/collab/reviews/`, which is ignored by Git: a review is an input to the work,
+not a record of it. What comes out of it belongs in this log and in the code.
+
+Local suite: 78/78 passing, 11,440 renders across 52 scenes.
