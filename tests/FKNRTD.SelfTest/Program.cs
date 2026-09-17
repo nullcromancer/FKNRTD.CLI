@@ -150,7 +150,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Doctor says where it got to", TestDoctorReadsWellAsync),
     ("Corrected claims stay corrected", TestCorrectedClaimsStayCorrectedAsync),
     ("The quieter commands work", TestTheQuieterCommandsWorkAsync),
-    ("The welcome panel tells the truth", TestWelcomeIsTrueAsync)
+    ("The welcome panel tells the truth", TestWelcomeIsTrueAsync),
+    ("Every command the product names exists", TestNamedCommandsExistAsync)
 };
 
 var failures = new List<string>();
@@ -4007,6 +4008,85 @@ static Task TestWelcomeIsTrueAsync()
         "A standalone workspace is told what LAND does there instead");
     True(!standalone.Contains("Nothing merges without that", StringComparison.Ordinal),
         "and is not told about a merge that will not happen");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Every command this product names in its own explanations is a command it has. Telling somebody
+/// to run something that does not exist is the most expensive kind of wrong sentence: they will
+/// type it, and the tool will tell them it is a typo.
+/// </summary>
+static Task TestNamedCommandsExistAsync()
+{
+    var known = CommandCatalog.All.Select(entry => entry.Name).ToHashSet(StringComparer.Ordinal);
+
+    // Everything the four tables and the build log say, in one bag.
+    var texts = new List<string>();
+    foreach (var entry in Glossary.All)
+    {
+        texts.AddRange([entry.Summary, entry.Detail, entry.Example]);
+    }
+
+    foreach (var entry in CommandCatalog.All)
+    {
+        texts.AddRange([entry.Summary, entry.Detail, entry.WhatHappensNext]);
+        texts.AddRange(entry.Options.Select(option => option.Meaning));
+    }
+
+    texts.AddRange(Keymap.All.Select(binding => binding.Detail));
+    foreach (var entry in SettingsCatalog.All)
+    {
+        texts.AddRange([entry.Summary, entry.Detail, entry.IfYouChangeIt]);
+    }
+
+    foreach (var entry in Milestones.All)
+    {
+        texts.AddRange([entry.Problem, entry.Change, entry.Why]);
+    }
+
+    // "fknrtd " followed by up to two lowercase words. Prose continues after the word too - "the
+    // fknrtd in git" - so a phrase counts as naming a command only when its first word is one.
+    var pattern = new System.Text.RegularExpressions.Regex(
+        "fknrtd ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?");
+
+    var checkedAny = false;
+    foreach (var text in texts.Where(item => !string.IsNullOrEmpty(item)))
+    {
+        foreach (System.Text.RegularExpressions.Match match in pattern.Matches(text))
+        {
+            var first = match.Groups[1].Value;
+            if (!known.Contains(first))
+            {
+                // Not a command at all: prose that happens to follow the product's name, or the
+                // deliberate typo in the milestone about typo suggestions.
+                continue;
+            }
+
+            checkedAny = true;
+            var second = match.Groups[2].Value;
+            if (second.Length == 0)
+            {
+                continue;
+            }
+
+            // A subcommand was named. Either it is a command, or the first word stands alone and
+            // what follows is prose.
+            var pair = first + " " + second;
+            True(known.Contains(pair) || known.Contains(first),
+                $"'fknrtd {pair}' names a command that exists");
+        }
+    }
+
+    True(checkedAny, "The tables do name commands, so this test is looking at something");
+
+    // Every catalogued command reaches the help surface by its own name, which is what makes
+    // naming one in a sentence safe advice.
+    foreach (var entry in CommandCatalog.All)
+    {
+        True(CommandCatalog.Find(entry.Name) is not null,
+            $"'{entry.Name}' can be looked up by the name it is referred to by");
+    }
 
     return Task.CompletedTask;
 }

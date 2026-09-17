@@ -114,7 +114,8 @@ internal static class SetupWizard
                         "writes a statusline into your Claude settings; takes effect on restart",
                         Recommended: true),
                     new WizardOption("no", "Not now",
-                        "Claude's usage figures stay blank; install it later with fknrtd integration")
+                        "Claude's usage figures stay blank until you run " +
+                        "'fknrtd integration install-claude-statusline'")
                 ]
             },
             new()
