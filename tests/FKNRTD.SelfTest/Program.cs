@@ -126,7 +126,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A failing key becomes a message, not an exit", TestAFailingActionDoesNotCrashAsync),
     ("The task-reading commands work end to end", TestTaskReadingCommandsAsync),
     ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync),
-    ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync)
+    ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync),
+    ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync)
 };
 
 var failures = new List<string>();
@@ -2514,4 +2515,46 @@ static string RepositoryRoot()
     }
 
     return directory?.FullName ?? Directory.GetCurrentDirectory();
+}
+
+/// <summary>
+/// The standalone overlay host, which is what `fknrtd task new`, `agent new` and an interactive
+/// `init` all draw into. It has no dashboard behind it, so its backdrop is the only thing telling
+/// the operator what they are configuring — and none of it was covered.
+/// </summary>
+static Task TestOverlayHostFrameAsync()
+{
+    var config = Scenes.SampleConfig();
+    foreach (var overlay in new IOverlay[]
+             {
+                 TaskWizard.Create(config),
+                 AgentWizard.Create(config),
+                 SetupWizard.Create(Scenes.SampleDetection())
+             })
+    {
+        foreach (var width in new[] { 40, 60, 80, 120, 200 })
+        {
+            foreach (var height in new[] { 10, 20, 32, 60 })
+            {
+                var frame = OverlayHost.Frame(overlay, "aurora-api - a caption", width, height, useColor: false);
+                var lines = FrameLines(frame);
+                var expectedWidth = Math.Max(60, width);
+                Equal(Math.Max(20, height), lines.Length, $"Host frame rows at {width}x{height}");
+                True(lines.All(line => Text.DisplayWidth(line) == expectedWidth),
+                    $"Host frame width at {width}x{height}");
+            }
+        }
+
+        // The backdrop names the product and the caption, so a form opened from a bare shell still
+        // says what it belongs to.
+        var readable = OverlayHost.Frame(overlay, "aurora-api - a caption", 110, 34, useColor: false);
+        True(readable.Contains("FKNRTD COMMAND CENTER", StringComparison.Ordinal),
+            "The host frame names the product");
+        True(readable.Contains("aurora-api - a caption", StringComparison.Ordinal),
+            "The host frame carries its caption");
+        True(readable.Contains("Esc", StringComparison.Ordinal),
+            "The host frame says how to leave");
+    }
+
+    return Task.CompletedTask;
 }
