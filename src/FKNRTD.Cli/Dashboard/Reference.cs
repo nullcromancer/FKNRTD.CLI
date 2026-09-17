@@ -92,11 +92,30 @@ internal static class Reference
         blocks.Add(new InfoParagraph(task.Brief));
 
         blocks.Add(new InfoHeading("Who is on it"));
-        blocks.Add(new InfoLine("Lead", task.LeadAgentId + "  —  reads the code and writes the plan"));
-        blocks.Add(new InfoLine("Implementer",
-            task.ImplementerAgentId + "  —  the agent asked to change files"));
-        blocks.Add(new InfoLine("Auditor",
-            task.AuditorAgentId + "  —  judges the finished work and must return PASS"));
+        Role("Lead", task.LeadAgentId, "reads the code and writes the plan");
+        Role("Implementer", task.ImplementerAgentId, "the agent asked to change files");
+        Role("Auditor", task.AuditorAgentId, "judges the finished work and must return PASS");
+
+        // A task keeps the agent names it was created with, and an agent can be disabled or removed
+        // afterwards. The roster warns about that when you do it; this is where you find out
+        // afterwards, rather than when the stage fails to launch.
+        void Role(string role, string agentId, string what)
+        {
+            var agent = config.Agents.FirstOrDefault(item =>
+                item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase));
+            var problem = agent is null
+                ? "NOT CONFIGURED — this stage cannot run. Press A to add it back, or create a new task."
+                : !agent.Enabled
+                    ? "disabled — it will still run here, because the task already names it"
+                    : null;
+            blocks.Add(new InfoLine(role, $"{agentId}  —  {what}",
+                problem is null ? Theme.Foreground : agent is null ? Theme.Red : Theme.Amber,
+                Bold: agent is null));
+            if (problem is not null)
+            {
+                blocks.Add(new InfoParagraph(problem, agent is null ? Theme.Red : Theme.Amber, Indent: 2));
+            }
+        }
 
         blocks.Add(new InfoHeading("Where the work happens"));
         if (config.Mode == WorkspaceMode.Git)

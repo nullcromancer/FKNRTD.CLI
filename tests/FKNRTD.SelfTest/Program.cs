@@ -135,7 +135,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("An empty list explains itself", TestEmptyListsExplainThemselvesAsync),
     ("Scrolling a log stays inside the log", TestLogScrollStaysInTheFileAsync),
     ("The help screen writes itself out as a page", TestHelpWritesThePageAsync),
-    ("What to do next fits the workspace it is in", TestNextStepFitsTheWorkspaceAsync)
+    ("What to do next fits the workspace it is in", TestNextStepFitsTheWorkspaceAsync),
+    ("A task naming a missing agent says so", TestOrphanedAgentIsFlaggedAsync)
 };
 
 var failures = new List<string>();
@@ -3131,6 +3132,38 @@ static Task TestNextStepFitsTheWorkspaceAsync()
     var cancelled = new WorkflowTask { Id = "x", Status = WorkflowStatus.Cancelled };
     True(Reference.NextStep(cancelled, standalone).Contains("in this folder", StringComparison.Ordinal),
         "A cancelled standalone task says where the half-finished edits are");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// A task naming an agent that is no longer there. A task keeps the agent names it was created
+/// with, and the roster can disable or remove one afterwards - it warns you when you do, and then
+/// the task screen said nothing at all, so the next news was a stage failing to launch.
+/// </summary>
+static Task TestOrphanedAgentIsFlaggedAsync()
+{
+    var frame = Scenes.Render("inspect-missing-agent", 110, 34, colour: false);
+
+    True(frame.Contains("NOT CONFIGURED", StringComparison.Ordinal),
+        "A removed agent is named as missing");
+    True(frame.Contains("this stage cannot run", StringComparison.Ordinal),
+        "And the screen says what that costs");
+    True(frame.Contains("Press A to add it back", StringComparison.Ordinal),
+        "And what to do about it");
+
+    // A disabled agent is a different case and must not be reported as the same one: the
+    // orchestrator looks agents up by id and never reads Enabled, so an existing task still runs.
+    True(frame.Contains("it will still run here", StringComparison.Ordinal),
+        "A disabled agent is distinguished from a removed one");
+
+    // An ordinary task says none of this.
+    var healthy = Scenes.Render("inspect", 110, 34, colour: false);
+    foreach (var alarm in new[] { "NOT CONFIGURED", "this stage cannot run", "it will still run here" })
+    {
+        True(!healthy.Contains(alarm, StringComparison.Ordinal),
+            $"A task whose agents are all present does not say '{alarm}'");
+    }
 
     return Task.CompletedTask;
 }
