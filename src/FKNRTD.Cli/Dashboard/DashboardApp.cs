@@ -32,6 +32,12 @@ internal sealed class DashboardApp
     private int _logScroll;
 
     /// <summary>
+    /// The most recent snapshot, kept so an open overlay can read live state rather than the state
+    /// that existed when it was opened.
+    /// </summary>
+    private DashboardSnapshot? _live;
+
+    /// <summary>
     /// The modal layer. Every question the dashboard asks is an overlay drawn over the frame, so the
     /// operator never drops out of the alternate screen to answer an unexplained prompt on a blank
     /// terminal — and can still see the task they are acting on while they answer.
@@ -91,6 +97,7 @@ internal sealed class DashboardApp
                 RemoveCompletedRuns();
                 var snapshot = await _snapshots.CaptureAsync(cancellationToken).ConfigureAwait(false);
                 ClampSelection(snapshot);
+                _live = snapshot;
 
                 // A workspace with nothing in it opens on the introduction rather than on an empty
                 // grid, because a command center that shows no state teaches nothing about itself.
@@ -1037,6 +1044,8 @@ internal sealed class DashboardApp
                 if (index.task is not null)
                 {
                     _selectedTask = index.position;
+                    // The scroll offset belonged to the task that was showing before.
+                    _logScroll = 0;
                     _toast = $"Selected {index.task.Title}";
                 }
             }
@@ -1051,7 +1060,11 @@ internal sealed class DashboardApp
     /// </summary>
     private void OpenPalette(DashboardSnapshot snapshot)
     {
-        _overlay = Palette.For(snapshot, SelectedTask(snapshot), _running.Count);
+        _overlay = new Palette(() =>
+        {
+            var current = _live ?? snapshot;
+            return Palette.Build(current, SelectedTask(current), _running.Count);
+        });
         _overlayCompleted = async (completed, current, token) =>
         {
             if (((Palette)completed).Chosen is { } chosen)

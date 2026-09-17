@@ -94,7 +94,8 @@ internal sealed class InfoPanel : IOverlay
         var contentWidth = Math.Max(10, Math.Min(104, area.Width - 4) - 6);
         var rows = Flatten(_build(_filter?.Value.Trim() ?? string.Empty), contentWidth);
         var chrome = 4 + (_filter is null ? 0 : 2);
-        var panel = Overlays.Centre(area, 104, Math.Clamp(rows.Count + chrome, 8, area.Height - 2));
+        var panel = Overlays.Centre(area, 104,
+            Math.Clamp(rows.Count + chrome, 8, Math.Max(8, area.Height - 2)));
         canvas.DrawPanel(panel, _title, _accent, Theme.Surface);
         var x = panel.X + 3;
         var width = Math.Max(10, panel.Width - 6);
@@ -174,8 +175,13 @@ internal sealed class InfoPanel : IOverlay
                 case InfoLine line:
                 {
                     var value = Text.Wrap(line.Text, Math.Max(1, width - labelWidth));
+                    // Padded by display width, not by UTF-16 length: a CJK label is two columns per
+                    // character, and PadRight would leave the value column one short of where every
+                    // other row puts it.
+                    var label = Text.Truncate(line.Label, labelWidth);
+                    label += new string(' ', Math.Max(0, labelWidth - Text.DisplayWidth(label)));
                     rows.Add(new Row(
-                        Text.Truncate(line.Label, labelWidth).PadRight(labelWidth) + value.FirstOrDefault(),
+                        label + value.FirstOrDefault(),
                         0,
                         line.Colour ?? Theme.Foreground,
                         line.Bold));

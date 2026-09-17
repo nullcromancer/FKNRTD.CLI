@@ -117,10 +117,10 @@ internal static class Scenes
             case "usage-missing":
                 return Reference.Usage(EmptySnapshot(), "codex exited 1: not logged in");
             case "palette":
-                return Palette.For(Populated(), null, running: 0);
+                return new Palette(() => Palette.Build(Populated(), null, running: 0));
             case "palette-search":
             {
-                var palette = Palette.For(Populated(), Populated().Tasks[1], running: 1);
+                var palette = new Palette(() => Palette.Build(Populated(), Populated().Tasks[1], running: 1));
                 Type(palette, "land");
                 return palette;
             }

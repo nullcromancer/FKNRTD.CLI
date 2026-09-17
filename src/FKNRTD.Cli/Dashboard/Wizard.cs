@@ -102,15 +102,17 @@ internal sealed class Wizard : IOverlay
 
     public OverlayResult HandleKey(ConsoleKeyInfo key)
     {
+        // Escape is checked first. A form whose steps all turn out not to apply would otherwise
+        // report a successful completion in response to the operator backing out of it.
+        if (key.Key == ConsoleKey.Escape)
+        {
+            return OverlayResult.Cancel;
+        }
+
         var step = Current;
         if (step is null)
         {
             return OverlayResult.Submit;
-        }
-
-        if (key.Key == ConsoleKey.Escape)
-        {
-            return OverlayResult.Cancel;
         }
 
         if (key.Key == ConsoleKey.F1)

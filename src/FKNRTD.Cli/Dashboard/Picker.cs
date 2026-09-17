@@ -84,7 +84,10 @@ internal sealed class Picker : IOverlay
                 return OverlayResult.Submit;
         }
 
-        if (_filter.HandleKey(key))
+        // Only a change to the filter text resets the highlight; moving the caret within the filter
+        // is also consumed by the field, and would otherwise discard a deliberate selection.
+        var before = _filter.Value;
+        if (_filter.HandleKey(key) && !string.Equals(_filter.Value, before, StringComparison.Ordinal))
         {
             _selected = 0;
         }
@@ -99,7 +102,7 @@ internal sealed class Picker : IOverlay
         _selected = Math.Clamp(_selected, 0, Math.Max(0, matching.Count - 1));
 
         var rows = Math.Max(1, Math.Min(Math.Max(matching.Count, 1), Math.Max(3, area.Height - 10)));
-        var panel = Overlays.Centre(area, 96, Math.Clamp(rows + 7, 8, area.Height - 2));
+        var panel = Overlays.Centre(area, 96, Math.Clamp(rows + 7, 8, Math.Max(8, area.Height - 2)));
         canvas.DrawPanel(panel, _title, _accent, Theme.Surface);
 
         var x = panel.X + 3;

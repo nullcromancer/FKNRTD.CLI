@@ -22,21 +22,26 @@ internal sealed record PaletteAction(string Id, string Title, string Detail, str
 /// </summary>
 internal sealed class Palette : IOverlay
 {
-    private readonly IReadOnlyList<PaletteAction> _actions;
+    private readonly Func<IReadOnlyList<PaletteAction>> _source;
     private readonly TextField _filter = new();
     private int _selected;
 
-    public Palette(IReadOnlyList<PaletteAction> actions)
+    /// <summary>
+    /// The actions are supplied as a function rather than a list because availability depends on
+    /// live state. A palette left open while a task finishes must stop saying the task cannot be
+    /// landed, and must then actually land it.
+    /// </summary>
+    public Palette(Func<IReadOnlyList<PaletteAction>> source)
     {
-        _actions = actions;
+        _source = source;
         // Start on something that can actually be done, so the first Enter is never a no-op.
-        _selected = Math.Max(0, actions.ToList().FindIndex(action => action.Unavailable is null));
+        _selected = Math.Max(0, source().ToList().FindIndex(action => action.Unavailable is null));
     }
 
     public string Mode => "COMMANDS";
 
-    /// <summary>Every action offered, available or not.</summary>
-    public IReadOnlyList<PaletteAction> Actions => _actions;
+    /// <summary>Every action offered right now, available or not.</summary>
+    public IReadOnlyList<PaletteAction> Actions => _source();
 
     /// <summary>The action the operator chose. Read by the dashboard after a submit.</summary>
     public PaletteAction? Chosen { get; private set; }
@@ -45,13 +50,14 @@ internal sealed class Palette : IOverlay
     {
         get
         {
+            var actions = _source();
             var needle = _filter.Value.Trim();
             if (needle.Length == 0)
             {
-                return _actions;
+                return actions;
             }
 
-            return _actions
+            return actions
                 .Where(action => action.Title.Contains(needle, StringComparison.OrdinalIgnoreCase) ||
                                  action.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase) ||
                                  action.Id.Equals(needle, StringComparison.OrdinalIgnoreCase))
@@ -86,10 +92,13 @@ internal sealed class Palette : IOverlay
             }
         }
 
-        if (_filter.HandleKey(key))
+        // Only a change to the filter text resets the highlight. Moving the caret within the filter
+        // is also consumed by the field, and resetting on that loses a selection the operator made
+        // deliberately with the arrow keys.
+        var before = _filter.Value;
+        if (_filter.HandleKey(key) && !string.Equals(_filter.Value, before, StringComparison.Ordinal))
         {
             _selected = 0;
-            return OverlayResult.Continue;
         }
 
         return OverlayResult.Continue;
@@ -108,7 +117,8 @@ internal sealed class Palette : IOverlay
             // A description cut off mid-sentence is worse than a slightly taller panel, and a narrow
             // terminal is exactly where these wrap to four lines.
             : Math.Min(5, Text.Wrap(Describe(matching[_selected]), contentWidth).Count);
-        var panel = Overlays.Centre(area, 92, Math.Clamp(rows + detailRows + 8, 10, area.Height - 2));
+        var panel = Overlays.Centre(area, 92,
+            Math.Clamp(rows + detailRows + 8, 10, Math.Max(10, area.Height - 2)));
         canvas.DrawPanel(panel, "WHAT WOULD YOU LIKE TO DO?", Theme.Blue, Theme.Surface);
 
         var x = panel.X + 3;
@@ -121,8 +131,9 @@ internal sealed class Palette : IOverlay
 
         if (matching.Count == 0)
         {
-            canvas.DrawText(x, top, "Nothing matches that. Press ? for the full reference.", Theme.Muted,
-                maxWidth: width, background: Theme.Surface);
+            // Not "press ?" — this overlay owns every key, so ? would be typed into the filter.
+            canvas.DrawText(x, top, "Nothing matches that. Esc, then ? for the full reference.",
+                Theme.Muted, maxWidth: width, background: Theme.Surface);
             Overlays.Footer(canvas, panel, Theme.Blue, ("Esc", "close"));
             return;
         }
@@ -162,7 +173,10 @@ internal sealed class Palette : IOverlay
     /// Builds the palette for the current state. Availability is computed here rather than at the
     /// moment a key is pressed, so the reason an action is refused can be shown before it is tried.
     /// </summary>
-    public static Palette For(DashboardSnapshot snapshot, WorkflowTask? selected, int running)
+    public static IReadOnlyList<PaletteAction> Build(
+        DashboardSnapshot snapshot,
+        WorkflowTask? selected,
+        int running)
     {
         var git = snapshot.Config.Mode == WorkspaceMode.Git;
         string? NeedsTask() => selected is null ? "no task is selected. Press N to create one" : null;
@@ -206,7 +220,7 @@ internal sealed class Palette : IOverlay
             actions.Add(new PaletteAction(binding.Key, Capitalise(binding.Action), binding.Detail, unavailable));
         }
 
-        return new Palette(actions);
+        return actions;
     }
 
     private static string Capitalise(string value) =>

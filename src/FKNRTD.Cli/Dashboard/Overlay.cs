@@ -41,8 +41,10 @@ internal static class Overlays
     /// </summary>
     public static Rect Centre(Rect area, int preferredWidth, int preferredHeight)
     {
-        var width = Math.Min(preferredWidth, Math.Max(20, area.Width - 4));
-        var height = Math.Min(preferredHeight, Math.Max(6, area.Height - 2));
+        // The minimums are floors on what is readable, but they never win against the area itself:
+        // a panel wider or taller than the terminal cannot be drawn, only wrapped and scrolled.
+        var width = Math.Min(Math.Min(preferredWidth, area.Width), Math.Max(20, area.Width - 4));
+        var height = Math.Min(Math.Min(preferredHeight, area.Height), Math.Max(6, area.Height - 2));
         var x = area.X + Math.Max(0, (area.Width - width) / 2);
         var y = area.Y + Math.Max(0, (area.Height - height) / 2);
         return new Rect(x, y, width, height);

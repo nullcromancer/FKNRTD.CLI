@@ -65,7 +65,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A mistyped command names the one you meant", TestMistypedCommandAsync),
     ("Help and explain render every entry they claim", TestHelpSurfacesAsync),
     ("The palette says why an action cannot be run", TestPaletteExplainsRefusalsAsync),
-    ("Scrolling back through a log lands on the right lines", TestLogScrollbackAsync)
+    ("Scrolling back through a log lands on the right lines", TestLogScrollbackAsync),
+    ("Overlay review regressions stay fixed", TestOverlayReviewRegressionsAsync)
 };
 
 var failures = new List<string>();
@@ -1660,7 +1661,7 @@ static Task TestPaletteExplainsRefusalsAsync()
 
     // With nothing selected, an action that needs a task is listed rather than hidden, marked so
     // that it reads as unavailable even with colour off.
-    var empty = Palette.For(snapshot, selected: null, running: 0);
+    var empty = new Palette(() => Palette.Build(snapshot, selected: null, running: 0));
     var frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, empty);
     True(frame.Contains("(not now)", StringComparison.Ordinal),
         "The palette marks an unavailable action without relying on colour");
@@ -1678,7 +1679,7 @@ static Task TestPaletteExplainsRefusalsAsync()
     True(empty.Chosen is null, "An unavailable action is never chosen");
 
     // A running task cannot be landed, and the palette says so in those words.
-    var mid = Palette.For(snapshot, running, running: 1);
+    var mid = new Palette(() => Palette.Build(snapshot, running, running: 1));
     Scenes.Type(mid, "land");
     frame = renderer.Render(snapshot, 110, 40, useColor: false, mid);
     True(frame.Contains("verified, audited", StringComparison.Ordinal),
@@ -1686,14 +1687,14 @@ static Task TestPaletteExplainsRefusalsAsync()
     Equal(OverlayResult.Continue, Scenes.Press(mid, ConsoleKey.Enter), "Landing a running task is refused");
 
     // The same action on a ready task is available and returns the identifier the dashboard routes on.
-    var landable = Palette.For(snapshot, ready, running: 0);
+    var landable = new Palette(() => Palette.Build(snapshot, ready, running: 0));
     Scenes.Type(landable, "land");
     Equal(OverlayResult.Submit, Scenes.Press(landable, ConsoleKey.Enter), "Landing a ready task is offered");
     Equal("G", landable.Chosen?.Id, "The palette returns the key the action is bound to");
 
     // Every palette action must correspond to a documented key, or the palette could offer
     // something the help reference has never heard of.
-    foreach (var action in Palette.For(snapshot, ready, running: 0).Actions)
+    foreach (var action in new Palette(() => Palette.Build(snapshot, ready, running: 0)).Actions)
     {
         True(Keymap.All.Any(binding => binding.Key == action.Id),
             $"Palette action '{action.Id}' is a documented key");
@@ -1738,3 +1739,120 @@ static Task TestLogScrollbackAsync()
     Equal(0, DashboardApp.ReadWindow(new StringReader(string.Empty), 0, 10).Lines.Length, "Empty file");
     return Task.CompletedTask;
 }
+
+/// <summary>
+/// Regressions for the findings of an independent read-only review of the overlay layer. Each was a
+/// real defect: none showed up in a screenshot, and all of them would have been reported as the
+/// dashboard behaving oddly rather than as a bug anyone could name.
+/// </summary>
+static Task TestOverlayReviewRegressionsAsync()
+{
+    var snapshot = Scenes.PopulatedSnapshot();
+    var ready = snapshot.Tasks.First(task => task.Status == WorkflowStatus.ReadyToLand);
+    var running = snapshot.Tasks.First(task => task.Status == WorkflowStatus.Running);
+
+    // A palette left open while a task finishes must stop refusing to land it. Availability is read
+    // from a live source rather than frozen when the overlay opened.
+    var selected = running;
+    var live = new Palette(() => Palette.Build(snapshot, selected, running: 0));
+    True(live.Actions.Single(action => action.Id == "G").Unavailable is not null,
+        "Landing a running task is refused");
+    selected = ready;
+    True(live.Actions.Single(action => action.Id == "G").Unavailable is null,
+        "The same palette offers landing once the task is ready");
+
+    // Moving the caret inside the filter is consumed by the field but must not discard a selection
+    // the operator made deliberately with the arrow keys.
+    var palette = new Palette(() => Palette.Build(snapshot, ready, running: 0));
+    Scenes.Press(palette, ConsoleKey.DownArrow);
+    Scenes.Press(palette, ConsoleKey.DownArrow);
+    Scenes.Press(palette, ConsoleKey.Home);
+    Scenes.Press(palette, ConsoleKey.End);
+    Scenes.Press(palette, ConsoleKey.Enter);
+    True(palette.Chosen is not null, "Caret movement in the filter keeps the highlight");
+    True(palette.Chosen!.Id != palette.Actions.First(action => action.Unavailable is null).Id,
+        "Caret movement does not reset to the first action");
+
+    var picker = Picker.Tasks(snapshot);
+    Scenes.Press(picker, ConsoleKey.DownArrow);
+    Scenes.Press(picker, ConsoleKey.Home);
+    Scenes.Press(picker, ConsoleKey.Enter);
+    Equal(snapshot.Tasks[1].Id, picker.Chosen, "Caret movement in the picker keeps the highlight");
+
+    // Escape must back out of a form even when no step applies, rather than reporting success.
+    var vacuous = new Wizard("EMPTY", Theme.Blue, new List<WizardStep>
+    {
+        new()
+        {
+            Key = "never",
+            Question = "Does not apply",
+            GlossaryTerm = "task",
+            Applies = _ => false
+        }
+    });
+    Equal(OverlayResult.Cancel, Scenes.Press(vacuous, ConsoleKey.Escape),
+        "Escape cancels a form with no applicable steps");
+
+    // Wrapping must terminate and must consume the whole string, even when a single glyph is wider
+    // than the field it is being drawn into. Before this, a two-column character in a one-column
+    // space appended empty lines until the process ran out of memory.
+    foreach (var value in new[] { "界", "😀", "a界b", "界界界", "ab😀cd" })
+    {
+        foreach (var width in new[] { 1, 2, 3 })
+        {
+            var laid = TextField.Layout(value, width);
+            True(laid.Count <= value.Length + 2, $"Wrapping '{value}' at {width} terminates");
+            Equal(value.Length, laid.Sum(line => line.Length) + CountBreaks(value),
+                $"Wrapping '{value}' at {width} consumes every character");
+        }
+    }
+
+    // Wrapping must not split a surrogate pair: half an emoji renders as a replacement character.
+    const string emoji = "ab\U0001F600cd";
+    foreach (var width in new[] { 1, 2, 3, 4, 5, 8 })
+    {
+        foreach (var line in TextField.Layout(emoji, width))
+        {
+            var text = emoji.Substring(line.Start, line.Length);
+            True(text.Length == 0 || !char.IsLowSurrogate(text[0]),
+                $"Wrap at {width} does not start a line on a low surrogate");
+            True(text.Length == 0 || !char.IsHighSurrogate(text[^1]),
+                $"Wrap at {width} does not end a line on a high surrogate");
+        }
+    }
+
+    // A panel may never be larger than the area it is centred in, at any terminal size.
+    foreach (var width in new[] { 20, 40, 60, 80, 200 })
+    {
+        foreach (var height in new[] { 4, 8, 12, 20, 60 })
+        {
+            var area = new Rect(0, 0, width, height);
+            var panel = Overlays.Centre(area, 104, 40);
+            True(panel.Width <= width && panel.Height <= height,
+                $"A centred panel fits inside {width}x{height}");
+            True(panel.X >= 0 && panel.Y >= 0, $"A centred panel starts inside {width}x{height}");
+        }
+    }
+
+    // And drawing into a small area must render rather than throw.
+    foreach (var overlay in new IOverlay[]
+             {
+                 new Palette(() => Palette.Build(snapshot, ready, running: 0)),
+                 Picker.Tasks(snapshot),
+                 Reference.Agents(snapshot.Config),
+                 TaskWizard.Create(snapshot.Config)
+             })
+    {
+        foreach (var height in new[] { 4, 6, 8, 9, 10, 11 })
+        {
+            var canvas = new Canvas(80, height);
+            overlay.Draw(canvas, new Rect(0, 0, 80, height));
+            Equal(height, FrameLines(canvas.Render(false)).Length, $"Overlay draws into an 80x{height} area");
+        }
+    }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>Newlines are consumed by the wrap rather than kept in a span, so they are counted back.</summary>
+static int CountBreaks(string value) => value.Count(character => character == (char)10);

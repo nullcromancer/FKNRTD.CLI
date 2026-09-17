@@ -207,8 +207,14 @@ internal sealed class TextField
         return Math.Min(inner.Height, Math.Max(1, lines.Count - first));
     }
 
+    /// <summary>
+    /// Draws the caret over the glyph beneath it. The width budget is the glyph's own, not one
+    /// column: a CJK character or an emoji occupies two, and a one-column budget makes the caret —
+    /// and the character it is sitting on — vanish.
+    /// </summary>
     private static void DrawCaret(Canvas canvas, int x, int y, string under, Rgb accent) =>
-        canvas.DrawText(x, y, under, Theme.OnAccent, bold: true, maxWidth: 1, background: accent);
+        canvas.DrawText(x, y, under, Theme.OnAccent, bold: true,
+            maxWidth: Math.Max(1, Text.DisplayWidth(under)), background: accent);
 
     /// <summary>
     /// The glyph the caret sits on top of. An empty field is showing its placeholder, so the caret
@@ -222,9 +228,16 @@ internal sealed class TextField
             return Text.Elements(placeholder).FirstOrDefault() ?? " ";
         }
 
-        return Cursor >= 0 && Cursor < Value.Length && Value[Cursor] != '\n'
-            ? Value[Cursor].ToString()
-            : " ";
+        if (Cursor < 0 || Cursor >= Value.Length || Value[Cursor] == '\n')
+        {
+            return " ";
+        }
+
+        // Read the whole pair, or the caret shows half an emoji.
+        return char.IsHighSurrogate(Value[Cursor]) && Cursor + 1 < Value.Length &&
+               char.IsLowSurrogate(Value[Cursor + 1])
+            ? Value.Substring(Cursor, 2)
+            : Value[Cursor].ToString();
     }
 
     /// <summary>Returns the substring visible in the display columns [scroll, scroll + width).</summary>
@@ -280,7 +293,12 @@ internal sealed class TextField
                 var cursor = lineStart;
                 while (cursor < hardEnd)
                 {
-                    var elementWidth = Text.DisplayWidth(value[cursor].ToString());
+                    // A surrogate pair is measured and advanced as one unit. Splitting it across two
+                    // rendered lines turns an emoji into a pair of replacement characters.
+                    var pair = char.IsHighSurrogate(value[cursor]) && cursor + 1 < hardEnd &&
+                               char.IsLowSurrogate(value[cursor + 1]);
+                    var element = pair ? value.Substring(cursor, 2) : value[cursor].ToString();
+                    var elementWidth = Text.DisplayWidth(element);
                     if (used + elementWidth > width)
                     {
                         break;
@@ -292,7 +310,7 @@ internal sealed class TextField
                         breakAfterSpace = cursor + 1;
                     }
 
-                    cursor++;
+                    cursor += pair ? 2 : 1;
                 }
 
                 if (cursor >= hardEnd)
@@ -302,6 +320,17 @@ internal sealed class TextField
                 }
 
                 var end = breakAfterSpace > lineStart ? breakAfterSpace : cursor;
+                if (end <= lineStart)
+                {
+                    // A single glyph wider than the whole field — a CJK character or an emoji in a
+                    // one-column space. It cannot be made to fit, but the loop has to advance past it
+                    // or it appends empty lines until the process runs out of memory.
+                    end = lineStart + (char.IsHighSurrogate(value[lineStart]) && lineStart + 1 < hardEnd &&
+                                       char.IsLowSurrogate(value[lineStart + 1])
+                        ? 2
+                        : 1);
+                }
+
                 lines.Add(new Line(lineStart, end - lineStart));
                 lineStart = end;
             }
