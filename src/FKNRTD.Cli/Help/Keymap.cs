@@ -47,14 +47,19 @@ public static class Keymap
             "pick. The overview shows a handful of rows at a time, which stops being a way to find " +
             "anything once a workspace has a history."),
         new("V", "view the change",
-            "Shows the finished diff for the highlighted task — everything it committed on top of " +
-            "the base branch, plus anything still uncommitted in its worktree — searchable by file " +
-            "or by any text in it. This is the reading that landing asks you to have done.",
+            "Shows the finished diff for the highlighted task — what it committed on top of the " +
+            "base branch, plus anything still uncommitted in its worktree — searchable by file or " +
+            "by any text in it. The uncommitted half is 'git diff HEAD', so a file the agent created " +
+            "and never staged does not appear here; run 'git status' in the worktree to catch those. " +
+            "This is the reading that landing asks you to have done.",
             InFooter: true),
         new("P", "prompts",
-            "Shows the exact text each of the three agents will be sent for this task, composed from " +
-            "your brief. Knowing what an agent is about to be told is the part of authorising it " +
-            "that no amount of sandboxing substitutes for."),
+            "Shows the text each of the three agents will be sent for this task, composed from your " +
+            "brief. The lead's is exactly what it will receive. The other two carry a placeholder " +
+            "wherever a real run pastes something that does not exist yet — the lead's plan before " +
+            "the plan stage has run, and always the verification results in the auditor's. A repair " +
+            "round adds the failure evidence too. Knowing what an agent is about to be told is the " +
+            "part of authorising it that no amount of sandboxing substitutes for."),
         new("I", "inspect",
             "Opens the full record of the highlighted task: every stage and its outcome, the agents " +
             "assigned to it, where its worktree is on disk, and what to do next."),
@@ -88,7 +93,7 @@ public static class Keymap
             "Lists the configured agents - which are enabled, which can actually be found on PATH, " +
             "and which are equipped to act as an auditor - and lets you change the roster: Space " +
             "enables or disables the highlighted one, N adds another, and Del removes one after " +
-            "confirming by name."),
+            "you type the word REMOVE in full."),
         new("S", "settings",
             "Every setting in this workspace's configuration with its current value, what it " +
             "controls, and what changing it would cost. Enter changes the highlighted one through " +

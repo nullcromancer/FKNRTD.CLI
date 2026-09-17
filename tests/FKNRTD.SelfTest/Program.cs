@@ -132,7 +132,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The settings screen can change what it explains", TestSettingsBrowserAsync),
     ("Coordination can clear the reservations it reports", TestCoordinationReleaseAsync),
     ("A landing Git refuses is reported as a refusal", TestRefusedLandingAsync),
-    ("An empty list explains itself", TestEmptyListsExplainThemselvesAsync)
+    ("An empty list explains itself", TestEmptyListsExplainThemselvesAsync),
+    ("Scrolling a log stays inside the log", TestLogScrollStaysInTheFileAsync)
 };
 
 var failures = new List<string>();
@@ -2870,5 +2871,82 @@ static async Task TestEmptyListsExplainThemselvesAsync()
             True(text.StartsWith('[') || text.StartsWith('{'),
                 $"{name} -json emits JSON and not prose");
         }
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// Scrolling a stage log. The frame clamps its own copy of the scroll position, so the picture was
+/// always right and the stored position was free to wander anywhere: Home set it to a sentinel a
+/// billion lines past the end of the file, and PgDn, which steps back ten lines at a time, would
+/// have taken about a hundred million presses to return. Only End recovered.
+/// </summary>
+static async Task TestLogScrollStaysInTheFileAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "scroll-test",
+            Agents = [CreateFakeAgent()]
+        }).ConfigureAwait(false);
+
+        var task = new WorkflowTask
+        {
+            Id = "FKN-20260917-000000-scroll",
+            Title = "A task with a long log",
+            Brief = "Long enough to scroll through.",
+            Status = WorkflowStatus.Running,
+            LeadAgentId = "fake",
+            ImplementerAgentId = "fake",
+            AuditorAgentId = "fake"
+        };
+        task.Stage(WorkflowStage.Implement).State = StageState.Running;
+        await store.SaveTaskAsync(task).ConfigureAwait(false);
+
+        var logPath = store.TaskLogPath(task.Id, WorkflowStage.Implement, task.RepairRound);
+        Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+        await File.WriteAllLinesAsync(logPath,
+            Enumerable.Range(1, 120).Select(index => "line " + index)).ConfigureAwait(false);
+
+        var app = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+        var snapshot = new DashboardSnapshot { Config = await store.LoadConfigAsync().ConfigureAwait(false), Tasks = [task] };
+
+        async Task PressAsync(ConsoleKey key) =>
+            await app.HandleKeyAsync(Key(key), snapshot, CancellationToken.None).ConfigureAwait(false);
+
+        // Into the log view, then to the top of the file.
+        await PressAsync(ConsoleKey.L).ConfigureAwait(false);
+        await PressAsync(ConsoleKey.Home).ConfigureAwait(false);
+        True(app.LogScroll <= 120,
+            $"Home stays inside the file rather than jumping past its end (was {app.LogScroll})");
+        True(app.LogScroll > 0, "Home actually scrolls back");
+
+        // One PgDn from the top moves by ten, not by a rounding error on a billion.
+        var atTop = app.LogScroll;
+        await PressAsync(ConsoleKey.PageDown).ConfigureAwait(false);
+        Equal(Math.Max(0, atTop - 10), app.LogScroll, "PgDn from the top steps back ten lines");
+
+        // Walking down with PgDn reaches the live tail in a sane number of presses.
+        var presses = 0;
+        while (app.LogScroll > 0 && presses < 40)
+        {
+            await PressAsync(ConsoleKey.PageDown).ConfigureAwait(false);
+            presses++;
+        }
+
+        Equal(0, app.LogScroll, $"PgDn reaches the live tail (took {presses} more presses)");
+
+        // PgUp cannot run past the end of the file either, which was the same defect in milder form.
+        for (var index = 0; index < 60; index++)
+        {
+            await PressAsync(ConsoleKey.PageUp).ConfigureAwait(false);
+        }
+
+        True(app.LogScroll <= 120,
+            $"PgUp stops at the top of the file rather than running away (was {app.LogScroll})");
+
+        await PressAsync(ConsoleKey.PageDown).ConfigureAwait(false);
+        True(app.LogScroll < 120, "And one PgDn after that moves back down");
     }).ConfigureAwait(false);
 }

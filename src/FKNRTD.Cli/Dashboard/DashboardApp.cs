@@ -757,6 +757,42 @@ internal sealed class DashboardApp
     };
 
     /// <summary>
+    /// How far back the current stage log can usefully be scrolled. The frame clamps its own copy
+    /// of the scroll position, which keeps the picture right while leaving the stored position
+    /// anywhere at all - so Home, which used to jump to a sentinel a billion lines past the end,
+    /// left PgDn needing about a hundred million presses to come back. Rendering has to stay a pure
+    /// function, so the bound is applied here instead, where the keystroke is.
+    /// </summary>
+    private int LogCeiling(DashboardSnapshot snapshot)
+    {
+        if (_view != DashboardView.Logs || SelectedTask(snapshot) is not { } task ||
+            ResolveLogPath(task) is not { } path)
+        {
+            return 0;
+        }
+
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            var lines = 0;
+            while (reader.ReadLine() is not null)
+            {
+                lines++;
+            }
+
+            return Math.Max(0, lines - 1);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A log being written to, or gone. Leaving the position alone is better than throwing
+            // away where the operator had scrolled to.
+            return _logScroll;
+        }
+    }
+
+    /// <summary>
     /// Reads <paramref name="count"/> lines ending <paramref name="skipFromEnd"/> lines before the
     /// end of the stream, and reports the total line count so the view can say where it is. The
     /// whole file is walked rather than seeked because a log is being appended to while it is read,
@@ -897,6 +933,9 @@ internal sealed class DashboardApp
 
     /// <summary>The most recent footer message. The test seam for the action guard.</summary>
     internal string Toast => _toast;
+
+    /// <summary>How far back through the stage log the operator has scrolled. A test seam.</summary>
+    internal int LogScroll => _logScroll;
 
     internal async Task HandleKeyAsync(ConsoleKeyInfo key, DashboardSnapshot snapshot, CancellationToken cancellationToken)
     {
@@ -1064,14 +1103,16 @@ internal sealed class DashboardApp
                 _logScroll = 0;
                 break;
             case "log-up":
-                _logScroll += _view == DashboardView.Logs ? 10 : 0;
+                _logScroll = Math.Min(_logScroll + 10, LogCeiling(snapshot));
                 break;
             case "log-down":
-                _logScroll = Math.Max(0, _logScroll - 10);
+                // The ceiling is applied before stepping down, not only after: a scroll position
+                // past the end of the file takes just as many presses to walk back as it took to
+                // reach, and Home used to put it a billion lines past the end.
+                _logScroll = Math.Max(0, Math.Min(_logScroll, LogCeiling(snapshot)) - 10);
                 break;
             case "log-top":
-                // Clamped against the file's real length when the frame is drawn.
-                _logScroll = _view == DashboardView.Logs ? int.MaxValue / 2 : 0;
+                _logScroll = LogCeiling(snapshot);
                 break;
             case "log-follow":
                 _logScroll = 0;

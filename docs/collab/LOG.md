@@ -321,3 +321,37 @@ somebody who had not written it reading it against the code. That is the product
 applied to the product's own documentation, and it has now been true three times running.
 
 Local suite: 49/49 passing, Release build clean.
+
+---
+
+## 2026-09-17 06:40 - Codex's keymap and settings fact-check
+
+The third table pair: `Keymap.cs` against `DashboardApp.cs`, and `SettingsCatalog.cs` against where
+each config field is actually read. **6 findings, one of them a real defect.**
+
+**PgDn after Home needed about a hundred million presses.** `Home` set `_logScroll` to
+`int.MaxValue / 2`. The frame clamps its own copy of that number before reading the log, so the
+display was correct - the top of the file, exactly as asked. But `PgDn` steps back ten lines from
+the *stored* position, which was a billion lines past the end of a file that might have ninety
+lines in it. Only `End` recovered. `PgUp` had the same defect in milder form, running past the end
+of the file at ten lines a press.
+
+The reason this survived three previous reviews and a renderer sweep across 8,140 frames is that
+the frame was never wrong. A clamp applied where a value is *used* rather than where it is *stored*
+keeps the picture honest and lets the state rot behind it. The bound now lives at the keystroke,
+because `Render` has to stay a pure function and cannot write the clamp back.
+
+The five documentation findings were the usual mix, and one of them was a sentence written earlier
+the same morning: the agent roster's help said Del removes an agent "after confirming by name",
+when the word it asks for is REMOVE. Also `P` claimed to show the exact text all three agents
+receive, when the auditor's always carries a placeholder where the verification results will go;
+`V` claimed to show anything still uncommitted, when `git diff HEAD` does not list a file the agent
+created and never staged; and two agent-field defaults were simply wrong.
+
+### Running total
+
+Three fact-checks, **53 findings**, two of them product defects rather than wording. The rate has
+not dropped between rounds, which is worth noticing: each pass covered tables the previous passes
+had not read, and every table has been wrong.
+
+Local suite: 51/51 passing, Release build clean.

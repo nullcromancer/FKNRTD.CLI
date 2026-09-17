@@ -302,6 +302,22 @@ public static class Milestones
             "And three commands quietly replace a whole record when you might expect them to " +
             "update part of one: a telemetry report, a usage measurement and an agent definition " +
             "all discard what you leave out."),
+
+        new("2026-09-17",
+            "PgDn after Home needed a hundred million presses",
+            "The third fact-check, against the key table and the settings table. It found five " +
+            "wrong sentences and one real defect, and the defect had been invisible for the worst " +
+            "possible reason: the picture on screen was correct.",
+            "Home set the log scroll position to a sentinel a billion lines past the end of the " +
+            "file. The frame clamped its own copy of that number, so the log displayed correctly " +
+            "from its first line - but PgDn steps back ten lines at a time from the stored " +
+            "position, so returning to the live tail would have taken about a hundred million " +
+            "presses. Only End recovered. The position is now bounded by the length of the actual " +
+            "file, at the keystroke rather than at the frame, because rendering has to stay pure.",
+            "A clamp applied where the value is used rather than where it is stored keeps the " +
+            "display honest and lets the state rot. PgUp had the same defect in milder form: it " +
+            "ran past the end of the file at ten lines a press, so scrolling up past the top and " +
+            "then back down did nothing for a while."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

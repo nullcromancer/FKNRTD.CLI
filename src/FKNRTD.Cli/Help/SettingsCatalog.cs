@@ -194,10 +194,12 @@ public static class SettingsCatalog
             "installation. Removing it loses the profiles.",
             "agent"),
 
-        new("agents[].displayName", "Agent display name", AgentFields, "the id, capitalised",
+        new("agents[].displayName", "Agent display name", AgentFields, "the id, unchanged",
             "What the agent is called on screen, where the id would read as a shell token.",
             "Shown in the agent radar, the roster and the role pickers. Nothing resolves anything " +
-            "through it; assignments are always by id.",
+            "through it; assignments are always by id. Only the guided builder capitalises it — " +
+            "'agent add' without -name keeps the id exactly as you typed it, and a JSON definition " +
+            "that omits the field gets an empty one.",
             "Safe to change to anything readable. It affects only what is displayed.",
             "agent"),
 
@@ -208,10 +210,11 @@ public static class SettingsCatalog
             "Setting it to an unrecognised value only loses the colour. It cannot break a task.",
             "agent"),
 
-        new("agents[].color", "Agent colour", AgentFields, "\"cyan\"",
+        new("agents[].color", "Agent colour", AgentFields, "\"orange\" for Claude, \"violet\" for Codex",
             "Recorded per agent, but the dashboard colours agents by kind rather than by this.",
             "Written when an agent is registered and kept in the file. Nothing currently reads it; " +
-            "the colour an agent is drawn in comes from its kind.",
+            "the colour an agent is drawn in comes from its kind. The two shipped agents set it " +
+            "explicitly; \"cyan\" is only what the field falls back to when nothing says otherwise.",
             "Nothing. Change agents[].kind if you want a different colour.",
             "agent"),
 
