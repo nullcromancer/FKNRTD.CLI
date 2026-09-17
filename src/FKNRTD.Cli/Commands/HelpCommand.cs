@@ -1,0 +1,326 @@
+using FKNRTD.Dashboard;
+using FKNRTD.Help;
+
+namespace FKNRTD.Commands;
+
+/// <summary>
+/// <c>fknrtd help</c>. Rendered from <see cref="CommandCatalog"/> rather than from a hand-written
+/// block of text, so the help cannot describe a command that was removed or omit one that was
+/// added. <c>fknrtd help &lt;command&gt;</c> prints the full entry for one command, including what
+/// it changes on disk and what to do next.
+/// </summary>
+internal static class HelpCommand
+{
+    public static int Execute(CliArguments arguments, bool useColor)
+    {
+        var width = Math.Clamp(Screen.Width(88) - 2, 40, 96);
+        var topic = string.Join(' ', arguments.Positionals.Skip(1)).Trim();
+
+        if (topic.Length == 0)
+        {
+            Overview(width, useColor);
+            return 0;
+        }
+
+        var entry = CommandCatalog.Find(topic);
+        if (entry is not null)
+        {
+            Detail(entry, width, useColor);
+            return 0;
+        }
+
+        var group = CommandCatalog.Groups
+            .FirstOrDefault(name => name.Equals(topic, StringComparison.OrdinalIgnoreCase));
+        if (group is not null)
+        {
+            Group(group, width, useColor);
+            return 0;
+        }
+
+        // A word that is not a command is very often a concept, so the two lookups are offered
+        // together rather than sending the operator away to guess which one it was.
+        var term = Glossary.Find(topic);
+        if (term is not null)
+        {
+            Console.WriteLine($"'{topic}' is not a command. It is a concept:");
+            Console.WriteLine();
+            foreach (var line in Text.Wrap(term.Summary, width))
+            {
+                Console.WriteLine(line);
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"Read it in full with: fknrtd explain {term.Term}");
+            return 0;
+        }
+
+        var suggestions = CommandCatalog.Search(topic);
+        Console.Error.WriteLine($"There is no '{topic}' command.");
+        if (suggestions.Count > 0)
+        {
+            Console.Error.WriteLine("Did you mean:");
+            foreach (var candidate in suggestions.Take(5))
+            {
+                Console.Error.WriteLine($"  fknrtd {candidate.Name,-24} {candidate.Summary}");
+            }
+        }
+        else
+        {
+            Console.Error.WriteLine("Run 'fknrtd help' for every command, or 'fknrtd explain' for every term.");
+        }
+
+        return 2;
+    }
+
+    private static void Overview(int width, bool useColor)
+    {
+        Write("FKNRTD COMMAND CENTER", Theme.Cyan, useColor, bold: true);
+        Console.WriteLine();
+        foreach (var line in Text.Wrap(Glossary.Find("fknrtd")?.Summary ?? string.Empty, width))
+        {
+            Console.WriteLine(line);
+        }
+
+        Console.WriteLine();
+        Write("NEW HERE", Theme.Green, useColor, bold: true);
+        Console.WriteLine();
+        Console.WriteLine("  fknrtd                    Open the command center here. It explains itself as you go.");
+        Console.WriteLine("  fknrtd doctor             Check that everything a run depends on is installed.");
+        Console.WriteLine("  fknrtd task new           Describe a piece of work through a guided, explained form.");
+        Console.WriteLine("  fknrtd explain <word>     Look up any term this product uses.");
+        Console.WriteLine("  fknrtd portal             Write the full offline guide as a single HTML file.");
+
+        foreach (var group in CommandCatalog.Groups)
+        {
+            Console.WriteLine();
+            Write(group.ToUpperInvariant(), Theme.Violet, useColor, bold: true);
+            Console.WriteLine();
+            foreach (var entry in CommandCatalog.InGroup(group))
+            {
+                Write($"  {entry.Name,-26}", Theme.Cyan, useColor);
+                Console.WriteLine(Text.Truncate(entry.Summary, Math.Max(20, width - 28)));
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Read one in full with: fknrtd help <command>");
+        Console.WriteLine();
+        Write("COMMON OPTIONS", Theme.Violet, useColor, bold: true);
+        Console.WriteLine();
+        Console.WriteLine("  -root <path>    Act on the workspace at this path instead of the current folder");
+        Console.WriteLine("  -json           Emit machine-readable JSON where supported");
+        Console.WriteLine("  -no-color       Disable ANSI colour");
+        Console.WriteLine("  -color          Force ANSI colour even when output is redirected");
+        Console.WriteLine();
+        Write("EXIT CODES", Theme.Violet, useColor, bold: true);
+        Console.WriteLine();
+        Console.WriteLine("  0 success   2 unknown command or a failed required check   " +
+                          "3 a failed or collided outcome   130 cancelled");
+    }
+
+    private static void Group(string group, int width, bool useColor)
+    {
+        Write(group.ToUpperInvariant(), Theme.Violet, useColor, bold: true);
+        Console.WriteLine();
+        foreach (var entry in CommandCatalog.InGroup(group))
+        {
+            Console.WriteLine();
+            Write("  " + entry.Invocation, Theme.Cyan, useColor, bold: true);
+            Console.WriteLine();
+            foreach (var line in Text.Wrap(entry.Summary, width - 4))
+            {
+                Console.WriteLine("    " + line);
+            }
+        }
+    }
+
+    private static void Detail(CommandEntry entry, int width, bool useColor)
+    {
+        Write(entry.Invocation, Theme.Cyan, useColor, bold: true);
+        Console.WriteLine();
+        Write(entry.Group, Theme.Muted, useColor);
+        Console.WriteLine();
+        Console.WriteLine();
+
+        foreach (var line in Text.Wrap(entry.Summary, width))
+        {
+            Console.WriteLine(line);
+        }
+
+        Console.WriteLine();
+        foreach (var line in Text.Wrap(entry.Detail, width))
+        {
+            Console.WriteLine(line);
+        }
+
+        if (entry.Options.Count > 0)
+        {
+            Console.WriteLine();
+            Write("OPTIONS", Theme.Violet, useColor, bold: true);
+            Console.WriteLine();
+            var labelWidth = Math.Min(28, entry.Options.Max(option =>
+                option.Name.Length + option.ValueHint.Length + 3));
+            foreach (var option in entry.Options)
+            {
+                var label = option.ValueHint.Length == 0
+                    ? option.Name
+                    : $"{option.Name} {option.ValueHint}";
+                Write("  " + label.PadRight(labelWidth), Theme.Cyan, useColor);
+                var meaning = option.Required ? option.Meaning + "  (required)" : option.Meaning;
+                var wrapped = Text.Wrap(meaning, Math.Max(20, width - labelWidth - 3));
+                Console.WriteLine(wrapped.FirstOrDefault());
+                foreach (var continuation in wrapped.Skip(1))
+                {
+                    Console.WriteLine(new string(' ', labelWidth + 2) + continuation);
+                }
+            }
+        }
+
+        if (entry.Examples.Count > 0)
+        {
+            Console.WriteLine();
+            Write("EXAMPLES", Theme.Violet, useColor, bold: true);
+            Console.WriteLine();
+            foreach (var example in entry.Examples)
+            {
+                Console.WriteLine("  " + example);
+            }
+        }
+
+        Console.WriteLine();
+        Write("WHAT HAPPENS NEXT", Theme.Green, useColor, bold: true);
+        Console.WriteLine();
+        foreach (var line in Text.Wrap(entry.WhatHappensNext, width - 2))
+        {
+            Console.WriteLine("  " + line);
+        }
+
+        var terms = entry.GlossaryTerms.Select(Glossary.Find).OfType<GlossaryEntry>().ToArray();
+        if (terms.Length > 0)
+        {
+            Console.WriteLine();
+            Write("WORDS USED HERE", Theme.Violet, useColor, bold: true);
+            Console.WriteLine();
+            foreach (var term in terms)
+            {
+                Write($"  {term.Term,-20}", Theme.Cyan, useColor);
+                Console.WriteLine(Text.Truncate(term.Summary, Math.Max(20, width - 22)));
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"  Read one with: fknrtd explain {terms[0].Term}");
+        }
+    }
+
+    /// <summary>The message for a command that does not exist, with the nearest ones that do.</summary>
+    public static int Unknown(string command)
+    {
+        Console.Error.WriteLine($"There is no '{command}' command in FKNRTD.CLI.");
+        var suggestions = Nearest(command);
+        if (suggestions.Count > 0)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("The closest matches are:");
+            foreach (var candidate in suggestions.Take(4))
+            {
+                Console.Error.WriteLine($"  fknrtd {candidate.Name,-24} {candidate.Summary}");
+            }
+        }
+
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("Run 'fknrtd help' for every command, or 'fknrtd explain' for every term.");
+        return 2;
+    }
+
+    /// <summary>
+    /// Commands close to what was typed. Substring search alone cannot help a typo — nothing
+    /// contains "taks" — so the nearest names by edit distance are offered first, which is the case
+    /// an unknown-command message exists to serve.
+    /// </summary>
+    internal static IReadOnlyList<CommandEntry> Nearest(string command)
+    {
+        var needle = command.Trim();
+        if (needle.Length == 0)
+        {
+            return [];
+        }
+
+        // Two edits covers a transposition, a doubled letter or a dropped one; more than that and a
+        // guess is noise. Short names get a tighter budget so "run" does not match "land".
+        var budget = needle.Length <= 4 ? 1 : 2;
+        var byDistance = CommandCatalog.All
+            .Select(entry => (entry, distance: Distance(needle, entry.Name.Split(' ')[0])))
+            .Where(item => item.distance <= budget)
+            .OrderBy(item => item.distance)
+            .ThenBy(item => item.entry.Name.Length)
+            .Select(item => item.entry)
+            .ToArray();
+
+        return byDistance.Length > 0 ? byDistance : CommandCatalog.Search(needle);
+    }
+
+    /// <summary>
+    /// Damerau-Levenshtein distance, case-insensitive. Transposition counts as one edit rather than
+    /// two, because swapping two letters is the typo people actually make: without it "taks" is as
+    /// far from "task" as it is from nothing, and the suggestion that would have helped is dropped.
+    /// Command names are a handful of characters, so a plain matrix is the clearest thing that works.
+    /// </summary>
+    internal static int Distance(string left, string right)
+    {
+        if (left.Length == 0 || right.Length == 0)
+        {
+            return Math.Max(left.Length, right.Length);
+        }
+
+        var distance = new int[left.Length + 1, right.Length + 1];
+        for (var row = 0; row <= left.Length; row++)
+        {
+            distance[row, 0] = row;
+        }
+
+        for (var column = 0; column <= right.Length; column++)
+        {
+            distance[0, column] = column;
+        }
+
+        for (var row = 1; row <= left.Length; row++)
+        {
+            for (var column = 1; column <= right.Length; column++)
+            {
+                var substitution = char.ToLowerInvariant(left[row - 1]) == char.ToLowerInvariant(right[column - 1])
+                    ? 0
+                    : 1;
+                distance[row, column] = Math.Min(
+                    Math.Min(distance[row, column - 1] + 1, distance[row - 1, column] + 1),
+                    distance[row - 1, column - 1] + substitution);
+
+                if (row > 1 && column > 1 &&
+                    char.ToLowerInvariant(left[row - 1]) == char.ToLowerInvariant(right[column - 2]) &&
+                    char.ToLowerInvariant(left[row - 2]) == char.ToLowerInvariant(right[column - 1]))
+                {
+                    distance[row, column] = Math.Min(distance[row, column], distance[row - 2, column - 2] + 1);
+                }
+            }
+        }
+
+        return distance[left.Length, right.Length];
+    }
+
+    private static void Write(string text, Rgb colour, bool useColor, bool bold = false)
+    {
+        if (!useColor)
+        {
+            Console.Write(text);
+            return;
+        }
+
+        Console.Write(colour.ForegroundCode);
+        if (bold)
+        {
+            Console.Write("[1m");
+        }
+
+        Console.Write(text);
+        Console.Write("[0m");
+    }
+}

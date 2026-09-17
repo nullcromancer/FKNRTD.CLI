@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FKNRTD.Dashboard;
 using FKNRTD.Domain;
 using FKNRTD.Services;
 
@@ -8,14 +9,23 @@ internal static class CommandDispatcher
 {
     public const string Version = "1.0.0";
 
+    /// <summary>
+    /// The commands the switch below handles. Kept beside it so a mistyped command can be rejected
+    /// with a useful message before a workspace is located for it.
+    /// </summary>
+    private static readonly HashSet<string> Dispatched = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "dashboard", "status", "doctor", "task", "run", "land", "agent", "message", "claim",
+        "usage", "events", "config", "telemetry", "hook"
+    };
+
     public static async Task<int> ExecuteAsync(
         CliArguments arguments,
         CancellationToken cancellationToken)
     {
         if (arguments.Command is "help" or "-h" or "--help" || arguments.Has("help") || arguments.Has("h"))
         {
-            PrintHelp();
-            return 0;
+            return HelpCommand.Execute(arguments, UseColor(arguments));
         }
 
         if (arguments.Command is "version" or "-v" or "--version" || arguments.Has("version") || arguments.Has("v"))
@@ -34,6 +44,20 @@ internal static class CommandDispatcher
             return await StatusLineRenderer.RenderClaudeAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
+        // The glossary needs no workspace: someone who hit an unfamiliar word in an error message
+        // should be able to look it up from any directory.
+        if (arguments.Command is "explain" or "glossary")
+        {
+            return ExplainCommand.Execute(arguments, UseColor(arguments));
+        }
+
+        // The portal is generated from the same tables the running program reads, so it needs no
+        // workspace and cannot describe a command or a term that does not exist.
+        if (arguments.Command == "portal")
+        {
+            return PortalCommand.Execute(arguments);
+        }
+
         if (arguments.Command == "integration")
         {
             return await IntegrationCommandAsync(arguments, cancellationToken).ConfigureAwait(false);
@@ -48,6 +72,14 @@ internal static class CommandDispatcher
                     currentFolderOnly: arguments.Command.Length != 0,
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        // A mistyped command is recognised before a workspace is located. Otherwise `fknrtd taks`
+        // outside a workspace fails with "no workspace was found", which sends the operator off to
+        // fix the wrong problem entirely.
+        if (!Dispatched.Contains(arguments.Command))
+        {
+            return Unknown(arguments.Command);
         }
 
         var runtime = CreateRuntime(arguments);
@@ -315,6 +347,7 @@ internal static class CommandDispatcher
             "create" => await CreateTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "list" or "ls" or "" => await ListTasksAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "show" => await ShowTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
+            "new" => await NewTaskAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "run" => await RunTaskAsync(runtime,
                 Required(arguments.Get("id") ?? arguments.Positional(2), "task ID"), cancellationToken)
                 .ConfigureAwait(false),
@@ -370,6 +403,61 @@ internal static class CommandDispatcher
         }
 
         Console.WriteLine($"  Run: fknrtd task run {task.Id}");
+        return 0;
+    }
+
+    /// <summary>
+    /// <c>fknrtd task new</c>. The same guided, explained form the dashboard opens for N, run on its
+    /// own. It exists so that the command line is not the surface where an operator is expected to
+    /// already know what a brief, a lead and an auditor are.
+    /// </summary>
+    private static async Task<int> NewTaskAsync(
+        FknrtdRuntime runtime,
+        CliArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+        if (!config.Agents.Any(agent => agent.Enabled))
+        {
+            throw new InvalidOperationException(
+                "No agents are enabled, so there is nobody to give the work to. " +
+                "Run 'fknrtd agent list' to see what is configured.");
+        }
+
+        var wizard = TaskWizard.Create(config);
+        var completed = await OverlayHost
+            .RunAsync(wizard, $"{config.ProjectName} · {DescribeMode(config.Mode)} workspace",
+                UseColor(arguments), cancellationToken)
+            .ConfigureAwait(false);
+        if (!completed)
+        {
+            Console.WriteLine("Cancelled. No task was created.");
+            return 0;
+        }
+
+        var task = await runtime.Tasks.CreateAsync(
+                wizard.Value("title"),
+                wizard.Value("brief"),
+                wizard.Value("lead"),
+                wizard.Value("implementer"),
+                wizard.Value("auditor"),
+                wizard.Lines("verify"),
+                config.Mode == WorkspaceMode.Git ? wizard.Value("base") : null,
+                int.TryParse(wizard.Value("repairs"), out var repairs) ? repairs : null,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        Console.WriteLine($"✓ Created {task.Id}: {task.Title}");
+        Console.WriteLine($"  {task.LeadAgentId} plans · {task.ImplementerAgentId} implements · {task.AuditorAgentId} audits");
+        Console.WriteLine(task.VerificationCommands.Count == 0
+            ? "  Nothing verifies this work, so the audit is the only gate."
+            : "  Verified by: " + string.Join("; ", task.VerificationCommands));
+        if (wizard.Value("then") == "run")
+        {
+            return await RunTaskAsync(runtime, task.Id, cancellationToken).ConfigureAwait(false);
+        }
+
+        Console.WriteLine($"  Run it with: fknrtd task run {task.Id}");
         return 0;
     }
 
@@ -1073,70 +1161,6 @@ internal static class CommandDispatcher
     private static void PrintJson<T>(T value) =>
         Console.WriteLine(JsonSerializer.Serialize(value, JsonSupport.Options));
 
-    private static int Unknown(string command)
-    {
-        Console.Error.WriteLine($"Unknown FKNRTD.CLI command: {command}");
-        Console.Error.WriteLine("Run 'fknrtd help' for usage.");
-        return 2;
-    }
+    private static int Unknown(string command) => HelpCommand.Unknown(command);
 
-    private static void PrintHelp()
-    {
-        Console.WriteLine("""
-            FKNRTD COMMAND CENTER
-            Coordinate Claude, Codex, and any command-line coding agent from one C# console.
-
-            Start
-              fknrtd                        Open the current folder, initializing it if needed
-              fknrtd init [path] [-standalone] [-git]
-              fknrtd doctor
-              fknrtd dashboard [-once] [-width <cols>] [-height <rows>]
-              fknrtd status [-json] [-width <cols>] [-height <rows>]
-
-            Tasks
-              fknrtd task create "Title" -brief "What to build" -verify "dotnet test" [-run]
-              fknrtd task list | show <id> | run <id> | retry <id> | cancel <id>
-              fknrtd task land <id> -confirm LAND
-              fknrtd task cleanup <id> -confirm REMOVE [-force]
-
-            Agents
-              fknrtd agent list
-              fknrtd agent add -id gemini -exe gemini -arg=-p -arg="{prompt}"
-              fknrtd agent add -file agent.json
-              fknrtd agent enable|disable <id>
-              fknrtd telemetry report -agent cline -state running -intent "Editing auth" -path src/auth.cs
-
-            Coordination
-              fknrtd message send -from codex -to claude -text "Ready for audit" [-task <id>]
-              fknrtd message list
-              fknrtd claim add -agent codex -path src/auth.cs [-mode write] [-ttl 300]
-              fknrtd claim list | renew <id> | release <id>
-
-            Usage and integration
-              fknrtd usage refresh codex
-              fknrtd usage list
-              fknrtd usage set <agent> -context 70 -five-hour 80 -weekly 60
-              fknrtd integration install-claude-statusline [-project] [-force]
-
-            Common options
-              -root <path>    Select an FKNRTD.CLI workspace
-              -standalone     Initialize without Git, for projects that will never be versioned
-              -git            Require a Git repository and fail if there is none
-              -json           Emit machine-readable JSON where supported
-              -no-color       Disable ANSI color
-              -color          Force ANSI color even when output is redirected
-
-            Workflow
-              brief → isolated worktree → lead plan → implementation → deterministic verification
-              → independent read-only audit → explicit landing
-
-            In a Git repository each task runs in its own worktree and lands by merge. In a
-            standalone workspace there is no worktree, branch or merge: agents work directly in the
-            folder, and landing simply records that the verified work is already in place.
-
-            Configuration lives at <root>/.fknrtd/config.json. Agent arguments are arrays, so
-            prompts and paths are passed without shell interpolation. Verification commands are trusted
-            project configuration and intentionally run through the platform shell.
-            """);
-    }
 }

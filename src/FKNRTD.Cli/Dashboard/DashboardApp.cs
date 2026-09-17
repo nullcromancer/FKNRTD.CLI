@@ -63,13 +63,13 @@ internal sealed class DashboardApp
         if (once || Console.IsOutputRedirected || Console.IsInputRedirected)
         {
             var snapshot = await _snapshots.CaptureAsync(cancellationToken).ConfigureAwait(false);
-            Console.WriteLine(Render(snapshot, widthOverride ?? GetWidth(140), heightOverride ?? GetHeight(40), useColor));
+            Console.WriteLine(Render(snapshot, widthOverride ?? Screen.Width(140), heightOverride ?? Screen.Height(40), useColor));
             return;
         }
 
         using var sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _sessionCancellation = sessionCancellation;
-        EnterScreen();
+        Screen.Enter();
         var previousWidth = -1;
         var previousHeight = -1;
         try
@@ -92,8 +92,8 @@ internal sealed class DashboardApp
                     }
                 }
 
-                var width = widthOverride ?? GetWidth(120);
-                var height = heightOverride ?? GetHeight(32);
+                var width = widthOverride ?? Screen.Width(120);
+                var height = heightOverride ?? Screen.Height(32);
                 Console.Write(width == previousWidth && height == previousHeight ? "\u001b[H" : "\u001b[2J\u001b[H");
                 Console.Write(RenderCurrent(snapshot, width, height, useColor));
                 previousWidth = width;
@@ -131,7 +131,7 @@ internal sealed class DashboardApp
             }
 
             _sessionCancellation = null;
-            ExitScreen();
+            Screen.Exit();
         }
     }
 
@@ -1061,43 +1061,6 @@ internal sealed class DashboardApp
         foreach (var completed in _running.Where(pair => pair.Value.IsCompleted).Select(pair => pair.Key).ToArray())
         {
             _running.Remove(completed);
-        }
-    }
-
-    private static void EnterScreen()
-    {
-        Console.OutputEncoding = System.Text.Encoding.UTF8;
-        Console.Write("\u001b[?1049h\u001b[?25l\u001b[2J\u001b[H");
-    }
-
-    private static void ExitScreen()
-    {
-        Console.Write("\u001b[0m\u001b[?25h\u001b[?1049l");
-    }
-
-    private static int GetWidth(int fallback)
-    {
-        try
-        {
-            return Math.Max(60, Console.WindowWidth);
-        }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException or
-                                          PlatformNotSupportedException)
-        {
-            return fallback;
-        }
-    }
-
-    private static int GetHeight(int fallback)
-    {
-        try
-        {
-            return Math.Max(20, Console.WindowHeight);
-        }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException or
-                                          PlatformNotSupportedException)
-        {
-            return fallback;
         }
     }
 

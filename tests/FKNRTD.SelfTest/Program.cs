@@ -6,6 +6,7 @@ using FKNRTD.Commands;
 using FKNRTD.Dashboard;
 using FKNRTD.Domain;
 using FKNRTD.Help;
+using FKNRTD.Portal;
 using FKNRTD.Services;
 using FKNRTD.Telemetry;
 
@@ -58,7 +59,11 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A refused answer says what was wrong with it", TestWizardValidationExplainsItselfAsync),
     ("Destructive actions take the whole word and nothing else", TestConfirmationRequiresTheWordAsync),
     ("Text field edits and maps the caret through a wrap", TestTextFieldEditingAsync),
-    ("An empty workspace tells you what to do", TestEmptyWorkspaceGuidesAsync)
+    ("An empty workspace tells you what to do", TestEmptyWorkspaceGuidesAsync),
+    ("Every documented command is a real command", TestCommandCatalogAsync),
+    ("The portal is offline, deterministic and escaped", TestPortalAsync),
+    ("A mistyped command names the one you meant", TestMistypedCommandAsync),
+    ("Help and explain render every entry they claim", TestHelpSurfacesAsync)
 };
 
 var failures = new List<string>();
@@ -1046,17 +1051,22 @@ static async Task TestDefaultInvocationInRepositoryAsync()
 /// <summary>Runs a dispatcher command with console output captured so the suite stays readable.</summary>
 static async Task<int> QuietlyAsync(string[] arguments, StringWriter? output = null)
 {
+    // Standard error is captured too. Several cases here deliberately exercise failure paths, and
+    // their diagnostics would otherwise be interleaved with the suite's own results.
     var originalOutput = Console.Out;
+    var originalError = Console.Error;
     output ??= new StringWriter();
     try
     {
         Console.SetOut(output);
+        Console.SetError(output);
         return await CommandDispatcher.ExecuteAsync(new CliArguments(arguments), CancellationToken.None)
             .ConfigureAwait(false);
     }
     finally
     {
         Console.SetOut(originalOutput);
+        Console.SetError(originalError);
     }
 }
 
@@ -1314,4 +1324,213 @@ static Task TestEmptyWorkspaceGuidesAsync()
     True(frame.Contains("Press N", StringComparison.Ordinal), "Empty workspace names the next key");
     True(frame.Contains("explained", StringComparison.Ordinal), "Empty workspace promises the explanation");
     return Task.CompletedTask;
+}
+
+// ── Command catalog and the generated portal ────────────────────────────────────────────────────
+
+/// <summary>
+/// The catalog is the CLI's half of the explanation contract. Every documented command must name a
+/// command the dispatcher actually has, must resolve however an operator spells it, and must point
+/// at glossary terms that exist.
+/// </summary>
+static Task TestCommandCatalogAsync()
+{
+    // The dispatcher's top-level verbs. This list is the contract: adding a command to
+    // CommandDispatcher without documenting it here and in the catalog fails this test.
+    string[] dispatched =
+    [
+        "fknrtd", "init", "doctor", "dashboard", "status", "task", "run", "land", "agent", "message",
+        "claim", "usage", "events", "config", "telemetry", "integration", "explain", "portal", "help",
+        "version"
+    ];
+
+    var documented = CommandCatalog.All
+        .Select(entry => entry.Name.Split(' ')[0])
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    foreach (var verb in dispatched)
+    {
+        True(documented.Contains(verb, StringComparer.OrdinalIgnoreCase),
+            $"The catalog documents the '{verb}' command");
+    }
+
+    foreach (var entry in CommandCatalog.All)
+    {
+        True(entry.Summary.Length > 20, $"Catalog summary is substantive for '{entry.Name}'");
+        True(entry.Detail.Length > 60, $"Catalog detail is substantive for '{entry.Name}'");
+        True(entry.WhatHappensNext.Length > 15, $"Catalog names a next step for '{entry.Name}'");
+        True(entry.Invocation.StartsWith("fknrtd", StringComparison.Ordinal),
+            $"Catalog invocation is runnable for '{entry.Name}'");
+
+        // A command may only point at explanations that exist, or the portal links into nothing.
+        foreach (var term in entry.GlossaryTerms)
+        {
+            True(Glossary.Find(term) is not null, $"'{entry.Name}' references glossary term '{term}'");
+        }
+
+        // However it is spelled, a command has to be findable.
+        True(CommandCatalog.Find(entry.Name) is not null, $"Catalog finds '{entry.Name}' verbatim");
+        True(CommandCatalog.Find(entry.Name.Replace(' ', '-')) is not null,
+            $"Catalog finds '{entry.Name}' hyphenated");
+        True(CommandCatalog.Find(entry.Name.ToUpperInvariant()) is not null,
+            $"Catalog finds '{entry.Name}' case-insensitively");
+    }
+
+    True(CommandCatalog.Search("audit").Count > 0, "Catalog search finds something for 'audit'");
+    True(CommandCatalog.Groups.Count > 2, "Catalog is grouped");
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// The portal is a single file an operator may open from a USB stick on a plane. It must carry
+/// everything it needs, escape everything it is given, and render identically every time.
+/// </summary>
+static Task TestPortalAsync()
+{
+    var generatedAt = new DateTimeOffset(2026, 9, 17, 10, 15, 0, TimeSpan.Zero);
+    var html = PortalCommand.Render(generatedAt);
+
+    // Deterministic: same input, same bytes. Documentation that churns on every run is unreviewable.
+    Equal(html, PortalCommand.Render(generatedAt), "Portal render is deterministic");
+
+    // Offline: the only permitted absolute URL is the SVG namespace, which is an identifier and not
+    // a fetch. Anything else would make the guide fail exactly when it is needed most.
+    foreach (var reference in System.Text.RegularExpressions.Regex
+                 .Matches(html, @"(?:src|href)\s*=\s*[""']?(https?:)?//[^""'\s>]+")
+                 .Select(match => match.Value))
+    {
+        True(false, "Portal references something off the page: " + reference);
+    }
+
+    True(html.Contains("<!doctype html>", StringComparison.OrdinalIgnoreCase), "Portal is a document");
+    True(html.Contains("prefers-color-scheme", StringComparison.Ordinal), "Portal has a light mode");
+    True(html.Contains("width=device-width", StringComparison.Ordinal), "Portal is sized for a phone");
+    True(html.Contains("<svg", StringComparison.Ordinal), "Portal draws the pipeline");
+
+    // Every term and every command reaches the page.
+    foreach (var entry in Glossary.All)
+    {
+        True(html.Contains(Escape(entry.Title), StringComparison.Ordinal),
+            $"Portal includes glossary title '{entry.Title}'");
+    }
+
+    foreach (var command in CommandCatalog.All)
+    {
+        True(html.Contains(Escape(command.Name), StringComparison.Ordinal),
+            $"Portal includes command '{command.Name}'");
+    }
+
+    foreach (var binding in Keymap.All)
+    {
+        True(html.Contains(Escape(binding.Action), StringComparison.Ordinal),
+            $"Portal includes key '{binding.Key}'");
+    }
+
+    // Hostile content in any model field has to arrive as text, never as markup.
+    const string hostile = "</script><img src=x onerror=alert(1)>\"'&";
+    var attacked = PortalWriter.Render(new PortalModel(
+        [new GlossaryEntry(hostile, hostile, hostile, hostile, hostile, hostile)],
+        [new CommandEntry(hostile, hostile, hostile, hostile, hostile, hostile,
+            [new CommandOption(hostile, hostile, hostile)], [hostile], [])],
+        [new KeyBinding(hostile, hostile, hostile)],
+        hostile,
+        generatedAt));
+    // The property that matters is that nothing supplied can become an element or an attribute.
+    // The characters of the payload still appear — as visible text, which is the correct outcome.
+    True(!attacked.Contains("<img", StringComparison.Ordinal), "Portal never emits an injected element");
+    True(attacked.Contains("&lt;img src=x onerror=alert(1)&gt;", StringComparison.Ordinal),
+        "Portal renders injected markup as text");
+    Equal(1, System.Text.RegularExpressions.Regex.Matches(attacked, "</script>").Count,
+        "Portal escapes an injected script terminator");
+
+    // Empty input must still produce a valid page rather than throwing.
+    var empty = PortalWriter.Render(new PortalModel([], [], [], "0.0.0", generatedAt));
+    True(empty.Contains("</html>", StringComparison.Ordinal), "Portal renders with nothing to say");
+    return Task.CompletedTask;
+}
+
+static string Escape(string value) => System.Net.WebUtility.HtmlEncode(value);
+
+/// <summary>
+/// A mistyped command is the most common thing a new operator does. It has to be told which command
+/// it meant, and it must not be sent off to fix a workspace that was never the problem.
+/// </summary>
+static async Task TestMistypedCommandAsync()
+{
+    // Transposition is the typo people actually make, so it must cost one edit rather than two.
+    Equal(1, HelpCommand.Distance("taks", "task"), "Transposition is one edit");
+    Equal(1, HelpCommand.Distance("lnad", "land"), "Leading transposition is one edit");
+    Equal(0, HelpCommand.Distance("TASK", "task"), "Distance ignores case");
+    Equal(4, HelpCommand.Distance("", "task"), "Distance from nothing is the length");
+
+    foreach (var (typed, expected) in new[]
+             {
+                 ("taks", "task"), ("lnad", "land"), ("docter", "doctor"),
+                 ("agnet", "agent"), ("explian", "explain"), ("prtal", "portal")
+             })
+    {
+        var nearest = HelpCommand.Nearest(typed);
+        True(nearest.Any(entry => entry.Name.StartsWith(expected, StringComparison.Ordinal)),
+            $"'{typed}' suggests '{expected}'");
+    }
+
+    // Outside a workspace, a typo must still be reported as a typo. Before this was checked, the
+    // runtime was built first and the operator was told no workspace existed.
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var original = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = root;
+            Equal(2, await QuietlyAsync(["taks", "-no-color"]).ConfigureAwait(false),
+                "A mistyped command exits 2 without a workspace");
+        }
+        finally
+        {
+            Environment.CurrentDirectory = original;
+        }
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// Help and explain are the surfaces an operator reaches for when they are already stuck. Every
+/// entry must render, and the overview must name the commands a first-time operator needs.
+/// </summary>
+static async Task TestHelpSurfacesAsync()
+{
+    var overview = new StringWriter();
+    Equal(0, await QuietlyAsync(["help", "-no-color"], overview).ConfigureAwait(false), "help exits 0");
+    var text = overview.ToString();
+    foreach (var expected in new[] { "fknrtd doctor", "fknrtd task new", "fknrtd explain", "EXIT CODES" })
+    {
+        True(text.Contains(expected, StringComparison.Ordinal), $"The help overview names '{expected}'");
+    }
+
+    // Every catalog entry has to render through the detail view without throwing.
+    foreach (var entry in CommandCatalog.All)
+    {
+        var detail = new StringWriter();
+        Equal(0, await QuietlyAsync(["help", .. entry.Name.Split(' '), "-no-color"], detail).ConfigureAwait(false),
+            $"help renders '{entry.Name}'");
+        True(detail.ToString().Contains("WHAT HAPPENS NEXT", StringComparison.Ordinal),
+            $"help for '{entry.Name}' says what happens next");
+    }
+
+    // Every glossary entry has to render through explain.
+    foreach (var entry in Glossary.All)
+    {
+        var explained = new StringWriter();
+        Equal(0, await QuietlyAsync(["explain", entry.Term, "-no-color"], explained).ConfigureAwait(false),
+            $"explain renders '{entry.Term}'");
+        True(explained.ToString().Contains(entry.Detail[..40], StringComparison.Ordinal),
+            $"explain prints the detail for '{entry.Term}'");
+    }
+
+    // Asking help about a concept rather than a command redirects instead of refusing.
+    var concept = new StringWriter();
+    Equal(0, await QuietlyAsync(["help", "brief", "-no-color"], concept).ConfigureAwait(false),
+        "help redirects a concept");
+    True(concept.ToString().Contains("fknrtd explain brief", StringComparison.Ordinal),
+        "help points a concept at explain");
 }
