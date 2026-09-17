@@ -3,7 +3,7 @@
 ## 2026-09-17 — the usability programme
 
 Revision: 1.0.0
-Commit verified: `d5e2d78e4b794a2e32c3eadfee0ed594a5678f55`
+Commit verified: `edb3615f5d7f0341b593adedf8513d056573b973`
 (branch `feature/standalone-workspaces-and-tool-management`)
 
 Environment: .NET SDK 10.0.401, Git 2.55.0.windows.4, Windows 11 (10.0.26200).
@@ -12,10 +12,18 @@ Every result below was produced by running the command on this machine against t
 named above, in a freshly created temporary Git repository. Nothing here is inferred, and
 nothing is reported that was not run.
 
+The command table is produced by `scripts/verify.sh`, which runs each one and compares its
+exit code to the one recorded here. It exists because this table was previously retyped by
+hand after each change, and a record maintained that way drifts from what was actually run:
+the first time the script was executed it found that `claim add` was listed with flags the
+command does not have, and that the standalone-workspace rows had been running inside a
+subdirectory of the temporary Git repository — so the case they existed to cover, a workspace
+with no Git at all, had never once been tested.
+
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 82/82 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 84/84 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -37,6 +45,11 @@ nothing is reported that was not run.
 | `fknrtd explain brief`, `fknrtd help task diff`, `fknrtd version` | Exit 0. |
 | `fknrtd portal -out <file>` | Exit 0; 80 terms, 44 commands, 26 keys, 25 settings, 31 log entries, 4 embedded screens. |
 | `fknrtd taks` | Exit 2; reported the typo and named the commands meant. |
+| `fknrtd task list -jsno` | Exit 2; named the option, suggested `-json`, and did not print a table. |
+| `fknrtd agent list -verbose` | Exit 2; named the option and listed the two the command accepts. |
+| `fknrtd init -yes` outside any Git repository | Exit 0; workspace created in standalone mode. |
+| `fknrtd doctor` in a standalone workspace | Exit 0. |
+| `fknrtd dashboard -once` in a standalone workspace | Exit 0; one frame. |
 
 The exit codes documented but never observed were checked directly, because writing one down
 is not the same as having seen it:
