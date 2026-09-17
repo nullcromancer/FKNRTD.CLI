@@ -1133,6 +1133,15 @@ static Task TestWizardStepsAreExplainedAsync()
                 "Every wizard step shows an explanation");
             True(frame.Contains("Esc cancel", StringComparison.Ordinal),
                 "Every wizard step says how to leave it");
+            // Every option on a choice step must be drawn. Hiding one on a two-option step hides
+            // that there was a choice at all, which is worse than any amount of scrolling.
+            var options = Scenes.OptionsOnScreen(frame);
+            if (options > 0)
+            {
+                True(frame.Contains("▸", StringComparison.Ordinal),
+                    "A choice step marks the selected option");
+            }
+
             if (Scenes.Press(wizard, ConsoleKey.Enter) == OverlayResult.Submit)
             {
                 break;
@@ -1326,11 +1335,31 @@ static Task TestWizardValidationExplainsItselfAsync()
     Scenes.Press(choices, ConsoleKey.Enter);
     Scenes.Type(choices, "A brief long enough to be accepted by the form.");
     Scenes.Press(choices, ConsoleKey.Enter);
-    Scenes.Press(choices, ConsoleKey.DownArrow);
+    Scenes.Press(choices, ConsoleKey.DownArrow);   // review: "let me look"
+    Scenes.Press(choices, ConsoleKey.Enter);
+    Scenes.Press(choices, ConsoleKey.DownArrow);   // lead: move off the default
     Scenes.Press(choices, ConsoleKey.Tab, shift: true);
     Scenes.Press(choices, ConsoleKey.Enter);
     Scenes.Press(choices, ConsoleKey.Enter);
     Equal("codex", choices.Value("lead"), "A moved choice survives stepping back and returning");
+
+    // The common path is title, brief, Enter: everything after the brief already has a default that
+    // is correct for this workspace, and a step skipped for that reason must still carry its answer.
+    var quick = TaskWizard.Create(Scenes.SampleConfig());
+    Scenes.Type(quick, "Quick task");
+    Scenes.Press(quick, ConsoleKey.Enter);
+    Scenes.Type(quick, "A brief long enough to be accepted by the form.");
+    Scenes.Press(quick, ConsoleKey.Enter);
+    Equal(OverlayResult.Continue, Scenes.Press(quick, ConsoleKey.Enter), "Accepting the defaults advances");
+    Equal(OverlayResult.Submit, Scenes.Press(quick, ConsoleKey.Enter), "Three answers create a task");
+
+    Equal("Quick task", quick.Value("title"), "The quick path keeps the title");
+    Equal("claude", quick.Value("lead"), "A skipped step still carries its default");
+    Equal("codex", quick.Value("implementer"), "A skipped default can depend on an earlier one");
+    Equal("claude", quick.Value("auditor"), "The auditor defaults to the lead");
+    Equal("main", quick.Value("base"), "The base branch defaults to the workspace's");
+    Equal(2, quick.Lines("verify").Count, "The verification commands default to the workspace's");
+    Equal("1", quick.Value("repairs"), "The repair budget defaults to the workspace's");
     return Task.CompletedTask;
 }
 

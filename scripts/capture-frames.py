@@ -32,6 +32,7 @@ FRAMES = {
     "dash-med": ("overview", 100, 30),
     "dash-narrow": ("overview", 74, 26),
     "new-task": ("wizard-brief", 118, 34),
+    "review": ("wizard-review", 118, 26),
     "choose-agent": ("wizard-auditor", 118, 30),
     "help": ("help-search", 112, 34),
     "commands": ("palette", 112, 32),

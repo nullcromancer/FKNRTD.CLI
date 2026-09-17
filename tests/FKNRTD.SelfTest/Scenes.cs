@@ -12,7 +12,7 @@ internal static class Scenes
 {
     public static readonly string[] Names =
     [
-        "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
+        "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
         "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
     ];
 
@@ -48,12 +48,23 @@ internal static class Scenes
                 Type(wizard, "Requests to POST /login from one IP are limited to 5 a minute.");
                 return wizard;
             }
+            case "wizard-review":
+            {
+                var wizard = TaskWizard.Create(config);
+                Type(wizard, "Add rate limiting to the login endpoint");
+                Press(wizard, ConsoleKey.Enter);
+                Type(wizard, "Requests to POST /login from one IP are limited to 5 a minute.");
+                Press(wizard, ConsoleKey.Enter);
+                return wizard;
+            }
             case "wizard-auditor":
             {
                 var wizard = TaskWizard.Create(config);
                 Type(wizard, "Add rate limiting to the login endpoint");
                 Press(wizard, ConsoleKey.Enter);
                 Type(wizard, "Requests to POST /login from one IP are limited to 5 a minute.");
+                Press(wizard, ConsoleKey.Enter);
+                Press(wizard, ConsoleKey.DownArrow);   // review: "let me look"
                 Press(wizard, ConsoleKey.Enter);
                 Press(wizard, ConsoleKey.Enter);
                 Press(wizard, ConsoleKey.Enter);
@@ -162,6 +173,10 @@ internal static class Scenes
                 return null;
         }
     }
+
+    /// <summary>How many option rows a rendered frame is showing, by its selection markers.</summary>
+    public static int OptionsOnScreen(string frame) =>
+        frame.Split((char)10).Count(line => line.Contains((char)0x25b8));
 
     public static void Type(IOverlay overlay, string text)
     {

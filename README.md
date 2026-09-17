@@ -166,6 +166,11 @@ already correct for this workspace.
 
 ![The guided task builder](docs/screenshots/new-task.png)
 
+Once the brief is written, everything else already has a default that is right for this workspace —
+so the common path is a title, a brief, and Enter. The option says exactly what accepting it means.
+
+![Accepting the defaults](docs/screenshots/review.png)
+
 Choosing who does the work says what each role may touch, and warns about an agent that could not
 do the job — one that is not on `PATH`, or that cannot return a verdict and so cannot audit.
 

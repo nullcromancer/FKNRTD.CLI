@@ -47,7 +47,22 @@ internal static class TaskWizard
             },
             new()
             {
+                Key = "review",
+                Question = "Everything else is already set for this workspace. Change any of it?",
+                GlossaryTerm = "task",
+                Input = WizardInput.Choice,
+                Default = _ => "no",
+                Options = _ =>
+                [
+                    new WizardOption("no", "Create it now", Summarise(config, enabled), Recommended: true),
+                    new WizardOption("yes", "Let me look",
+                        "walks the agents, the branch, the checks and the repair budget")
+                ]
+            },
+            new()
+            {
                 Key = "lead",
+                Applies = Reviewing,
                 Question = "Which agent should read the code and write the plan?",
                 GlossaryTerm = "lead",
                 Input = WizardInput.Choice,
@@ -57,6 +72,7 @@ internal static class TaskWizard
             new()
             {
                 Key = "implementer",
+                Applies = Reviewing,
                 Question = "Which agent should make the change?",
                 GlossaryTerm = "implementer",
                 Input = WizardInput.Choice,
@@ -71,6 +87,7 @@ internal static class TaskWizard
             new()
             {
                 Key = "auditor",
+                Applies = Reviewing,
                 Question = "Which agent should independently judge the result?",
                 GlossaryTerm = "auditor",
                 Input = WizardInput.Choice,
@@ -86,13 +103,14 @@ internal static class TaskWizard
                 Key = "base",
                 Question = "Which branch should this start from and merge back into?",
                 GlossaryTerm = "base-ref",
-                Applies = _ => git,
+                Applies = values => git && Reviewing(values),
                 Default = _ => config.DefaultBaseRef,
                 Placeholder = string.IsNullOrWhiteSpace(config.DefaultBaseRef) ? "main" : config.DefaultBaseRef
             },
             new()
             {
                 Key = "verify",
+                Applies = Reviewing,
                 Question = "Which commands decide whether the work is correct? One per line.",
                 GlossaryTerm = "verification",
                 Input = WizardInput.Commands,
@@ -102,6 +120,7 @@ internal static class TaskWizard
             new()
             {
                 Key = "repairs",
+                Applies = Reviewing,
                 Question = "How many times may a failed verification be handed back for repair?",
                 GlossaryTerm = "repair-round",
                 Input = WizardInput.Number,
@@ -128,6 +147,30 @@ internal static class TaskWizard
         };
 
         return new Wizard("NEW TASK", Theme.Blue, steps);
+    }
+
+    /// <summary>
+    /// Whether the operator asked to see the settings after the brief. They all have a default that
+    /// is already right for the workspace, so the form skips them unless asked.
+    /// </summary>
+    private static bool Reviewing(IReadOnlyDictionary<string, string> values) =>
+        values.GetValueOrDefault("review", "no") == "yes";
+
+    /// <summary>
+    /// What accepting the defaults actually means, spelled out on the option itself. Accepting them
+    /// blind would be exactly the kind of thing this whole form exists to stop.
+    /// </summary>
+    private static string Summarise(FknrtdConfig config, IReadOnlyList<AgentDefinition> enabled)
+    {
+        var lead = Prefer(enabled, "claude", 0);
+        var implementer = enabled
+                              .FirstOrDefault(agent => !agent.Id.Equals(lead, StringComparison.OrdinalIgnoreCase))
+                              ?.Id
+                          ?? Prefer(enabled, "codex", 1);
+        var checks = config.DefaultVerificationCommands.Count == 0
+            ? "nothing verifies it"
+            : "verified by " + string.Join(", ", config.DefaultVerificationCommands);
+        return $"{lead} plans, {implementer} implements, {lead} audits; {checks}";
     }
 
     /// <summary>The message-bus form behind M.</summary>

@@ -210,12 +210,38 @@ internal sealed class Wizard : IOverlay
         var next = FirstApplicable(_index + 1, 1);
         if (next < 0)
         {
+            FillUnanswered();
             return OverlayResult.Submit;
         }
 
         _index = next;
         LoadStep();
         return OverlayResult.Continue;
+    }
+
+    /// <summary>
+    /// Gives every step that was never reached its default, in order, before the answers are read.
+    /// A step skipped by <see cref="WizardStep.Applies"/> is skipped because its default is already
+    /// right — not because it has no answer — and the caller must not receive an empty string for it.
+    /// Order matters: a later default can depend on an earlier one.
+    /// </summary>
+    private void FillUnanswered()
+    {
+        foreach (var step in _steps)
+        {
+            if (_values.ContainsKey(step.Key))
+            {
+                continue;
+            }
+
+            var fallback = step.Default(_values);
+            if (fallback.Length == 0 && step.Input == WizardInput.Choice)
+            {
+                fallback = step.Options(_values).FirstOrDefault()?.Value ?? string.Empty;
+            }
+
+            _values[step.Key] = fallback;
+        }
     }
 
     private WizardStep? Current => _index >= 0 && _index < _steps.Count ? _steps[_index] : null;
@@ -467,7 +493,10 @@ internal sealed class Wizard : IOverlay
         }
 
         _choice = Math.Clamp(_choice, 0, options.Count - 1);
-        var visible = Math.Max(1, Math.Min(options.Count, lastRow - row - 7));
+        // Measure already gave the panel a row per option, so the only ceiling here is the panel
+        // itself. The old constant guess predates content-sized panels and could hide an option
+        // entirely — which on a two-option step means hiding that there was a choice at all.
+        var visible = Math.Max(1, Math.Min(options.Count, lastRow - row + 1));
         var first = Math.Clamp(_choice - visible / 2, 0, Math.Max(0, options.Count - visible));
         var labelWidth = Math.Min(16, options.Max(option => Text.DisplayWidth(option.Label)) + 1);
 
