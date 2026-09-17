@@ -878,11 +878,17 @@ internal static class Reference
         var id = task.Id;
         return task.Status switch
         {
-            WorkflowStatus.Queued => onDashboard
-                ? "Press Enter to run it. The lead agent starts first and nothing is written until " +
-                  "the implement stage."
-                : $"Run it with 'fknrtd task run {id}'. The lead agent starts first and nothing is " +
-                  "written until the implement stage.",
+            WorkflowStatus.Queued => config.Mode == WorkspaceMode.Git
+                ? onDashboard
+                    ? "Press Enter to run it. A worktree is checked out first, then the lead agent " +
+                      "plans; your own checkout is not touched at any point."
+                    : $"Run it with 'fknrtd task run {id}'. A worktree is checked out first, then " +
+                      "the lead agent plans; your own checkout is not touched at any point."
+                : onDashboard
+                    ? "Press Enter to run it. This is a standalone workspace, so the agents work in " +
+                      "this folder itself — commit anything you care about before you start."
+                    : $"Run it with 'fknrtd task run {id}'. This is a standalone workspace, so the " +
+                      "agents work in this folder itself — commit anything you care about first.",
 
             WorkflowStatus.Running => onDashboard
                 ? "Press L to watch the live output of the current stage. Press C if you want it to " +
@@ -909,17 +915,32 @@ internal static class Reference
                     : $"The verified work is already in this folder. Record it as final with " +
                       $"'fknrtd task land {id} -confirm LAND'.",
 
-            WorkflowStatus.Landed => onDashboard
-                ? "This is done and merged. Press X to remove its worktree when you no longer need " +
-                  "to read it."
-                : $"This is done and merged. Reclaim its worktree with " +
-                  $"'fknrtd task cleanup {id} -confirm REMOVE' when you no longer need to read it.",
+            WorkflowStatus.Landed => config.Mode == WorkspaceMode.Git
+                ? onDashboard
+                    ? $"This is done and merged into {Blank(task.BaseRef)}. Press X to remove its " +
+                      "worktree when you no longer need to read it; that deletes the task's branch " +
+                      "too, now that it has landed."
+                    : $"This is done and merged into {Blank(task.BaseRef)}. Reclaim its worktree " +
+                      $"with 'fknrtd task cleanup {id} -confirm REMOVE' when you no longer need to " +
+                      "read it; that deletes the task's branch too, now that it has landed."
+                : "This is done. Nothing was merged, because a standalone workspace has no branch " +
+                  "to merge — the verified work is the folder you are standing in. There is no " +
+                  "worktree to clean up either.",
 
-            WorkflowStatus.Cancelled => onDashboard
-                ? "Press R to reset it, then Enter to run again. Anything the implementer had " +
-                  "already written is still in the worktree."
-                : $"Reset and run it again with 'fknrtd task retry {id}'. Anything the implementer " +
-                  "had already written is still in the worktree.",
+            WorkflowStatus.Cancelled => config.Mode == WorkspaceMode.Git
+                ? onDashboard
+                    ? "Press R to reset it, then Enter to run again. Anything the implementer had " +
+                      "already written is still in its worktree, away from your checkout."
+                    : $"Reset and run it again with 'fknrtd task retry {id}'. Anything the " +
+                      "implementer had already written is still in its worktree, away from your " +
+                      "checkout."
+                : onDashboard
+                    ? "Press R to reset it, then Enter to run again. Anything the implementer had " +
+                      $"already written is in this folder right now — press V to read it before " +
+                      "you decide."
+                    : $"Reset and run it again with 'fknrtd task retry {id}'. Anything the " +
+                      "implementer had already written is in this folder right now; read it with " +
+                      $"'fknrtd task diff {id}' before you decide.",
 
             _ => onDashboard
                 ? "Press L to read the log for whatever this is waiting on."

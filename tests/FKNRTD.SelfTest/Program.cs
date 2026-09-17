@@ -134,7 +134,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A landing Git refuses is reported as a refusal", TestRefusedLandingAsync),
     ("An empty list explains itself", TestEmptyListsExplainThemselvesAsync),
     ("Scrolling a log stays inside the log", TestLogScrollStaysInTheFileAsync),
-    ("The help screen writes itself out as a page", TestHelpWritesThePageAsync)
+    ("The help screen writes itself out as a page", TestHelpWritesThePageAsync),
+    ("What to do next fits the workspace it is in", TestNextStepFitsTheWorkspaceAsync)
 };
 
 var failures = new List<string>();
@@ -3044,6 +3045,71 @@ static Task TestHelpWritesThePageAsync()
         True(page.Contains(binding.Action, StringComparison.Ordinal),
             $"The page documents the {binding.Key} key");
     }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// The advice under "what to do next", for every status and both workspace modes. It is the most
+/// action-guiding text the product has - `task show` and the inspector both print it - and three of
+/// its seven branches had been written as though every workspace were Git-backed. A standalone
+/// workspace has no worktree and no branch, so advice that names either is telling somebody to do
+/// something that is not available to them.
+/// </summary>
+static Task TestNextStepFitsTheWorkspaceAsync()
+{
+    var git = Scenes.SampleConfig();
+    var standalone = git with { Mode = WorkspaceMode.Standalone, DefaultBaseRef = string.Empty };
+
+    // Phrases that point the operator at something a standalone workspace does not have. Naming
+    // one in order to deny it is fine and useful - "there is no worktree to clean up either" is
+    // exactly what somebody needs to read - so what is checked is the directing forms.
+    var pointsAtGit = new[]
+    {
+        "its worktree", "in the worktree", "task cleanup", "Press X", "and merged", "its branch"
+    };
+
+    foreach (var status in Enum.GetValues<WorkflowStatus>())
+    {
+        var task = new WorkflowTask
+        {
+            Id = "FKN-20260917-000000-next",
+            Title = "A task",
+            Brief = "Something to do.",
+            Status = status,
+            BaseRef = "main",
+            BranchName = "fknrtd/next",
+            WorktreePath = "/src/aurora-api/.fknrtd/worktrees/next"
+        };
+
+        foreach (var onDashboard in new[] { true, false })
+        {
+            var advice = Reference.NextStep(task, standalone, onDashboard);
+            True(advice.Trim().Length > 0, $"{status} has advice in a standalone workspace");
+            foreach (var phrase in pointsAtGit)
+            {
+                True(!advice.Contains(phrase, StringComparison.OrdinalIgnoreCase),
+                    $"Standalone advice for {status} (onDashboard: {onDashboard}) does not point at " +
+                    $"'{phrase}': {advice}");
+            }
+
+            // Some statuses genuinely give the same advice either way - a running task is watched
+            // with L and stopped with C whatever the workspace is - so the two are not required to
+            // differ. What is required is that the Git one is there and says something.
+            var gitAdvice = Reference.NextStep(task, git, onDashboard);
+            True(gitAdvice.Trim().Length > 0, $"{status} has advice in a Git workspace");
+        }
+    }
+
+    // The two that matter most, spelled out: a landed standalone task merged nothing, and a
+    // cancelled one left its edits in the operator's own folder.
+    var landed = new WorkflowTask { Id = "x", Status = WorkflowStatus.Landed };
+    True(Reference.NextStep(landed, standalone).Contains("Nothing was merged", StringComparison.Ordinal),
+        "A landed standalone task says nothing was merged");
+
+    var cancelled = new WorkflowTask { Id = "x", Status = WorkflowStatus.Cancelled };
+    True(Reference.NextStep(cancelled, standalone).Contains("in this folder", StringComparison.Ordinal),
+        "A cancelled standalone task says where the half-finished edits are");
 
     return Task.CompletedTask;
 }
