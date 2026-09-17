@@ -56,6 +56,10 @@ public static class Keymap
         new("A", "agents",
             "Lists the configured agents: which are enabled, which can actually be found on PATH, " +
             "and which are equipped to act as an auditor."),
+        new("E", "events",
+            "Opens the workspace history: every task created, stage started and finished, conflict " +
+            "raised and agent check-in, newest first and searchable. This is where you look when " +
+            "you want to know what actually happened rather than what the current state implies."),
         new("/", "commands",
             "Opens the command palette: every action the dashboard can take, searchable by name, " +
             "with the reason stated for any that cannot be taken right now.",

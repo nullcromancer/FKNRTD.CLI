@@ -149,6 +149,73 @@ internal static class Reference
         return new InfoPanel("TASK", Theme.Blue, blocks);
     }
 
+    /// <summary>
+    /// The workspace history behind <c>E</c>. The overview's events panel shows the last few lines,
+    /// which is the wrong instrument for "what happened an hour ago". This is searchable and keeps
+    /// the severity legible without relying on colour.
+    /// </summary>
+    public static InfoPanel Events(IReadOnlyList<FknrtdEvent> events, DateTimeOffset now) => new(
+        "HISTORY",
+        Theme.Cyan,
+        filter =>
+        {
+            var matching = events
+                .Where(item => filter.Length == 0 ||
+                               item.Message.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                               item.Type.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                               item.Severity.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                               (item.TaskId?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false))
+                .OrderByDescending(item => item.Timestamp)
+                .ToArray();
+
+            if (matching.Length == 0)
+            {
+                return
+                [
+                    new InfoParagraph(events.Count == 0
+                        ? "Nothing has happened in this workspace yet. Events are recorded as tasks are " +
+                          "created, stages run, and agents report in."
+                        : "No event matches that. Try a task id, a severity such as error, or an event " +
+                          "type such as stage.failed.", Theme.Muted)
+                ];
+            }
+
+            var blocks = new List<InfoBlock>();
+            foreach (var item in matching)
+            {
+                blocks.Add(new InfoLine(
+                    $"{Severity(item.Severity)} {Text.Age(item.Timestamp, now)} ago",
+                    item.Message,
+                    EventColour(item.Severity),
+                    Bold: item.Severity >= EventSeverity.Error));
+                blocks.Add(new InfoParagraph(
+                    item.TaskId is null ? item.Type : $"{item.Type}  ·  {item.TaskId}",
+                    Theme.Muted, Indent: 2));
+            }
+
+            return blocks;
+        },
+        filterHint: "a task id, a severity, or part of a message");
+
+    private static string Severity(EventSeverity severity) => severity switch
+    {
+        EventSeverity.Success => "OK   ",
+        EventSeverity.Warning => "WARN ",
+        EventSeverity.Error => "ERROR",
+        EventSeverity.Critical => "FATAL",
+        EventSeverity.Trace => "trace",
+        _ => "info "
+    };
+
+    private static Rgb EventColour(EventSeverity severity) => severity switch
+    {
+        EventSeverity.Success => Theme.Green,
+        EventSeverity.Warning => Theme.Amber,
+        EventSeverity.Error or EventSeverity.Critical => Theme.Red,
+        EventSeverity.Trace => Theme.Muted,
+        _ => Theme.Foreground
+    };
+
     /// <summary>The pre-flight checks behind <c>D</c>, with what a failure would actually cost.</summary>
     public static InfoPanel Doctor(IReadOnlyList<DoctorCheck> checks)
     {

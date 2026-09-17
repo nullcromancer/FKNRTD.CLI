@@ -839,6 +839,7 @@ internal sealed class DashboardApp
             ConsoleKey.I => "I",
             ConsoleKey.A => "A",
             ConsoleKey.D => "D",
+            ConsoleKey.E => "E",
             ConsoleKey.Tab => "Tab",
             // '?' and '/' have no ConsoleKey of their own and arrive differently on different
             // keyboard layouts, so they are matched on the character instead.
@@ -925,6 +926,11 @@ internal sealed class DashboardApp
                 _toast = "Running the pre-flight checks...";
                 _overlay = Reference.Doctor(await _doctor.RunAsync(cancellationToken).ConfigureAwait(false));
                 _toast = "Ready";
+                break;
+            case "E":
+                _overlay = Reference.Events(
+                    await _store.LoadEventsAsync(500, cancellationToken).ConfigureAwait(false),
+                    snapshot.CapturedAt);
                 break;
             case "?":
                 _overlay = Reference.Help();
