@@ -715,8 +715,7 @@ internal sealed class DashboardApp
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream);
-            (lines, total) = ReadWindow(reader, _logScroll, Math.Max(0, inner.Bottom - row - 1));
+            (lines, total) = ReadWindow(stream, _logScroll, Math.Max(0, inner.Bottom - row - 1));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -876,14 +875,7 @@ internal sealed class DashboardApp
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream);
-            var lines = 0;
-            while (reader.ReadLine() is not null)
-            {
-                lines++;
-            }
-
-            return Math.Max(0, lines - 1);
+            return Math.Max(0, CountLines(stream) - 1);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -899,23 +891,117 @@ internal sealed class DashboardApp
     /// whole file is walked rather than seeked because a log is being appended to while it is read,
     /// and a byte offset into a growing UTF-8 stream is not a line boundary.
     /// </summary>
-    internal static (string[] Lines, int Total) ReadWindow(TextReader reader, int skipFromEnd, int count)
+    internal static (string[] Lines, int Total) ReadWindow(Stream stream, int skipFromEnd, int count)
     {
-        var all = new List<string>();
-        while (reader.ReadLine() is { } line)
+        // Two passes over the bytes, and strings only for the rows that will be drawn. Reading the
+        // file into a list first was simple and cost 58 MB of allocation per refresh against a
+        // 26 MB log — an ordinary size for a long task with machine-readable output — because
+        // every one of its hundred and twenty thousand lines became a string and was then thrown
+        // away. That happened once a second, on the one screen somebody watches while they wait.
+        var total = CountLines(stream);
+        if (count <= 0 || total == 0)
         {
-            all.Add(line);
+            return ([], total);
         }
 
-        if (count <= 0 || all.Count == 0)
+        var skip = Math.Clamp(skipFromEnd, 0, Math.Max(0, total - count));
+        var first = Math.Max(0, total - skip - count);
+
+        // Skip in bytes, not in lines. ReadLine allocates a string for every line it passes over
+        // whether or not the caller keeps it, so reading forward to the window and discarding as it
+        // went still allocated one string per line of the file - which was most of the cost and the
+        // reason the first attempt at this changed the timing and almost nothing else.
+        stream.Seek(OffsetOfLine(stream, first), SeekOrigin.Begin);
+        using var reader = new StreamReader(stream, leaveOpen: true);
+        var lines = new List<string>(count);
+        while (lines.Count < count && reader.ReadLine() is { } line)
         {
-            return ([], all.Count);
+            lines.Add(line);
         }
 
-        var skip = Math.Clamp(skipFromEnd, 0, Math.Max(0, all.Count - count));
-        var end = all.Count - skip;
-        var start = Math.Max(0, end - count);
-        return (all.GetRange(start, end - start).ToArray(), all.Count);
+        return (lines.ToArray(), total);
+    }
+
+    /// <summary>The byte a line ends with. Written as a number because the escape keeps being eaten.</summary>
+    private const byte Newline = 10;
+
+    /// <summary>
+    /// The byte the given line starts at, found by counting newlines. Line zero starts at zero.
+    /// </summary>
+    private static long OffsetOfLine(Stream stream, int index)
+    {
+        if (index <= 0)
+        {
+            return 0;
+        }
+
+        stream.Seek(0, SeekOrigin.Begin);
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(64 * 1024);
+        try
+        {
+            long offset = 0;
+            var seen = 0;
+            int read;
+            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                for (var position = 0; position < read; position++)
+                {
+                    offset++;
+                    if (buffer[position] != Newline)
+                    {
+                        continue;
+                    }
+
+                    if (++seen == index)
+                    {
+                        return offset;
+                    }
+                }
+            }
+
+            return offset;
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    /// <summary>
+    /// How many lines a stream holds, counted from its bytes. The footer says "lines 40-64 of 120000"
+    /// and that total is the only reason the whole file has to be touched at all; doing it this way
+    /// touches it without building anything.
+    /// </summary>
+    private static int CountLines(Stream stream)
+    {
+        stream.Seek(0, SeekOrigin.Begin);
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(64 * 1024);
+        try
+        {
+            var lines = 0;
+            var lastByte = 0;
+            int read;
+            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                for (var index = 0; index < read; index++)
+                {
+                    if (buffer[index] == (byte)'\n')
+                    {
+                        lines++;
+                    }
+                }
+
+                lastByte = buffer[read - 1];
+            }
+
+            // A final line with no newline after it is still a line. A file that ends with one is
+            // not two lines, which is the off-by-one this shape invites.
+            return lastByte == 0 ? lines : lastByte == (byte)'\n' ? lines : lines + 1;
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     private static void RenderFooter(

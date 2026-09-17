@@ -35,6 +35,43 @@ if (args.FirstOrDefault() == "render")
 // What a refresh costs. The loop takes a snapshot and draws a frame once a second; if either were
 // slower than the interval the dashboard would spend its life behind, and neither had been timed.
 //   dotnet run --project tests/FKNRTD.SelfTest -c Release -- bench
+// How the log view behaves against a log an agent actually produces. A long task with
+// machine-readable output reaches tens of megabytes.
+//   dotnet run --project tests/FKNRTD.SelfTest -c Release -- logbench <path>
+if (args.FirstOrDefault() == "logbench")
+{
+    var logPath = args.Length > 1
+        ? args[1]
+        : Path.Combine(Path.GetTempPath(), "fknrtd-biglog.log");
+    if (!File.Exists(logPath))
+    {
+        Console.WriteLine("no log at " + logPath);
+        return 1;
+    }
+
+    var bytes = new FileInfo(logPath).Length;
+    Console.WriteLine($"{bytes / 1024.0 / 1024.0:0.0} MB");
+
+    var before = GC.GetTotalAllocatedBytes();
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    var total = 0;
+    for (var pass = 0; pass < 5; pass++)
+    {
+        using var stream = new FileStream(logPath, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+            var window = DashboardApp.ReadWindow(stream, 0, 25);
+        total = window.Total;
+    }
+
+    var allocated = GC.GetTotalAllocatedBytes() - before;
+    Console.WriteLine($"{total} lines, showing 25");
+    Console.WriteLine($"{clock.Elapsed.TotalMilliseconds / 5:0.0} ms per read");
+    Console.WriteLine($"{allocated / 5.0 / 1024 / 1024:0.0} MB allocated per read");
+    Console.WriteLine();
+    Console.WriteLine("The log view does one of these per refresh, at 1000 ms by default.");
+    return 0;
+}
+
 if (args.FirstOrDefault() == "bench")
 {
     var benchRoot = Path.Combine(Path.GetTempPath(), "fknrtd-bench-" + Guid.NewGuid().ToString("N")[..8]);
@@ -248,7 +285,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Installing the statusline keeps existing settings", TestStatusLineInstallKeepsExistingSettingsAsync),
     ("The output observer survives anything an agent prints", TestAgentOutputObserverSurvivesAnythingAsync),
     ("An age reads like a time", TestAgeReadsLikeATimeAsync),
-    ("Every label on the main screen leads somewhere", TestEveryLabelOnTheMainScreenLeadsSomewhereAsync)
+    ("Every label on the main screen leads somewhere", TestEveryLabelOnTheMainScreenLeadsSomewhereAsync),
+    ("The log window is right at scale and at its edges", TestLogWindowAtScaleAsync)
 };
 
 var failures = new List<string>();
@@ -2033,30 +2071,30 @@ static Task TestLogScrollbackAsync()
     var log = string.Join("\n", Enumerable.Range(1, 100).Select(number => $"line {number}"));
 
     // Following the tail shows the last lines and reports the file's real length.
-    var (tail, total) = DashboardApp.ReadWindow(new StringReader(log), skipFromEnd: 0, count: 10);
+    var (tail, total) = DashboardApp.ReadWindow(Streamed(log), skipFromEnd: 0, count: 10);
     Equal(100, total, "Window reports the whole file's length");
     Equal(10, tail.Length, "Tail window size");
     Equal("line 91", tail[0], "Tail window first line");
     Equal("line 100", tail[^1], "Tail window last line");
 
     // Scrolling back ten lines moves the window by exactly ten.
-    var (back, _) = DashboardApp.ReadWindow(new StringReader(log), skipFromEnd: 10, count: 10);
+    var (back, _) = DashboardApp.ReadWindow(Streamed(log), skipFromEnd: 10, count: 10);
     Equal("line 81", back[0], "Scrolled window first line");
     Equal("line 90", back[^1], "Scrolled window last line");
 
     // Scrolling past the top clamps to the first line rather than emptying the view.
-    var (top, _) = DashboardApp.ReadWindow(new StringReader(log), skipFromEnd: int.MaxValue / 2, count: 10);
+    var (top, _) = DashboardApp.ReadWindow(Streamed(log), skipFromEnd: int.MaxValue / 2, count: 10);
     Equal("line 1", top[0], "Scrolling past the top clamps to the first line");
     Equal(10, top.Length, "Clamped window is still full");
 
     // A window larger than the file shows the whole file, not a padded one.
-    var (all, allTotal) = DashboardApp.ReadWindow(new StringReader("only\nthree\nlines"), 0, 50);
+    var (all, allTotal) = DashboardApp.ReadWindow(Streamed("only\nthree\nlines"), 0, 50);
     Equal(3, allTotal, "Short file line count");
     Equal(3, all.Length, "Short file window");
 
     // Degenerate inputs return nothing rather than throwing.
-    Equal(0, DashboardApp.ReadWindow(new StringReader(log), 0, 0).Lines.Length, "Zero-height window");
-    Equal(0, DashboardApp.ReadWindow(new StringReader(string.Empty), 0, 10).Lines.Length, "Empty file");
+    Equal(0, DashboardApp.ReadWindow(Streamed(log), 0, 0).Lines.Length, "Zero-height window");
+    Equal(0, DashboardApp.ReadWindow(Streamed(string.Empty), 0, 10).Lines.Length, "Empty file");
     return Task.CompletedTask;
 }
 
@@ -2789,6 +2827,9 @@ static string Prose(string frame)
 
     return joined;
 }
+
+/// <summary>A seekable stream over a string, for the log-window tests.</summary>
+static Stream Streamed(string text) => new MemoryStream(new UTF8Encoding(false).GetBytes(text));
 
 static ConsoleKeyInfo Key(ConsoleKey key) => new((char)0, key, false, false, false);
 
@@ -5046,6 +5087,65 @@ static Task TestEveryLabelOnTheMainScreenLeadsSomewhereAsync()
     {
         True(Glossary.Find(term) is not null, $"'{term}' explains a mark the overview draws");
     }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// The log window against a log the size an agent really produces, and around the edges where byte
+/// arithmetic goes wrong.
+/// </summary>
+/// <remarks>
+/// The reader used to load the whole file to show twenty-five lines of it, once a second: 58 MB of
+/// allocation per refresh against a 26 MB log, on the one screen somebody watches while they wait.
+/// It counts newlines and seeks now, which is faster and allocates nothing per line - and moves the
+/// risk to off-by-ones in the offsets, which is what this checks.
+/// </remarks>
+static Task TestLogWindowAtScaleAsync()
+{
+    var newline = ((char)10).ToString();
+
+    static Stream Of(string text) => new MemoryStream(new UTF8Encoding(false).GetBytes(text));
+
+    // Fifty thousand lines, each identifiable, so a window off by one is visible rather than
+    // plausible.
+    var many = string.Join(newline, Enumerable.Range(1, 50_000).Select(n => $"line {n}"));
+
+    var (tail, total) = DashboardApp.ReadWindow(Of(many), skipFromEnd: 0, count: 25);
+    Equal(50_000, total, "It counts every line of a large log");
+    Equal(25, tail.Length, "and returns the window asked for");
+    Equal("line 49976", tail[0], "starting at the right line");
+    Equal("line 50000", tail[^1], "and ending at the last");
+
+    // Scrolled into the middle, where both the count and the offset have to be right.
+    var (middle, _) = DashboardApp.ReadWindow(Of(many), skipFromEnd: 20_000, count: 10);
+    Equal("line 29991", middle[0], "A window in the middle starts where it should");
+    Equal("line 30000", middle[^1], "and ends where it should");
+
+    // Exactly at the top, which is where an offset of zero and an offset of one look the same.
+    var (top, _) = DashboardApp.ReadWindow(Of(many), skipFromEnd: 49_990, count: 10);
+    Equal("line 1", top[0], "Scrolled to the very top, the first line is the first line");
+    Equal("line 10", top[^1], "and the window is full");
+
+    // A file that ends with a newline is not one line longer than the same file without.
+    Equal(3, DashboardApp.ReadWindow(Of("a" + newline + "b" + newline + "c"), 0, 10).Total,
+        "Three lines with no trailing newline");
+    Equal(3, DashboardApp.ReadWindow(Of("a" + newline + "b" + newline + "c" + newline), 0, 10).Total,
+        "Three lines with one");
+    Equal(1, DashboardApp.ReadWindow(Of("only"), 0, 10).Total, "One line with no newline at all");
+    Equal(0, DashboardApp.ReadWindow(Of(string.Empty), 0, 10).Total, "An empty file has no lines");
+
+    // Windows line endings, which is what the shell verification commands produce on this machine.
+    var crlf = "a" + (char)13 + (char)10 + "b" + (char)13 + (char)10 + "c";
+    var (mixed, mixedTotal) = DashboardApp.ReadWindow(Of(crlf), 0, 10);
+    Equal(3, mixedTotal, "Carriage returns do not add lines");
+    Equal("c", mixed[^1], "and do not survive into the text");
+
+    // A line longer than the read buffer, which is where a chunked byte scan loses count.
+    var huge = new string('x', 200_000);
+    var (big, bigTotal) = DashboardApp.ReadWindow(Of(huge + newline + "after"), 0, 10);
+    Equal(2, bigTotal, "A line longer than the buffer is still one line");
+    Equal("after", big[^1], "and the line after it is found");
 
     return Task.CompletedTask;
 }
