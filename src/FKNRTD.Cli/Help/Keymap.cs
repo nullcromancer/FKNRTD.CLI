@@ -121,7 +121,11 @@ public static class Keymap
             "physical key.",
             InFooter: true),
         new("?", "help",
-            "Opens the key reference and the searchable glossary of every term the product uses.",
+            "Opens the key reference and the searchable glossary of every term the product uses. " +
+            "Type to search it. F2 writes the whole thing out beside the workspace as a single " +
+            "self-contained web page - the same document 'fknrtd portal' produces - so the " +
+            "explanation is something you can keep rather than something that exists only while " +
+            "the dashboard is open.",
             InFooter: true, Essential: true),
         new("PgUp PgDn", "scroll the log",
             "In the log view, moves ten lines back or forward through the output. A failure is " +

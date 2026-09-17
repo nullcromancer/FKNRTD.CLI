@@ -61,7 +61,10 @@ internal static class Reference
 
             return blocks;
         },
-        filterHint: "a key, a word, or anything you do not recognise");
+        filterHint: "a key, a word, or anything you do not recognise",
+        // The one thing this panel could not do was let you keep it. F2 writes the whole reference
+        // out as a page you can open away from the terminal, or send to whoever asks you next.
+        action: (ConsoleKey.F2, "F2", "save all of this as a web page"));
 
     /// <summary>
     /// The full record of one task behind <c>I</c>. Each stage is shown with what that stage is for,

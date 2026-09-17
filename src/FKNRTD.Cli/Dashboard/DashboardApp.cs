@@ -1,3 +1,5 @@
+using System.Text;
+using FKNRTD.Commands;
 using FKNRTD.Domain;
 using FKNRTD.Help;
 using FKNRTD.Services;
@@ -1154,7 +1156,7 @@ internal sealed class DashboardApp
                 await ShowPromptsAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 break;
             case "?":
-                _overlay = Reference.Help();
+                OpenHelp();
                 break;
             case "/":
                 OpenPalette(snapshot);
@@ -1496,6 +1498,42 @@ internal sealed class DashboardApp
             {
                 _toast = "Could not create the task: " + exception.Message;
             }
+        };
+    }
+
+    /// <summary>
+    /// Opens the key reference and the glossary behind ?, and writes the whole thing out as a page
+    /// on F2. Everything the dashboard can explain was explained only while the dashboard was open;
+    /// this is the same reference in a form you can keep, or hand to whoever asks you next.
+    /// </summary>
+    private void OpenHelp()
+    {
+        _overlay = Reference.Help();
+        _overlayCompleted = (completed, _, _) =>
+        {
+            if (completed is not InfoPanel { ActionRequested: true })
+            {
+                return Task.CompletedTask;
+            }
+
+            // Beside the workspace rather than in the current directory, so it lands somewhere the
+            // operator can find again from the path the header is already showing them.
+            var destination = Path.Combine(
+                Path.GetDirectoryName(_store.Paths.Config) ?? _store.Paths.Root,
+                PortalCommand.DefaultFileName);
+            try
+            {
+                File.WriteAllText(destination, PortalCommand.Render(DateTimeOffset.UtcNow),
+                    new UTF8Encoding(false));
+                _toast = $"Wrote the whole reference to {destination}. Open it in a browser; it " +
+                         "needs no network.";
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                _toast = "Could not write the page: " + exception.Message;
+            }
+
+            return Task.CompletedTask;
         };
     }
 

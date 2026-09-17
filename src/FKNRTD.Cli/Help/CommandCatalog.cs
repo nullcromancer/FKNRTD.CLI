@@ -558,7 +558,8 @@ public static class CommandCatalog
             "program reads, so it cannot document a command that was removed or a key that never " +
             "existed. The file has no external references and opens correctly with no network. It " +
             "overwrites the destination and reads nothing from the workspace.",
-            "Open the generated file in a browser. Regenerate it after upgrading FKNRTD.CLI.",
+            "Open the generated file in a browser. Regenerate it after upgrading FKNRTD.CLI. The " +
+            "dashboard writes the same document on F2 from its help screen.",
             [new("-out", "<file>", "Where to write it. Defaults to fknrtd-portal.html here.")],
             ["fknrtd portal", "fknrtd portal -out docs/guide.html"],
             ["fknrtd", "workspace"],

@@ -49,9 +49,12 @@ internal sealed class InfoPanel : IOverlay
         _build = build;
         _filterHint = filterHint ?? string.Empty;
         _filter = filterHint is null ? null : new TextField();
-        // A panel that filters has already spent every letter key on the filter, so an action key
-        // would eat a character the operator meant to type. Only an unfiltered panel can offer one.
-        _action = _filter is null ? action : null;
+        // A panel that filters has already spent every letter key on the filter, so an action bound
+        // to one would eat a character the operator meant to type. A function key cannot be typed
+        // into a filter, so it is the one kind that is safe on a panel that has one.
+        _action = _filter is null || action is null || IsFunctionKey(action.Value.Key)
+            ? action
+            : null;
     }
 
     public InfoPanel(string title, Rgb accent, IReadOnlyList<InfoBlock> blocks)
@@ -60,6 +63,8 @@ internal sealed class InfoPanel : IOverlay
     }
 
     public string Mode => _title;
+
+    private static bool IsFunctionKey(ConsoleKey key) => key is >= ConsoleKey.F1 and <= ConsoleKey.F12;
 
     /// <summary>
     /// True when the operator pressed this panel's action key. A reference panel is normally a

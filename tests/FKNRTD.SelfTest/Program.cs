@@ -133,7 +133,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Coordination can clear the reservations it reports", TestCoordinationReleaseAsync),
     ("A landing Git refuses is reported as a refusal", TestRefusedLandingAsync),
     ("An empty list explains itself", TestEmptyListsExplainThemselvesAsync),
-    ("Scrolling a log stays inside the log", TestLogScrollStaysInTheFileAsync)
+    ("Scrolling a log stays inside the log", TestLogScrollStaysInTheFileAsync),
+    ("The help screen writes itself out as a page", TestHelpWritesThePageAsync)
 };
 
 var failures = new List<string>();
@@ -2949,4 +2950,51 @@ static async Task TestLogScrollStaysInTheFileAsync()
         await PressAsync(ConsoleKey.PageDown).ConfigureAwait(false);
         True(app.LogScroll < 120, "And one PgDn after that moves back down");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// The one action the help screen offers, and the filter it must not break. An action key on a
+/// panel that filters would normally steal a character the operator meant to type, which is why
+/// only a function key is allowed there.
+/// </summary>
+static Task TestHelpWritesThePageAsync()
+{
+    var help = Reference.Help();
+
+    // Typing still searches. If the action had taken a letter, this would have fired instead.
+    foreach (var character in "found")
+    {
+        Equal(OverlayResult.Continue,
+            help.HandleKey(new ConsoleKeyInfo(character, ConsoleKey.NoName, false, false, false)),
+            $"Typing '{character}' searches rather than acting");
+    }
+
+    True(!help.ActionRequested, "Typing never asks for the page to be written");
+
+    Equal(OverlayResult.Submit, help.HandleKey(Key(ConsoleKey.F2)), "F2 asks for the page");
+    True(help.ActionRequested, "And the panel records it");
+
+    // The footer has to say so, or the key may as well not exist.
+    var frame = Scenes.Render("help", 100, 30, colour: false);
+    True(frame.Contains("F2 save all of this as a web page", StringComparison.Ordinal),
+        "The help footer offers the key");
+
+    // A panel that filters refuses a letter action outright, which is the rule that makes the
+    // function key the only safe kind there.
+    var refused = new InfoPanel("T", Theme.Cyan, _ => [new InfoLine("a", "b")], filterHint: "x",
+        action: (ConsoleKey.R, "R", "do a thing"));
+    Equal(OverlayResult.Continue, refused.HandleKey(Key(ConsoleKey.R)),
+        "A letter action is not bound on a panel that filters");
+    True(!refused.ActionRequested, "And it does not fire");
+
+    // The document it writes is the real one, with every table in it.
+    var page = PortalCommand.Render(DateTimeOffset.UnixEpoch);
+    True(page.Contains("FKNRTD", StringComparison.Ordinal), "The page names the product");
+    foreach (var binding in Keymap.All)
+    {
+        True(page.Contains(binding.Action, StringComparison.Ordinal),
+            $"The page documents the {binding.Key} key");
+    }
+
+    return Task.CompletedTask;
 }
