@@ -16,6 +16,17 @@ internal static class Scenes
         "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
     ];
 
+    /// <summary>
+    /// Renders an arbitrary snapshot, for a test that needs a workspace the named scenes do not
+    /// cover - a standalone one, say, with one task in a particular state.
+    /// </summary>
+    public static string RenderWith(DashboardSnapshot snapshot, int width, int height)
+    {
+        var renderer = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
+            WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
+        return renderer.Render(snapshot, width, height, useColor: false);
+    }
+
     public static string Render(string name, int width, int height, bool colour)
     {
         var snapshot = name == "empty" ? EmptySnapshot() : Populated();

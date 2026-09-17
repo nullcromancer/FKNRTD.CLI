@@ -3101,6 +3101,27 @@ static Task TestNextStepFitsTheWorkspaceAsync()
         }
     }
 
+    // The footer hint has the same job in one line, and had the same defect. It is reached through
+    // a rendered frame, so the scene is what proves it.
+    foreach (var status in new[] { WorkflowStatus.Landed, WorkflowStatus.ReadyToLand })
+    {
+        var one = new WorkflowTask
+        {
+            Id = "FKN-20260917-000000-hint",
+            Title = "A task",
+            Brief = "Something to do.",
+            Status = status
+        };
+        var frame = Scenes.RenderWith(
+            Scenes.PopulatedSnapshot() with { Config = standalone, Tasks = [one] },
+            110, 30);
+        foreach (var phrase in pointsAtGit)
+        {
+            True(!frame.Contains(phrase, StringComparison.OrdinalIgnoreCase),
+                $"The standalone footer hint for {status} does not point at '{phrase}'");
+        }
+    }
+
     // The two that matter most, spelled out: a landed standalone task merged nothing, and a
     // cancelled one left its edits in the operator's own folder.
     var landed = new WorkflowTask { Id = "x", Status = WorkflowStatus.Landed };

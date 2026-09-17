@@ -951,16 +951,23 @@ internal sealed class DashboardApp
             };
         }
 
+        // Git is checked rather than assumed. A standalone workspace has nothing to merge into and
+        // no worktree to reclaim, so the same two hints would be pointing at things that are not
+        // there - and X is refused outright in that mode.
+        var git = snapshot.Config.Mode == WorkspaceMode.Git;
         return task?.Status switch
         {
             WorkflowStatus.Queued => "This task has never run — press Enter to start it",
             WorkflowStatus.Running => "Press L to watch the live log for this task",
             WorkflowStatus.Failed => "Press L to read why it failed, then R to retry from the failed stage",
-            WorkflowStatus.ReadyToLand => "Verified and audited — press V to read the change, then G to " +
-                                          "merge it into " +
-                                          (string.IsNullOrWhiteSpace(task.BaseRef) ? "the workspace" : task.BaseRef),
+            WorkflowStatus.ReadyToLand => git
+                ? "Verified and audited — press V to read the change, then G to merge it into " +
+                  (string.IsNullOrWhiteSpace(task.BaseRef) ? "your base branch" : task.BaseRef)
+                : "Verified and audited — press V to read the change, then G to record it as final",
             WorkflowStatus.Cancelled => "Cancelled — press R to retry it",
-            WorkflowStatus.Landed => "Landed — press X to remove its worktree and reclaim the disk space",
+            WorkflowStatus.Landed => git
+                ? "Landed — press X to remove its worktree and reclaim the disk space"
+                : "Landed — the verified work is this folder, and there is nothing to clean up",
             _ => null
         };
     }
@@ -1410,10 +1417,13 @@ internal sealed class DashboardApp
                 // A refused merge is recorded on the task and returned, not thrown. Announcing a
                 // landing without reading that back said the work was on the base branch when Git
                 // had declined to put it there.
-                _toast = landed.Status == WorkflowStatus.Landed
-                    ? $"Landed {task.Id}. Press X to remove its worktree when you are done with it."
-                    : $"{task.Id} was NOT landed. Nothing was merged into {landed.BaseRef}. " +
-                      "Press I to read the land stage's output.";
+                _toast = landed.Status != WorkflowStatus.Landed
+                    ? $"{task.Id} was NOT landed. Nothing was merged into {landed.BaseRef}. " +
+                      "Press I to read the land stage's output."
+                    : git
+                        ? $"Landed {task.Id}. Press X to remove its worktree when you are done with it."
+                        : $"Landed {task.Id}. The verified work is this folder; there is no worktree " +
+                          "to clean up.";
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
