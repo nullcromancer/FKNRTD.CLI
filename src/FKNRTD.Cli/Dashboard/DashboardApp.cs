@@ -226,8 +226,8 @@ internal sealed class DashboardApp
 
     private void RenderWide(Canvas canvas, DashboardSnapshot snapshot, Rect body, int selectedTaskIndex)
     {
-        var topHeight = Math.Max(10, body.Height / 2);
-        var bottomHeight = body.Height - topHeight + 1;
+        var bottomHeight = BottomStripHeight(snapshot, body.Height);
+        var topHeight = body.Height - bottomHeight + 1;
         var joinedWidth = body.Width + 2;
         var firstWidth = joinedWidth * 30 / 100;
         var secondWidth = joinedWidth * 38 / 100;
@@ -243,6 +243,29 @@ internal sealed class DashboardApp
         RenderMessages(canvas, snapshot, new Rect(body.X, bottomY, firstWidth, bottomHeight));
         RenderConflicts(canvas, snapshot, new Rect(secondX, bottomY, secondWidth, bottomHeight));
         RenderEvents(canvas, snapshot, new Rect(thirdX, bottomY, thirdWidth, bottomHeight));
+    }
+
+    /// <summary>
+    /// How many rows the lower strip of panels gets. A fixed half-and-half split left the message
+    /// bus, the sentinel and the event feed mostly empty while the pipeline above them - the panel
+    /// the operator is actually steering with - truncated its task list and drew an arrow. This
+    /// gives the strip what its contents can use and hands the remainder upwards.
+    /// </summary>
+    /// <remarks>
+    /// The counts here only decide the split. Each panel still clips its own content to whatever
+    /// rectangle it is handed, so an estimate that is slightly wrong wastes or saves a row rather
+    /// than cutting a sentence in half.
+    /// </remarks>
+    private static int BottomStripHeight(DashboardSnapshot snapshot, int available)
+    {
+        var messages = snapshot.Messages.Count;
+        var conflicts = snapshot.Conflicts.Count * 2;
+        var events = snapshot.Events.Count;
+        var content = Math.Max(2, Math.Max(messages, Math.Max(conflicts, events)));
+
+        // Never less than a readable panel, and never more than half, so a workspace with hundreds
+        // of events cannot push the pipeline off the screen.
+        return Math.Clamp(content + 2, 6, Math.Max(6, available / 2));
     }
 
     private void RenderMedium(Canvas canvas, DashboardSnapshot snapshot, Rect body, int selectedTaskIndex)
@@ -357,8 +380,9 @@ internal sealed class DashboardApp
         Rect rect,
         int selectedTaskIndex)
     {
-        // The panel shows a handful of rows with a small arrow in the margin when there are more.
-        // Naming the total is what tells a reader the arrow means three tasks rather than one.
+        // The panel shows as many rows as it has room for, with a small arrow in the margin when
+        // there are more. Naming the total is what tells a reader the arrow means three tasks
+        // rather than one.
         canvas.DrawBox(
             rect,
             snapshot.Tasks.Count > 1 ? $"PIPELINE · {snapshot.Tasks.Count} tasks · F to find" : "PIPELINE",
@@ -375,7 +399,11 @@ internal sealed class DashboardApp
         selectedTaskIndex = Math.Clamp(selectedTaskIndex, 0, snapshot.Tasks.Count - 1);
         var selected = SelectedTask(snapshot, selectedTaskIndex);
         var row = inner.Y;
-        var maxTaskRows = Math.Max(1, Math.Min(5, inner.Height - 4));
+        // Four rows are held back for the selected task's own detail: a gap, its stages, its
+        // progress bar and its three agents. Everything else is the list. It used to be capped at
+        // five rows whatever the panel's height, so a tall terminal drew an overflow arrow above
+        // twenty blank rows.
+        var maxTaskRows = Math.Max(1, inner.Height - 4);
         var visibleTasks = Math.Min(snapshot.Tasks.Count, maxTaskRows);
         var firstTask = Math.Clamp(selectedTaskIndex - visibleTasks / 2, 0, snapshot.Tasks.Count - visibleTasks);
         for (var index = firstTask; index < firstTask + visibleTasks; index++)

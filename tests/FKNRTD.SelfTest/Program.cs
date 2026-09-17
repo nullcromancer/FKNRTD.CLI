@@ -293,15 +293,37 @@ static Task TestDashboardRendererAsync()
     Equal("├", DisplayCell(narrow[16], 0), "Narrow joined left border");
     Equal("┤", DisplayCell(narrow[16], 71), "Narrow joined right border");
 
+    // The row the upper and lower strips meet on depends on what the lower strip has to show, so
+    // the divider is found rather than assumed. Pinning it to a fixed row only pinned the layout's
+    // old habit of splitting the body exactly in half whatever was in it.
+    static int DividerRow(string[] lines) =>
+        Array.FindIndex(lines, 5, line => DisplayCell(line, 0) == "├");
+
     var medium = FrameLines(renderer.Render(snapshot, 100, 32, useColor: false));
+    var mediumDivider = DividerRow(medium);
+    True(mediumDivider > 5, "Medium layout divides its body somewhere below the panel titles");
     Equal("┬", DisplayCell(medium[4], 49), "Medium upper junction");
-    Equal("┼", DisplayCell(medium[16], 49), "Medium center junction");
+    Equal("┼", DisplayCell(medium[mediumDivider], 49), "Medium center junction");
 
     var wide = FrameLines(renderer.Render(snapshot, 120, 32, useColor: false));
+    var wideDivider = DividerRow(wide);
+    True(wideDivider > 5, "Wide layout divides its body somewhere below the panel titles");
     Equal("┬", DisplayCell(wide[4], 35), "Wide first upper junction");
     Equal("┬", DisplayCell(wide[4], 80), "Wide second upper junction");
-    Equal("┼", DisplayCell(wide[16], 35), "Wide first center junction");
-    Equal("┼", DisplayCell(wide[16], 80), "Wide second center junction");
+    Equal("┼", DisplayCell(wide[wideDivider], 35), "Wide first center junction");
+    Equal("┼", DisplayCell(wide[wideDivider], 80), "Wide second center junction");
+
+    // And the lower strip is sized by what it holds rather than by half the body: an overview with
+    // very little to report below leaves the pipeline more room than one with a lot.
+    var busy = snapshot with
+    {
+        Events = Enumerable.Range(0, 30)
+            .Select(index => new FknrtdEvent { Type = "task.created", Message = "event " + index })
+            .ToArray()
+    };
+    var busyDivider = DividerRow(FrameLines(renderer.Render(busy, 120, 32, useColor: false)));
+    True(busyDivider < wideDivider,
+        $"A fuller lower strip takes more room (quiet divider {wideDivider}, busy {busyDivider})");
 
     var selected = renderer.Render(snapshot, 60, 20, useColor: false, selectedTaskIndex: 10);
     True(selected.Contains("FKN-RENDER-10", StringComparison.Ordinal), "Scrolled pipeline selected task");
