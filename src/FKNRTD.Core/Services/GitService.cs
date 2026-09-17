@@ -70,17 +70,24 @@ public sealed class GitService
         }
 
         var root = rootResult.StandardOutput.Trim();
-        var branchResult = await GitAsync(root, ["branch", "--show-current"], cancellationToken)
-            .ConfigureAwait(false);
-        var remoteResult = await GitAsync(root, ["remote", "get-url", "origin"], cancellationToken)
-            .ConfigureAwait(false);
-        var statusResult = await GitAsync(root, ["status", "--porcelain=v1", "-z"], cancellationToken)
-            .ConfigureAwait(false);
-        var divergenceResult = await GitAsync(
-                root,
-                ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
-                cancellationToken)
-            .ConfigureAwait(false);
+
+        // These four ask Git four unrelated questions about the same directory, so they are asked
+        // at once. The dashboard takes a snapshot every second and almost all of what that costs is
+        // starting Git processes rather than doing anything with them — running them in sequence
+        // paid that cost four times over for no reason.
+        var branchTask = GitAsync(root, ["branch", "--show-current"], cancellationToken);
+        var remoteTask = GitAsync(root, ["remote", "get-url", "origin"], cancellationToken);
+        var statusTask = GitAsync(root, ["status", "--porcelain=v1", "-z"], cancellationToken);
+        var divergenceTask = GitAsync(
+            root,
+            ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+            cancellationToken);
+
+        await Task.WhenAll(branchTask, remoteTask, statusTask, divergenceTask).ConfigureAwait(false);
+        var branchResult = await branchTask.ConfigureAwait(false);
+        var remoteResult = await remoteTask.ConfigureAwait(false);
+        var statusResult = await statusTask.ConfigureAwait(false);
+        var divergenceResult = await divergenceTask.ConfigureAwait(false);
 
         var (ahead, behind) = ParseDivergence(divergenceResult.StandardOutput);
         var remote = remoteResult.Success ? remoteResult.StandardOutput.Trim() : string.Empty;
