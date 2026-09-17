@@ -929,7 +929,7 @@ internal sealed class DashboardApp
                 _view = _view == DashboardView.Logs ? DashboardView.Overview : DashboardView.Logs;
                 break;
             case "U":
-                await RefreshUsageAsync(cancellationToken).ConfigureAwait(false);
+                await ShowUsageAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 break;
             case "I":
                 _overlay = SelectedTask(snapshot) is { } inspected
@@ -1211,18 +1211,27 @@ internal sealed class DashboardApp
         };
     }
 
-    private async Task RefreshUsageAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Asks Codex for its current figures, then shows every agent's budget explained. The header has
+    /// room for five numbers and no room to say what any of them mean or why one is blank.
+    /// </summary>
+    private async Task ShowUsageAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
     {
-        _toast = "Refreshing Codex usage";
+        string? error = null;
         try
         {
-            var snapshot = await _usage.RefreshCodexAsync(cancellationToken).ConfigureAwait(false);
-            _toast = $"Codex usage refreshed: 5h {Percent(snapshot.FiveHourRemainingPercent)}, 7d {Percent(snapshot.WeeklyRemainingPercent)}";
+            await _usage.RefreshCodexAsync(cancellationToken).ConfigureAwait(false);
+            _toast = "Budget refreshed.";
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            _toast = "Usage refresh failed: " + exception.Message;
+            error = exception.Message;
+            _toast = "Could not refresh the budget.";
         }
+
+        // Re-read so the panel shows what the refresh just wrote rather than the frame's snapshot.
+        var refreshed = await _snapshots.CaptureAsync(cancellationToken).ConfigureAwait(false);
+        _overlay = Reference.Usage(refreshed, error);
     }
 
     private WorkflowTask? SelectedTask(DashboardSnapshot snapshot) => SelectedTask(snapshot, _selectedTask);

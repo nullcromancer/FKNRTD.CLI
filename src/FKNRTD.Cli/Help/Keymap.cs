@@ -47,9 +47,9 @@ public static class Keymap
             "task record, its logs and its Git branch are all kept."),
         new("M", "message",
             "Records a note from one agent to another on the message bus."),
-        new("U", "usage",
-            "Refreshes Codex's rate-limit figures. Claude's arrive on their own once the statusline " +
-            "integration is installed."),
+        new("U", "budget",
+            "Asks Codex for its current rate-limit figures, then shows every agent's remaining " +
+            "context and window budget with what each window means and why one might be blank."),
         new("D", "doctor",
             "Runs the pre-flight checks and shows what is ready and what would fail, without leaving " +
             "the dashboard."),

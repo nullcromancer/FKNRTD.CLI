@@ -399,6 +399,92 @@ internal static class Reference
         _ => null
     };
 
+    /// <summary>
+    /// Rate-limit budget behind <c>U</c>, after a refresh. The header has room for five numbers and
+    /// no room to say what any of them mean, where they came from, or why one is blank.
+    /// </summary>
+    public static InfoPanel Usage(DashboardSnapshot snapshot, string? refreshError)
+    {
+        var blocks = new List<InfoBlock>();
+        if (refreshError is not null)
+        {
+            blocks.Add(new InfoHeading("Refresh failed"));
+            blocks.Add(new InfoParagraph(refreshError, Theme.Red));
+        }
+
+        foreach (var agent in snapshot.Config.Agents)
+        {
+            var usage = snapshot.Usage.FirstOrDefault(item =>
+                item.AgentId.Equals(agent.Id, StringComparison.OrdinalIgnoreCase));
+            blocks.Add(new InfoHeading(agent.DisplayName));
+            if (usage is null)
+            {
+                blocks.Add(new InfoParagraph(HowToGetFigures(agent.Id), Theme.Amber));
+                continue;
+            }
+
+            blocks.Add(new InfoLine("Context left", Percent(usage.ContextRemainingPercent),
+                Colour(usage.ContextRemainingPercent)));
+            blocks.Add(new InfoLine("5-hour window", Percent(usage.FiveHourRemainingPercent),
+                Colour(usage.FiveHourRemainingPercent)));
+            blocks.Add(new InfoLine("7-day window", Percent(usage.WeeklyRemainingPercent),
+                Colour(usage.WeeklyRemainingPercent)));
+            blocks.Add(new InfoLine("Reported by", usage.Source, Theme.Muted));
+            blocks.Add(new InfoLine("Last updated",
+                Text.Age(usage.UpdatedAt, snapshot.CapturedAt) + " ago", Theme.Muted));
+
+            var lowest = new[]
+            {
+                usage.FiveHourRemainingPercent, usage.WeeklyRemainingPercent
+            }.Where(value => value is not null).Select(value => value!.Value).DefaultIfEmpty(100).Min();
+            if (lowest < 25)
+            {
+                blocks.Add(new InfoParagraph(
+                    $"{agent.DisplayName} is low. A long task started now may exhaust its budget " +
+                    "mid-stage, which fails in a confusing way — the agent simply stops producing " +
+                    "output. Consider a smaller brief, or waiting for the window to refill.",
+                    Theme.Amber));
+            }
+        }
+
+        blocks.Add(new InfoHeading("What these windows are"));
+        foreach (var term in new[] { "context", "five-hour", "weekly" })
+        {
+            if (Glossary.Find(term) is { } entry)
+            {
+                blocks.Add(new InfoLine(entry.Title, entry.Summary, Theme.Foreground, Bold: true));
+                blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted, Indent: 2));
+            }
+        }
+
+        return new InfoPanel("BUDGET", Theme.Green, blocks);
+    }
+
+    /// <summary>Why an agent has no figures, and what would give it some.</summary>
+    private static string HowToGetFigures(string agentId) => agentId.ToLowerInvariant() switch
+    {
+        "claude" =>
+            "Nothing reported yet. Claude reports through its statusline: install it with " +
+            "'fknrtd integration install-claude-statusline' and restart Claude Code.",
+        "codex" =>
+            "Nothing reported yet. Press U to ask Codex directly; it answers on demand rather than " +
+            "reporting on its own.",
+        _ =>
+            "Nothing reported yet. This agent has no automatic reporting. Feed figures in with " +
+            "'fknrtd usage set <agent> -five-hour <percent>' if you track them elsewhere."
+    };
+
+    private static string Percent(double? value) => value is null ? "not reported" : $"{value:0}% left";
+
+    private static Rgb Colour(double? remaining) => remaining switch
+    {
+        null => Theme.Muted,
+        >= 60 => Theme.Green,
+        >= 40 => Theme.Amber,
+        >= 20 => Theme.Orange,
+        _ => Theme.Red
+    };
+
     /// <summary>The pre-flight checks behind <c>D</c>, with what a failure would actually cost.</summary>
     public static InfoPanel Doctor(IReadOnlyList<DoctorCheck> checks)
     {
