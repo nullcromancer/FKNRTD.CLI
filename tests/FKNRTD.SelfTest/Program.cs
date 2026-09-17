@@ -1698,6 +1698,28 @@ static Task TestPaletteExplainsRefusalsAsync()
     Equal(OverlayResult.Submit, Scenes.Press(landable, ConsoleKey.Enter), "Landing a ready task is offered");
     Equal("G", landable.Chosen?.Id, "The palette returns the key the action is bound to");
 
+    // An action the code would refuse must be refused by the palette too, with the reason. Offering
+    // one that throws the moment it is taken is worse than not offering it.
+    var cancelled = snapshot.Tasks.First(task => task.Status == WorkflowStatus.Failed) with
+    {
+        Status = WorkflowStatus.Cancelled
+    };
+    var afterCancel = Palette.Build(snapshot, cancelled, running: 0);
+    True(afterCancel.Single(action => action.Id == "Enter").Unavailable?.Contains("cancelled",
+            StringComparison.Ordinal) == true,
+        "Running a cancelled task is refused, and says to reset it first");
+
+    // And with no enabled agents there is nobody to give work to, so the builder says so up front.
+    var agentless = snapshot with
+    {
+        Config = snapshot.Config with
+        {
+            Agents = snapshot.Config.Agents.Select(agent => agent with { Enabled = false }).ToList()
+        }
+    };
+    True(Palette.Build(agentless, ready, running: 0).Single(action => action.Id == "N").Unavailable is not null,
+        "Creating a task is refused when no agent is enabled");
+
     // Every palette action must correspond to a documented key, or the palette could offer
     // something the help reference has never heard of.
     foreach (var action in new Palette(() => Palette.Build(snapshot, ready, running: 0)).Actions)

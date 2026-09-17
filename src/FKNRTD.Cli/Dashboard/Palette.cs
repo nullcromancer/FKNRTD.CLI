@@ -196,6 +196,11 @@ internal sealed class Palette : IOverlay
                 "Enter" => NeedsTask()
                            ?? (selected!.Status == WorkflowStatus.Running ? "it is already running" : null)
                            ?? (selected.Status == WorkflowStatus.Landed ? "it has already landed" : null)
+                           // The orchestrator refuses a cancelled task outright, so offering to run
+                           // one would be an action that fails the moment it is taken.
+                           ?? (selected.Status == WorkflowStatus.Cancelled
+                               ? "it was cancelled. Press R to reset it first"
+                               : null)
                            ?? (running >= snapshot.Config.MaxParallelAgents
                                ? $"{running} tasks are already running, which is this workspace's limit"
                                : null),
@@ -213,6 +218,11 @@ internal sealed class Palette : IOverlay
                            ? null
                            : $"it is {selected.Status}, so there is nothing to reset"),
                 "I" or "L" => NeedsTask(),
+                // The task builder cannot produce a valid task without somebody to assign it to.
+                "N" => snapshot.Config.Agents.Any(agent => agent.Enabled)
+                    ? null
+                    : "no agents are enabled, so there would be nobody to give the work to",
+                "F" => snapshot.Tasks.Count == 0 ? "there are no tasks to find yet" : null,
                 "M" => snapshot.Config.Agents.Count == 0 ? "no agents are configured" : null,
                 _ => null
             };
