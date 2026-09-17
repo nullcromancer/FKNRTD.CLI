@@ -308,11 +308,11 @@ else, including both markers or neither, fails. Ambiguity never merges.
 
 ## The Three Seats
 
-| Seat | Mode | Responsibility |
+| Seat | Profile asks for | Responsibility |
 | --- | --- | --- |
 | **Lead** | read-only | Plans. Inspects the repository, names the files that will change, states the risks. Produces no code. |
-| **Implementer** | write | Writes the change inside the isolated worktree. Cannot merge, cannot leave the worktree. Its report is a claim, not evidence. |
-| **Auditor** | read-only | Reads the diff and the verification results. Must return an explicit verdict. Should not be the agent that implemented. |
+| **Implementer** | write | Writes the change inside the isolated worktree. It is launched there and nothing merges without you. Its report is a claim, not evidence. |
+| **Auditor** | read-only | Reads the diff and the verification results. Must return an explicit verdict. Should not be the agent that implemented — nothing stops you naming the same one, and nothing warns you. |
 
 Any command-line coding tool can hold any seat. Claude Code and Codex CLI ship configured.
 

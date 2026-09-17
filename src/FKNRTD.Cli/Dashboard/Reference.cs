@@ -820,7 +820,8 @@ internal static class Reference
             new InfoParagraph(product?.Detail ?? string.Empty),
             new InfoHeading("How a piece of work moves through it"),
             new InfoParagraph("1. You write a brief saying what done looks like."),
-            new InfoParagraph("2. The lead agent reads your code and writes a plan. It cannot change anything."),
+            new InfoParagraph("2. The lead agent reads your code and writes a plan, with a profile that " +
+                              "asks it not to edit."),
             new InfoParagraph("3. The implementer makes the change" +
                               (config.Mode == WorkspaceMode.Git
                                   ? " in its own worktree, so your checkout never moves."
