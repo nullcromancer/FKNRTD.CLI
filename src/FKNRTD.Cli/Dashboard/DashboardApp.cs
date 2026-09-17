@@ -856,6 +856,7 @@ internal sealed class DashboardApp
             ConsoleKey.D => "D",
             ConsoleKey.E => "E",
             ConsoleKey.K => "K",
+            ConsoleKey.S => "S",
             ConsoleKey.Tab => "Tab",
             // '?' and '/' have no ConsoleKey of their own and arrive differently on different
             // keyboard layouts, so they are matched on the character instead.
@@ -950,6 +951,9 @@ internal sealed class DashboardApp
                 break;
             case "K":
                 _overlay = Reference.Coordination(snapshot);
+                break;
+            case "S":
+                _overlay = Reference.Settings(snapshot.Config, _store.Paths.Config);
                 break;
             case "?":
                 _overlay = Reference.Help();

@@ -27,6 +27,14 @@ internal static class ExplainCommand
             return 0;
         }
 
+        // A word met in .fknrtd/config.json is looked up the same way as a word met in the
+        // dashboard. Which table it lives in is not the operator's problem.
+        if (SettingsCatalog.Find(term) is { } setting)
+        {
+            PrintSetting(setting, width, useColor);
+            return 0;
+        }
+
         // A miss is far more useful as a search than as a refusal: the word the operator typed is
         // usually a word that appears inside the entry they are looking for.
         var matches = Glossary.Search(term);
@@ -50,6 +58,42 @@ internal static class ExplainCommand
         return 0;
     }
 
+    private static void PrintSetting(SettingEntry setting, int width, bool useColor)
+    {
+        Write(setting.Title.ToUpperInvariant(), Theme.Blue, useColor, bold: true);
+        Console.WriteLine();
+        Write($"Configuration setting · {setting.Key} · defaults to {setting.Default}", Theme.Muted, useColor);
+        Console.WriteLine();
+        Console.WriteLine();
+
+        foreach (var line in Text.Wrap(setting.Summary, width))
+        {
+            Console.WriteLine(line);
+        }
+
+        Console.WriteLine();
+        foreach (var line in Text.Wrap(setting.Detail, width))
+        {
+            Console.WriteLine(line);
+        }
+
+        Console.WriteLine();
+        Write("IF YOU CHANGE IT", Theme.Amber, useColor, bold: true);
+        Console.WriteLine();
+        foreach (var line in Text.Wrap(setting.IfYouChangeIt, width - 2))
+        {
+            Console.WriteLine("  " + line);
+        }
+
+        if (Glossary.Find(setting.GlossaryTerm) is { } related)
+        {
+            Console.WriteLine();
+            Write("SEE ALSO", Theme.Violet, useColor, bold: true);
+            Console.WriteLine();
+            Console.WriteLine($"  fknrtd explain {related.Term}");
+        }
+    }
+
     private static int List(int width, bool useColor)
     {
         Write("FKNRTD.CLI GLOSSARY", Theme.Cyan, useColor, bold: true);
@@ -67,6 +111,17 @@ internal static class ExplainCommand
                 Write($"  {entry.Term,-22}", Theme.Cyan, useColor);
                 Console.WriteLine(Text.Truncate(entry.Summary, Math.Max(20, width - 24)));
             }
+        }
+
+        // The configuration file's keys are listed here too. Which table a word lives in is not
+        // something the operator should have to know before they can look it up.
+        Console.WriteLine();
+        Write("CONFIGURATION SETTINGS", Theme.Blue, useColor, bold: true);
+        Console.WriteLine();
+        foreach (var setting in SettingsCatalog.All)
+        {
+            Write($"  {setting.Key,-38}", Theme.Cyan, useColor);
+            Console.WriteLine(Text.Truncate(setting.Summary, Math.Max(20, width - 40)));
         }
 
         return 0;

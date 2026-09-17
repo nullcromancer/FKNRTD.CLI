@@ -1184,6 +1184,30 @@ static Task TestGlossaryIsCompleteAsync()
         True(binding.Detail.Length > 40, $"Keymap explains '{binding.Key}'");
     }
 
+    // Every settable field has to say what it controls and what moving it costs. A setting whose
+    // consequence is unstated is one an operator changes by guessing.
+    foreach (var setting in SettingsCatalog.All)
+    {
+        True(setting.Summary.Length is > 20 and <= 96, $"Setting summary for '{setting.Key}'");
+        True(setting.Detail.Length > 40, $"Setting detail for '{setting.Key}'");
+        True(setting.IfYouChangeIt.Length > 50, $"Setting '{setting.Key}' states a consequence");
+        True(SettingsCatalog.Find(setting.Key) is not null, $"Setting lookup for '{setting.Key}'");
+        True(SettingsCatalog.Find(setting.Title) is not null, $"Setting lookup by title for '{setting.Key}'");
+        if (setting.GlossaryTerm is not null)
+        {
+            True(Glossary.Find(setting.GlossaryTerm) is not null,
+                $"Setting '{setting.Key}' references glossary term '{setting.GlossaryTerm}'");
+        }
+    }
+
+    // Every scalar field on the configuration record has to be documented, or the file keeps a key
+    // the operator has no way to understand.
+    foreach (var property in typeof(FknrtdConfig).GetProperties())
+    {
+        var name = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
+        True(SettingsCatalog.Find(name) is not null, $"The settings catalog documents '{name}'");
+    }
+
     Equal(Keymap.All.Count, Keymap.All.Select(binding => binding.Key).Distinct(StringComparer.Ordinal).Count(),
         "Keymap keys are unique");
     True(Keymap.Footer.Length is > 3 and < 9, "Keymap footer is a usable size");
@@ -1460,6 +1484,12 @@ static Task TestPortalAsync()
             $"Portal includes key '{binding.Key}'");
     }
 
+    foreach (var setting in SettingsCatalog.All)
+    {
+        True(html.Contains(Escape(setting.Key), StringComparison.Ordinal),
+            $"Portal includes setting '{setting.Key}'");
+    }
+
     // The build log explains why the pieces fit together the way they do, which a list of features
     // cannot. Every entry has to reach the page, and every entry has to actually say something.
     foreach (var milestone in Milestones.All)
@@ -1481,7 +1511,8 @@ static Task TestPortalAsync()
         [new KeyBinding(hostile, hostile, hostile)],
         hostile,
         generatedAt,
-        [new Milestone(hostile, hostile, hostile, hostile, hostile)]));
+        [new Milestone(hostile, hostile, hostile, hostile, hostile)],
+        [new SettingEntry(hostile, hostile, hostile, hostile, hostile, hostile, hostile, "brief")]));
     // The property that matters is that nothing supplied can become an element or an attribute.
     // The characters of the payload still appear — as visible text, which is the correct outcome.
     True(!attacked.Contains("<img", StringComparison.Ordinal), "Portal never emits an injected element");

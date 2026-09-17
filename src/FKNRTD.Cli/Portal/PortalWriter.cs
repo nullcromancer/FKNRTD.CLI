@@ -12,7 +12,8 @@ public sealed record PortalModel(
     IReadOnlyList<KeyBinding> Keymap,
     string ProductVersion,
     DateTimeOffset GeneratedAt,
-    IReadOnlyList<Milestone>? Milestones = null);
+    IReadOnlyList<Milestone>? Milestones = null,
+    IReadOnlyList<SettingEntry>? Settings = null);
 
 /// <summary>Renders an offline guide without reading files, launching processes or consulting the clock.</summary>
 public static class PortalWriter
@@ -36,6 +37,7 @@ public static class PortalWriter
         RenderCommands(html, model);
         RenderKeymap(html, model.Keymap);
         RenderGlossary(html, model.Glossary);
+        RenderSettings(html, model.Settings ?? []);
         RenderMilestones(html, model.Milestones ?? []);
         html.Append(StateAndExitCodes);
         html.Append(Script);
@@ -217,6 +219,47 @@ public static class PortalWriter
     }
 
     /// <summary>
+    /// The configuration file, explained. It is plain JSON meant to be edited by hand, so the
+    /// consequence of moving each value matters more than the value itself.
+    /// </summary>
+    private static void RenderSettings(StringBuilder html, IReadOnlyList<SettingEntry> settings)
+    {
+        if (settings.Count == 0)
+        {
+            return;
+        }
+
+        html.Append("<section id=settings aria-labelledby=settings-title>")
+            .Append("<h2 id=settings-title>Configuration</h2>")
+            .Append("<p>Everything about a workspace lives in <code>.fknrtd/config.json</code>. ")
+            .Append("Validate it after editing with <code>fknrtd config validate</code>.</p>");
+        foreach (var group in settings.GroupBy(entry => entry.Section, StringComparer.Ordinal))
+        {
+            html.Append("<div data-filter-group><h3>").Append(H(group.Key)).Append("</h3>");
+            foreach (var entry in group)
+            {
+                html.Append("<article class=entry data-filter-entry><h4><code>").Append(H(entry.Key))
+                    .Append("</code></h4><p class=summary>").Append(H(entry.Summary))
+                    .Append("</p><p class=term>Default: <code>").Append(H(entry.Default))
+                    .Append("</code></p><p>").Append(H(entry.Detail))
+                    .Append("</p><p class=next><strong>If you change it:</strong> ")
+                    .Append(H(entry.IfYouChangeIt)).Append("</p>");
+                if (entry.GlossaryTerm is not null)
+                {
+                    html.Append("<p class=related><a href=\"#").Append(H(TermId(entry.GlossaryTerm)))
+                        .Append("\">").Append(H(entry.GlossaryTerm)).Append("</a></p>");
+                }
+
+                html.Append("</article>");
+            }
+
+            html.Append("</div>");
+        }
+
+        html.Append("</section>");
+    }
+
+    /// <summary>
     /// How the product came to work this way. It is here rather than in a changelog because the
     /// parts only make sense together, and a record of what each piece was for shows that where a
     /// list of features would not.
@@ -273,7 +316,7 @@ public static class PortalWriter
         @media print{aside,.skip{display:none}.shell{display:block;padding:0}body{background:white;color:black}.entry{break-inside:avoid}section{margin-bottom:2rem}}
         </style></head><body><a class=skip href=#main>Skip to guide</a><div class=shell>
         <aside aria-label="Guide navigation"><a class=brand href=#overview>FKNRTD.CLI</a>
-        <nav aria-label=Sections><a href=#overview>Start here</a><a href=#pipeline>Eight-stage pipeline</a><a href=#commands>Commands</a><a href=#keymap>Dashboard keys</a><a href=#glossary>Glossary</a><a href=#built>How this was built</a><a href=#state>Files on disk</a><a href=#exit-codes>Exit codes</a></nav>
+        <nav aria-label=Sections><a href=#overview>Start here</a><a href=#pipeline>Eight-stage pipeline</a><a href=#commands>Commands</a><a href=#keymap>Dashboard keys</a><a href=#glossary>Glossary</a><a href=#settings>Configuration</a><a href=#built>How this was built</a><a href=#state>Files on disk</a><a href=#exit-codes>Exit codes</a></nav>
         <div id=filter-controls hidden><label for=filter>Find a command or concept</label><input id=filter type=search placeholder="Try brief, audit, task…" autocomplete=off aria-controls="commands glossary"><button id=clear-filter type=button>Clear filter</button><p id=filter-status class=filter-status role=status aria-live=polite></p></div>
         <noscript><p>All entries are shown. Use your browser's Find command to search.</p></noscript></aside>
         <main id=main><section id=overview aria-labelledby=overview-title><p class=eyebrow>Operator guide / offline edition</p><h1 id=overview-title>Your agents.<br>Your final say.</h1>

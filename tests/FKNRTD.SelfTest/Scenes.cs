@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -102,6 +102,8 @@ internal static class Scenes
                 return Reference.Events([], Populated().CapturedAt);
             case "coordination":
                 return Reference.Coordination(Populated());
+            case "settings":
+                return Reference.Settings(SampleConfig(), "/src/aurora-api/.fknrtd/config.json");
             case "palette":
                 return Palette.For(Populated(), null, running: 0);
             case "palette-search":

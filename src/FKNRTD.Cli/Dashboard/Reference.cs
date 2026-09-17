@@ -314,6 +314,91 @@ internal static class Reference
             blocks);
     }
 
+    /// <summary>
+    /// The workspace's settings behind <c>S</c>, each shown with what this workspace currently has
+    /// rather than only with its default. The configuration file is plain JSON meant to be edited by
+    /// hand and carried no explanation of any kind.
+    /// </summary>
+    public static InfoPanel Settings(FknrtdConfig config, string configPath) => new(
+        "SETTINGS",
+        Theme.Blue,
+        filter =>
+        {
+            var blocks = new List<InfoBlock>
+            {
+                new InfoParagraph("Edit these in " + configPath + ", then run 'fknrtd config validate'.",
+                    Theme.Muted)
+            };
+
+            var matched = false;
+            foreach (var section in SettingsCatalog.Sections)
+            {
+                var entries = SettingsCatalog.InSection(section)
+                    .Where(entry => filter.Length == 0 ||
+                                    entry.Key.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                    entry.Title.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                    entry.Summary.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                    entry.Detail.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (entries.Length == 0)
+                {
+                    continue;
+                }
+
+                matched = true;
+                blocks.Add(new InfoHeading(section));
+                foreach (var entry in entries)
+                {
+                    var live = CurrentValue(config, entry.Key);
+                    blocks.Add(new InfoLine(entry.Key, live ?? entry.Summary, Theme.Foreground, Bold: true));
+                    if (live is not null)
+                    {
+                        blocks.Add(new InfoParagraph(entry.Summary, Theme.Muted, Indent: 2));
+                    }
+
+                    blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted, Indent: 2));
+                    blocks.Add(new InfoParagraph("If you change it: " + entry.IfYouChangeIt, Theme.Amber,
+                        Indent: 2));
+                }
+            }
+
+            if (!matched)
+            {
+                blocks.Add(new InfoParagraph("No setting matches that.", Theme.Muted));
+            }
+
+            return blocks;
+        },
+        filterHint: "a setting name, or what you are trying to change");
+
+    /// <summary>
+    /// What this workspace has, for the settings whose value is a single readable scalar. A default
+    /// is what the documentation says; the live value is what the operator is actually running.
+    /// </summary>
+    private static string? CurrentValue(FknrtdConfig config, string key) => key switch
+    {
+        "schemaVersion" => config.SchemaVersion.ToString(),
+        "projectName" => config.ProjectName,
+        "mode" => config.Mode.ToString(),
+        "defaultBaseRef" => string.IsNullOrWhiteSpace(config.DefaultBaseRef) ? "none" : config.DefaultBaseRef,
+        "defaultVerificationCommands" => config.DefaultVerificationCommands.Count == 0
+            ? "none — nothing checks agent work in this workspace"
+            : string.Join("; ", config.DefaultVerificationCommands),
+        "defaultMaxRepairRounds" => config.DefaultMaxRepairRounds.ToString(),
+        "maxParallelAgents" => config.MaxParallelAgents.ToString(),
+        "agentTimeoutSeconds" => $"{config.AgentTimeoutSeconds}s",
+        "verificationTimeoutSeconds" => $"{config.VerificationTimeoutSeconds}s",
+        "agentStaleAfterSeconds" => $"{config.AgentStaleAfterSeconds}s",
+        "claimStaleAfterSeconds" => $"{config.ClaimStaleAfterSeconds}s",
+        "dashboardRefreshMilliseconds" => $"{config.DashboardRefreshMilliseconds}ms",
+        "requireCleanTreeForLanding" => config.RequireCleanTreeForLanding ? "true" : "false",
+        "autoCommitAgentChanges" => config.AutoCommitAgentChanges ? "true" : "false",
+        "agents" => config.Agents.Count == 0
+            ? "none configured"
+            : string.Join(", ", config.Agents.Select(agent => agent.Enabled ? agent.Id : agent.Id + " (disabled)")),
+        _ => null
+    };
+
     /// <summary>The pre-flight checks behind <c>D</c>, with what a failure would actually cost.</summary>
     public static InfoPanel Doctor(IReadOnlyList<DoctorCheck> checks)
     {
