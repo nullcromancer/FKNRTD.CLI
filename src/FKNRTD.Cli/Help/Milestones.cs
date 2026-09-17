@@ -109,6 +109,57 @@ public static class Milestones
             "leaves the folder untouched rather than half-configured."),
 
         new("2026-09-17",
+            "The configuration file, explained",
+            "`.fknrtd/config.json` is plain JSON meant to be edited by hand, and nothing in the " +
+            "product said what any of it meant. An operator who opened it met agentStaleAfterSeconds " +
+            "and requireCleanTreeForLanding with no way to find out what they controlled.",
+            "Every settable field became a row in a third table, carrying what it controls, its " +
+            "default, and what changing it actually costs. It reaches the dashboard showing the " +
+            "value this workspace is really running, `fknrtd explain`, and this page.",
+            "The consequence is the field that earns the file's existence. \"Raising this past two " +
+            "rarely converges and burns rate-limit budget\" is usable; a restatement of the setting's " +
+            "own name is not. A self-test walks the configuration record by reflection, so the next " +
+            "setting added cannot arrive unexplained."),
+
+        new("2026-09-17",
+            "Errors that say what to do about them",
+            "Thirty-eight thrown messages across the core stated a fact and stopped. \"No enabled " +
+            "agents are configured.\" \"Unable to create the isolated worktree.\" Each was accurate " +
+            "and each left the operator holding a correct sentence with nothing to do next.",
+            "Every one now says what happened, why it matters, and the next action, naming an exact " +
+            "command or file. Where a failure leaves work somewhere, the message says where.",
+            "Strings only — no condition, exception type or signature changed, so the diff is " +
+            "reviewable in one pass. An agent that crashes mid-implement has still written to the " +
+            "task's worktree and not to your checkout, and that is worth knowing before you go " +
+            "looking for it."),
+
+        new("2026-09-17",
+            "Glyphs the terminal can actually draw",
+            "Every character the dashboard draws was measured against Cascadia Mono, Consolas and " +
+            "Lucida Console. Four were missing from all three and rendered as empty boxes — one of " +
+            "them the failure marker, so on a default Windows Terminal every failure in this product " +
+            "was a blank rectangle.",
+            "Replaced with characters all three fonts carry, chosen to keep each marker distinct " +
+            "from its neighbours. Two had no universal equivalent that still meant anything, so the " +
+            "header says \"on main\" rather than drawing a branch glyph nobody recognises.",
+            "A design that only renders on the machine it was built on is not a design. The " +
+            "documentation captures are now generated from the real renderer for the same reason " +
+            "this page is, so a screenshot cannot go on showing a keymap the product no longer has."),
+
+        new("2026-09-17",
+            "A second pair of eyes, which is the whole argument",
+            "This work was written by one agent. The product's entire premise is that the one who " +
+            "wrote the change is not the one who should decide it is good.",
+            "A second agent reviewed the overlay layer read-only and returned twenty ranked " +
+            "findings. Several were real, and the worst was a text wrap that never terminated when " +
+            "a glyph was wider than the field it was drawn into — it appended empty lines until the " +
+            "process ran out of memory.",
+            "That bug was actually found by the regression test written for a different finding, " +
+            "which is the argument for writing the test rather than fixing and moving on. The " +
+            "review found what the author could not, on exactly the reasoning this tool exists to " +
+            "enforce."),
+
+        new("2026-09-17",
             "This page",
             "The only written guide was the repository's README, which nobody reads from the " +
             "machine they are working on, and which is free to describe a command that no longer " +
