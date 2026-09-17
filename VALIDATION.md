@@ -3,7 +3,7 @@
 ## 2026-09-17 — the usability programme
 
 Revision: 1.0.0
-Commit verified: `cda7e8309023b19c87d766ba01fcf094663e949d`
+Commit verified: `187f1490f2af3abd30e34dbac77db88a2a771b7e`
 (branch `feature/standalone-workspaces-and-tool-management`)
 
 Environment: .NET SDK 10.0.401, Git 2.55.0.windows.4, Windows 11 (10.0.26200).
@@ -15,7 +15,7 @@ nothing is reported that was not run.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 49/49 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 60/60 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -30,12 +30,12 @@ nothing is reported that was not run.
 | `fknrtd task cancel <missing id>` | Exit 1; said no such task exists in this workspace. |
 | `fknrtd claim add` | Exit 0; claim registered with its expiry. |
 | `fknrtd claim list` / `-json`, no conflict | Exit 0 for both. |
-| `fknrtd message list`, `fknrtd usage list` | Exit 0. |
+| `fknrtd message list`, `fknrtd usage list` | Exit 0; each says what the empty thing is for and names a command that would fill it. |
 | `fknrtd events` / `-json` | Exit 0 for both. |
 | `fknrtd status -json` | Exit 0; complete normalised snapshot. |
 | `fknrtd dashboard -once -no-color -width 100 -height 30` | Exit 0; one frame, no ANSI. |
 | `fknrtd explain brief`, `fknrtd help task diff`, `fknrtd version` | Exit 0. |
-| `fknrtd portal -out <file>` | Exit 0; 71 terms, 44 commands, 26 keys, 25 settings, 21 log entries; 170 KB. |
+| `fknrtd portal -out <file>` | Exit 0; 73 terms, 44 commands, 26 keys, 25 settings, 24 log entries; 177 KB. |
 | `fknrtd taks` | Exit 2; reported the typo and named the commands meant. |
 
 The exit codes documented but never observed were checked directly, because writing one down
@@ -63,15 +63,26 @@ Also verified directly, outside the suite:
 - **The generated guide.** `fknrtd-portal.html` was checked to contain no external references,
   no broken internal links, and balanced structural tags.
 - **A renderer sweep.** `dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz` renders
-  every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 8,140 frames
-  across 37 scenes — and checks each for the right number of rows, the right display width on
-  every row, and no exception. All 8,140 passed. The suite itself samples five widths and three
+  every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 9,460 frames
+  across 43 scenes — and checks each for the right number of rows, the right display width on
+  every row, and no exception. All 9,460 passed. The suite itself samples five widths and three
   heights; this is the wider net.
 - **A landing Git refuses.** A task was run to ready-to-land, a conflicting version of the same
   file was committed to `main`, and the landing was attempted. The task came back Failed with
   its land stage failed, the base branch was exactly where it had been, and no conflict markers
   were left in the working copy. This is a regression test now; it was written because the
   command used to report that landing as a success and exit 0.
+
+Two more things were checked directly after the scene set grew to cover them, because both had
+gone unnoticed for the same reason — the situation was rendered nowhere:
+
+- **A standalone workspace.** It had appeared in one diff panel and nowhere else, so three
+  separate pieces of advice went on telling a standalone operator to clean up a worktree they do
+  not have. Two scenes cover it now, and the advice checks the mode.
+- **A stage log with a log in it.** The log panel had only ever been rendered empty, so the whole
+  drawing path was exercised nowhere — which is how it went unnoticed that the panel showed the
+  agents' raw JSON stream. Three log scenes cover it now: absent, plain shell output, and an
+  agent's machine-readable stream.
 
 Independent review: three read-only audits by an OpenAI Codex seat, recorded in
 `docs/collab/LOG.md`. The first found a non-terminating text wrap and eight other real defects
