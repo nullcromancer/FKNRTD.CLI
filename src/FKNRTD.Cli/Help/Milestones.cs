@@ -349,6 +349,20 @@ public static class Milestones
             "you are debugging the agent rather than the work. The reason this went unnoticed so " +
             "long is that the log panel had never been rendered with a log in it - the scene set " +
             "covered the empty case only, so the entire drawing path was exercised nowhere."),
+
+        new("2026-09-17",
+            "The guide started showing the screens",
+            "This page explained every key and every term in words and never showed anybody a " +
+            "screen, which is a strange way to document a product whose whole problem was that " +
+            "people could not tell what it was asking them for.",
+            "Four real frames are drawn into it when it is generated - the command center, the task " +
+            "builder, the agent roster and the settings screen - by the same renderer the program " +
+            "runs, from a small example workspace.",
+            "A picture in a manual is the first thing to go stale, and one produced from the same " +
+            "code as the thing it depicts cannot. The self-test checks each embedded frame is a " +
+            "whole frame with every row the same width and no escape sequences in it, which is the " +
+            "same check the renderer's own suite makes - if a picture here ever stops matching, it " +
+            "is because the screen changed and the page was not regenerated."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

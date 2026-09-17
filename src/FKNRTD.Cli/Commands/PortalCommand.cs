@@ -1,3 +1,5 @@
+using FKNRTD.Dashboard;
+using FKNRTD.Services;
 using FKNRTD.Help;
 using FKNRTD.Portal;
 
@@ -42,5 +44,47 @@ internal static class PortalCommand
         CommandDispatcher.Version,
         generatedAt,
         Milestones.All,
-        SettingsCatalog.All));
+        SettingsCatalog.All,
+        Screens()));
+
+    /// <summary>
+    /// The screens, drawn now by the renderer the product runs. Generating them rather than pasting
+    /// them in is the point: a picture in a manual is the first thing to go stale, and one that is
+    /// produced from the same code as the thing it depicts cannot.
+    /// </summary>
+    private static IReadOnlyList<(string Title, string Why, string Frame)> Screens()
+    {
+        var renderer = new DashboardApp(null!, null!, null!, null!, null!,
+            new StateStore(WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
+        var snapshot = SampleWorkspace.Snapshot;
+
+        return
+        [
+            ("The command center",
+                "What 'fknrtd' opens. The pipeline is your tasks; the radar is what each agent is " +
+                "doing right now; the sentinel warns when two agents are about to touch the same " +
+                "file. The bottom line always says what the highlighted task needs from you next.",
+                renderer.Render(snapshot, 108, 30, useColor: false)),
+
+            ("Describing a piece of work",
+                "What N opens. Every question carries its own definition and a worked example, and " +
+                "every field after the brief already holds the right answer for this workspace - so " +
+                "the usual path through this form is a title, a brief, and Enter.",
+                renderer.Render(snapshot, 108, 26, useColor: false, TaskWizard.Create(SampleWorkspace.Config))),
+
+            ("The agent roster",
+                "What A opens. It says which agents can actually be launched on this machine and " +
+                "which can return a verdict, and it can change the list: Space enables or disables " +
+                "one, E points one at a different program, N adds one, Del removes one.",
+                renderer.Render(snapshot, 108, 28, useColor: false,
+                    AgentManager.Create(snapshot))),
+
+            ("Every setting, and what changing it costs",
+                "What S opens. The configuration is plain JSON meant to be edited by hand, and this " +
+                "is the explanation that was missing from it. Enter changes the highlighted field " +
+                "through the same guided form the rest of the product uses.",
+                renderer.Render(snapshot, 108, 30, useColor: false,
+                    new SettingsBrowser(SampleWorkspace.Config, "/src/aurora-api/.fknrtd/config.json")))
+        ];
+    }
 }

@@ -13,7 +13,8 @@ public sealed record PortalModel(
     string ProductVersion,
     DateTimeOffset GeneratedAt,
     IReadOnlyList<Milestone>? Milestones = null,
-    IReadOnlyList<SettingEntry>? Settings = null);
+    IReadOnlyList<SettingEntry>? Settings = null,
+    IReadOnlyList<(string Title, string Why, string Frame)>? Screens = null);
 
 /// <summary>Renders an offline guide without reading files, launching processes or consulting the clock.</summary>
 public static class PortalWriter
@@ -34,6 +35,7 @@ public static class PortalWriter
             .Append("</time></p>");
         html.Append(Introduction);
         RenderPipeline(html);
+        RenderScreens(html, model.Screens ?? []);
         RenderCommands(html, model);
         RenderKeymap(html, model.Keymap);
         RenderGlossary(html, model.Glossary);
@@ -112,6 +114,33 @@ public static class PortalWriter
             }
             html.Append("</div>");
         }
+        html.Append("</section>");
+    }
+
+    /// <summary>
+    /// Real frames, drawn by the same renderer the product runs, from an illustrative workspace.
+    /// The guide explained every key and every term in words and never showed anybody a screen -
+    /// and because these are generated rather than pasted in, one cannot show a panel that has been
+    /// removed or a key that has been renamed.
+    /// </summary>
+    private static void RenderScreens(StringBuilder html, IReadOnlyList<(string Title, string Why, string Frame)> screens)
+    {
+        if (screens.Count == 0)
+        {
+            return;
+        }
+
+        html.Append("<section id=screens aria-labelledby=screens-title>")
+            .Append("<h2 id=screens-title>What it looks like</h2>")
+            .Append("<p>These are drawn by the program itself when this page is written, from a " +
+                    "small example workspace, so they show the screens as they actually are today.</p>");
+
+        foreach (var (title, why, frame) in screens)
+        {
+            html.Append("<h3>").Append(H(title)).Append("</h3><p>").Append(H(why)).Append("</p>")
+                .Append("<pre class=screen><code>").Append(H(frame)).Append("</code></pre>");
+        }
+
         html.Append("</section>");
     }
 
@@ -302,6 +331,8 @@ public static class PortalWriter
         *{box-sizing:border-box}html{scroll-padding-top:2rem}body{margin:0;background:var(--bg);color:var(--text);font:1rem/1.65 system-ui,sans-serif;overflow-wrap:anywhere}
         a{color:var(--accent);text-underline-offset:.2em}a:hover{text-decoration-thickness:2px}:focus-visible{outline:3px solid var(--focus);outline-offset:4px}
         .shell{display:grid;grid-template-columns:15rem minmax(0,1fr);max-width:1440px;margin:auto;gap:3rem;padding:2rem}
+        pre.screen{overflow-x:auto;line-height:1.15;font-size:.72rem;padding:.8rem;border:1px solid var(--border);border-radius:6px}
+        pre.screen code{white-space:pre}
         aside{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow-y:auto;padding:.25rem}nav a{display:block;padding:.3rem 0}nav{margin:1rem 0}
         main,section,article,figure{min-width:0}main{max-width:68rem}section{margin:0 0 4rem;scroll-margin-top:1rem}h1,h2,h3,h4,h5{line-height:1.2;text-wrap:balance}h1{font-size:clamp(2.1rem,5vw,4.2rem);letter-spacing:-.04em;margin:.3rem 0 1rem}h2{font-size:1.85rem}h3{font-size:1.3rem;margin-top:2rem}h4{font-size:1.15rem;margin:0 0 .6rem}h5{font-size:1rem;margin:1.4rem 0 .5rem}
         .brand{font-weight:800;letter-spacing:.04em}.eyebrow,.edition,.term,.related,figcaption{color:var(--muted);font-size:.88rem}.eyebrow{text-transform:uppercase;letter-spacing:.12em}.intro{font-size:1.2rem;max-width:50rem}
@@ -316,7 +347,7 @@ public static class PortalWriter
         @media print{aside,.skip{display:none}.shell{display:block;padding:0}body{background:white;color:black}.entry{break-inside:avoid}section{margin-bottom:2rem}}
         </style></head><body><a class=skip href=#main>Skip to guide</a><div class=shell>
         <aside aria-label="Guide navigation"><a class=brand href=#overview>FKNRTD.CLI</a>
-        <nav aria-label=Sections><a href=#overview>Start here</a><a href=#pipeline>Eight-stage pipeline</a><a href=#commands>Commands</a><a href=#keymap>Dashboard keys</a><a href=#glossary>Glossary</a><a href=#settings>Configuration</a><a href=#built>How this was built</a><a href=#state>Files on disk</a><a href=#exit-codes>Exit codes</a></nav>
+        <nav aria-label=Sections><a href=#overview>Start here</a><a href=#pipeline>Eight-stage pipeline</a><a href=#screens>What it looks like</a><a href=#commands>Commands</a><a href=#keymap>Dashboard keys</a><a href=#glossary>Glossary</a><a href=#settings>Configuration</a><a href=#built>How this was built</a><a href=#state>Files on disk</a><a href=#exit-codes>Exit codes</a></nav>
         <div id=filter-controls hidden><label for=filter>Find a command or concept</label><input id=filter type=search placeholder="Try brief, audit, task…" autocomplete=off aria-controls="commands glossary"><button id=clear-filter type=button>Clear filter</button><p id=filter-status class=filter-status role=status aria-live=polite></p></div>
         <noscript><p>All entries are shown. Use your browser's Find command to search.</p></noscript></aside>
         <main id=main><section id=overview aria-labelledby=overview-title><p class=eyebrow>Operator guide / offline edition</p><h1 id=overview-title>Your agents.<br>Your final say.</h1>
