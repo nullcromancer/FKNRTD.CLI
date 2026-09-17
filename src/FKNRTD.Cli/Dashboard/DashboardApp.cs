@@ -885,7 +885,10 @@ internal sealed class DashboardApp
         };
     }
 
-    private async Task HandleKeyAsync(ConsoleKeyInfo key, DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    /// <summary>The most recent footer message. The test seam for the action guard.</summary>
+    internal string Toast => _toast;
+
+    internal async Task HandleKeyAsync(ConsoleKeyInfo key, DashboardSnapshot snapshot, CancellationToken cancellationToken)
     {
         // An open overlay owns every keystroke. Nothing behind it can be triggered by accident while
         // the operator is part-way through answering a question.
@@ -904,7 +907,19 @@ internal sealed class DashboardApp
                     _overlayCompleted = null;
                     if (completed is not null)
                     {
-                        await completed(overlay, snapshot, cancellationToken).ConfigureAwait(false);
+                        try
+                        {
+                            await completed(overlay, snapshot, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception exception) when (exception is not StackOverflowException &&
+                                                          exception is not OutOfMemoryException)
+                        {
+                            _toast = "That did not work: " + exception.Message;
+                        }
                     }
 
                     break;
@@ -957,9 +972,27 @@ internal sealed class DashboardApp
             }
         };
 
-        if (action is not null)
+        if (action is null)
+        {
+            return;
+        }
+
+        // One guard for every action. Several of them read files, query Git or launch a process, and
+        // any of those can fail for reasons that have nothing to do with the operator — a log held
+        // open, a repository mid-rebase, an agent that will not start. A dashboard that exits to a
+        // stack trace because a file was momentarily locked is a dashboard nobody leaves running.
+        try
         {
             await RunActionAsync(action, snapshot, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not StackOverflowException &&
+                                          exception is not OutOfMemoryException)
+        {
+            _toast = "That did not work: " + exception.Message;
         }
     }
 

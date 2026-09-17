@@ -70,7 +70,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The diff view keeps a diff readable", TestDiffViewAsync),
     ("Advice is phrased for the surface asking", TestNextStepIsSurfaceAwareAsync),
     ("Doctor reports rather than throws on a broken workspace", TestDoctorSurvivesABrokenWorkspaceAsync),
-    ("The prompt preview shows what is actually sent", TestPromptPreviewAsync)
+    ("The prompt preview shows what is actually sent", TestPromptPreviewAsync),
+    ("A failing key becomes a message, not an exit", TestAFailingActionDoesNotCrashAsync)
 };
 
 var failures = new List<string>();
@@ -2121,4 +2122,39 @@ static Task TestPromptPreviewAsync()
     True(frame.Contains("Nothing else is sent", StringComparison.Ordinal),
         "The preview says this is all that is sent");
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// A key that fails must become a message, never an exit. Several actions read files, query Git or
+/// launch a process, and any of those can fail for reasons that have nothing to do with the
+/// operator. A dashboard that exits to a stack trace because a log was briefly locked is one nobody
+/// leaves running.
+/// </summary>
+static async Task TestAFailingActionDoesNotCrashAsync()
+{
+    // Every service is null, so any action that reaches one throws immediately — which is exactly
+    // the condition under test.
+    var app = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
+    var snapshot = Scenes.PopulatedSnapshot();
+
+    foreach (var key in new[]
+             {
+                 ConsoleKey.D,      // runs the pre-flight checks
+                 ConsoleKey.E,      // reads the event log
+                 ConsoleKey.U,      // asks Codex for its budget
+                 ConsoleKey.C,      // requests cancellation
+                 ConsoleKey.R,      // resets failed stages
+                 ConsoleKey.V,      // reads the finished change
+                 ConsoleKey.P       // reads the plan artifact
+             })
+    {
+        await app.HandleKeyAsync(
+                new ConsoleKeyInfo(' ', key, false, false, false), snapshot, CancellationToken.None)
+            .ConfigureAwait(false);
+        True(app.Toast.Length > 0, $"Pressing {key} against a broken workspace leaves a message");
+    }
+
+    // And the frame still renders afterwards rather than being left in a half-drawn state.
+    var frame = app.Render(snapshot, 110, 34, useColor: false);
+    Equal(34, FrameLines(frame).Length, "The dashboard still renders after a failed action");
 }
