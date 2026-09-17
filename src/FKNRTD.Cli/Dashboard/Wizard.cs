@@ -112,6 +112,9 @@ internal sealed class Wizard : IOverlay
 
     public IReadOnlyDictionary<string, string> Values => _values;
 
+    /// <summary>The questions this form asks, in order. A test seam.</summary>
+    internal IReadOnlyList<WizardStep> Steps => _steps;
+
     public string Value(string key) => _values.TryGetValue(key, out var value) ? value : string.Empty;
 
     /// <summary>Answers split into lines, for the steps that mean one item per line.</summary>

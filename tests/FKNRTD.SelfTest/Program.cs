@@ -152,7 +152,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The quieter commands work", TestTheQuieterCommandsWorkAsync),
     ("The welcome panel tells the truth", TestWelcomeIsTrueAsync),
     ("Every command the product names exists", TestNamedCommandsExistAsync),
-    ("Every key a screen names can be pressed there", TestNamedKeysArePressableAsync)
+    ("Every key a screen names can be pressed there", TestNamedKeysArePressableAsync),
+    ("Every question can explain itself", TestEveryQuestionCanExplainItselfAsync)
 };
 
 var failures = new List<string>();
@@ -4145,5 +4146,57 @@ static Task TestNamedKeysArePressableAsync()
     True(!budget.Contains("Press U", StringComparison.Ordinal),
         "The budget panel does not tell you to press the key that opened it");
 
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Every question a form asks names a glossary term that exists. A step's term is what F1 opens and
+/// what the inline "what this is" block reads from, so a term that does not resolve leaves the one
+/// field somebody stopped at with nothing to explain it - which is the exact complaint this whole
+/// programme started from.
+/// </summary>
+static Task TestEveryQuestionCanExplainItselfAsync()
+{
+    var config = Scenes.SampleConfig();
+    var forms = new (string Name, Wizard Form)[]
+    {
+        ("the task builder", TaskWizard.Create(config)),
+        ("the message form", TaskWizard.Message(config)),
+        ("the agent builder", AgentWizard.Create(config)),
+        ("setup, with a repository", SetupWizard.Create(Scenes.SampleDetection())),
+        ("setup, without one", SetupWizard.Create(new SetupWizard.Detected(
+            "/src/notes", IsRepository: false, GitInstalled: false, string.Empty, [], HasClaude: true)))
+    };
+
+    var seen = 0;
+    foreach (var (name, form) in forms)
+    {
+        foreach (var step in form.Steps)
+        {
+            seen++;
+            True(Glossary.Find(step.GlossaryTerm) is not null,
+                $"In {name}, the '{step.Key}' step names glossary term '{step.GlossaryTerm}'");
+
+            // And the question is a question, not a label. "Lead agent:" is what this replaced.
+            True(step.Question.Trim().Length > 0, $"In {name}, the '{step.Key}' step asks something");
+            True(step.Question.Contains('?') || step.Input == WizardInput.Commands,
+                $"In {name}, the '{step.Key}' step asks rather than labels: {step.Question}");
+        }
+    }
+
+    // Every settings field's form too, which is built one step at a time from the catalog.
+    foreach (var setting in SettingsBrowser.Editable)
+    {
+        var form = SettingsBrowser.Form(config, setting.Key);
+        True(form is not null, $"'{setting.Key}' has a form");
+        foreach (var step in form!.Steps)
+        {
+            seen++;
+            True(Glossary.Find(step.GlossaryTerm) is not null,
+                $"The '{setting.Key}' editor names glossary term '{step.GlossaryTerm}'");
+        }
+    }
+
+    True(seen > 20, $"There are forms to check, and {seen} steps were checked");
     return Task.CompletedTask;
 }
