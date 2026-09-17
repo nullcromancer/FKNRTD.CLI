@@ -329,6 +329,35 @@ public static class Glossary
             "The final stage merges the task branch back. In standalone mode there is no merge and " +
             "the stage records that the verified work is already in place in the folder."),
 
+        new("pipeline", "The pipeline panel", Concepts,
+            "Every task in the workspace, and the one you have highlighted in detail.",
+            "The list gives each task a marker for its status and enough of its title to recognise " +
+            "it. Under it, the highlighted task gets its stage strip, its progress bar and the " +
+            "three agents assigned to it. The keys that act on a task — Enter, I, L, R, C, G, X — " +
+            "all act on the highlighted one, so this panel is what the rest of the dashboard is " +
+            "pointed at. F searches it once there are more tasks than rows.",
+            "\u203a  \u2666 FKN-20260917-101500-a1b2  Add rate limiting to the login endpoint"),
+
+        new("radar", "The agent radar", Concepts,
+            "What each configured agent is doing at this moment, and what it last said.",
+            "One row per agent in the configuration, not per agent that is running: an agent that " +
+            "has never started is listed as offline rather than left out, because its absence from " +
+            "the list would be indistinguishable from its absence from the workspace. The text " +
+            "beside each one is its intent, which comes from reading its own output as it arrives " +
+            "— the last thing it said, or the tool it most recently used. A is the roster, where " +
+            "the list can be changed.",
+            "\u25ba Codex Implementer      Rewriting CsvReader.Parse"),
+
+        new("sentinel", "The conflict sentinel", Coordination,
+            "Where two agents are about to get in each other's way, worst first.",
+            "It compares the paths agents have reserved and the paths they report touching, and " +
+            "shows what that comparison found. It watches and does not act: nothing here stops a " +
+            "task, holds a lock or waits for anything, so an overlap is something for you to decide " +
+            "about rather than something the pipeline is already handling. When it says Safe it " +
+            "means nothing that counts was found, which is not the same as nothing overlapping — " +
+            "read the conflict entry for what counts. K opens it in full.",
+            "\u00d7 100 Live collision: claude and codex: src/auth.cs"),
+
         new("progress-bar", "The progress bar", Stages,
             "How many of a task's eight stages are behind it, and nothing more.",
             "The bar under the stage strip counts the stages that have passed or been skipped and " +
