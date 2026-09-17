@@ -10,6 +10,13 @@
 #     scripts/codex-review.sh              # everything still queued
 #     scripts/codex-review.sh reference    # one of them
 #     scripts/codex-review.sh --list       # what is queued, without dispatching
+#     scripts/codex-review.sh --wait       # sleep until the budget resets, then dispatch
+#
+# Do not test whether the other seat is available with a small prompt first. A one-line dispatch
+# costs about nineteen thousand tokens and fits under headroom that a real review does not, so it
+# answers "is the seat reachable" and not "can the seat do a unit of work" - which is the only
+# question worth asking. Running the queue is the probe: it fails safely, leaves every entry
+# queued, and prints when to try again.
 #
 # Output lands in docs/collab/reviews/. Nothing here writes to the repository except that
 # directory: every dispatch is --sandbox read-only, which is the only shape that has ever worked.
@@ -31,6 +38,32 @@ wizard|src/FKNRTD.Cli/Dashboard/Wizard.cs|src/FKNRTD.Cli/Dashboard/TaskWizard.cs
 logformat|src/FKNRTD.Cli/Dashboard/LogLine.cs|src/FKNRTD.Core/Services/AgentOutputObserver.cs|Report ONLY input that would make this throw, return something misleading, or lose the agent's message.
 ENTRIES
 )
+
+# Sleep until the reset time in the last failure, then carry on. The goal this queue serves says
+# that a seat which reaches its window waits and then continues; doing that by hand means somebody
+# has to be awake at the right moment, and the reset is often many hours out.
+if [ "${1:-}" = "--wait" ]; then
+    shift
+    latest=""
+    for log in "$OUT"/*.failed.log; do
+        [ -e "$log" ] || continue
+        found=$(grep -oE "try again at [A-Z][a-z]+ [0-9]+[a-z]{2}, [0-9]{4} [0-9]+:[0-9]+ [AP]M" "$log" | tail -1)
+        [ -n "$found" ] && latest="$found"
+    done
+
+    if [ -z "$latest" ]; then
+        echo "No reset time is recorded in $OUT/*.failed.log; dispatching now." >&2
+    elif ! seconds=$(printf '%s' "$latest" | python "$ROOT/scripts/reset-seconds.py"); then
+        echo "Could not read a reset time out of '$latest'; dispatching now." >&2
+    else
+        echo "The budget resets at ${latest#try again at }, which is ${seconds}s away."
+        echo "Sleeping until then, and dispatching as soon as it passes."
+        sleep "$seconds"
+        # A minute of slack. The reset is stated to the minute, and refusing on the boundary
+        # would spend an entry to learn nothing.
+        sleep 60
+    fi
+fi
 
 if [ "${1:-}" = "--list" ]; then
     printf '%s\n' "$QUEUE" | while IFS='|' read -r name file _ _; do

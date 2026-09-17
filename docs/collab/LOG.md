@@ -497,6 +497,20 @@ The practical rule: do not test availability separately. Run `scripts/codex-revi
 budget it produces reviews, and if there is not it costs one failed entry and says when to try
 again.
 
+**The waiting is now the script's job.** The goal this queue serves says that a seat which reaches
+its window waits and then continues, and doing that by hand means somebody has to be awake at the
+right minute for a reset that is usually many hours out. `scripts/codex-review.sh --wait` reads the
+reset time out of the last `.failed.log`, sleeps until it passes, and dispatches. It is running now,
+against a reset of 19 September 07:55 — a little over forty-four hours from when it started.
+
+The time is parsed in `scripts/reset-seconds.py` rather than inline, for two reasons. The refusal is
+written for a person ("try again at Sep 19th, 2026 7:55 AM") so the ordinal suffix needs stripping,
+and every attempt to embed that expression in the shell script lost its escapes in transit. It
+carries its own cases — midnight as hour 0 rather than 12, a reset already in the past clamping to
+zero rather than going negative — and `scripts/verify.sh` runs them, because a wait of the wrong
+length fails silently in both directions: too short spends a queue entry, too long misses the window
+entirely.
+
 The queue is now eight, not six, and all eight are still outstanding. Two entries were added for
 surfaces written since it was last touched, and both are in the script rather than in a paragraph
 here because the script is what actually runs:
