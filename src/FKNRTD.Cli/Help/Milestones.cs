@@ -571,10 +571,10 @@ public static class Milestones
             "asked whether the agent existed. Two lines of red followed by a green claim about the " +
             "same two agents is worse than either on its own.",
             "Auditing now requires an installed agent, and the agent checks say what to do rather " +
-            "than only what is wrong: install it, press A then E to point the entry at an " +
-            "executable you have, or disable it so it stops being offered. Repointing has no " +
-            "command-line equivalent, which is why the dashboard is what gets named - 'agent add' " +
-            "refuses an identifier that already exists."),
+            "than only what is wrong: install it, point the entry at an executable you have, or " +
+            "disable it so it stops being offered. When this was written the only way to repoint " +
+            "an agent was the dashboard, so that is what it named; the next entry is the command " +
+            "that fixed that, and the message now leads with it."),
 
         new("2026-09-17",
             "Something the dashboard could do and the command line could not",
@@ -592,6 +592,36 @@ public static class Milestones
             "is reported and then accepted, and doctor keeps saying so. Both places that used to " +
             "name a keystroke or the configuration file now name the command; advice that outlives " +
             "the reason for it is how a product ends up recommending the worst of its own options."),
+
+        new("2026-09-17",
+            "An abbreviation is not a typo",
+            "'fknrtd init -y' was refused, correctly, and then handed the reader all six options " +
+            "and left them to work out which one they had meant. -y is the most universal " +
+            "abbreviation on any command line there is.",
+            "The message had a \"did you mean\" path already; it could not fire. It ranks by edit " +
+            "distance, and edit distance is worst at exactly the case a person is most sure of: " +
+            "y to yes is two insertions, over a threshold of one that cannot be loosened without " +
+            "admitting noise. The shortest and most deliberate thing anybody types got the least " +
+            "help.",
+            "A prefix is now matched on its own terms and ranks ahead of a spelling near-miss, " +
+            "because somebody who wrote -q knows which option they want. It is still refused " +
+            "rather than accepted: accepting a prefix would mean that adding an option later " +
+            "silently changed what an existing script's -y referred to, and an option read wrongly " +
+            "and reported as success is the damage this check exists to prevent."),
+
+        new("2026-09-17",
+            "The reviewable diff that was never reviewable",
+            "The portal is generated and committed, and this file claimed it was deterministic so " +
+            "that its diff could be read. Regenerating it changed a line whether or not a word of " +
+            "the product had changed, because the page was stamped with the wall clock.",
+            "The test written to defend the claim held a timestamp fixed and rendered twice with " +
+            "it. That proves the renderer is a pure function of its model, which was true and was " +
+            "not the claim: the command behind it was passing the current time. The half of the " +
+            "property that was easy to test was the half that was never in doubt.",
+            "The renderer takes no clock now - it cannot be handed one - and the page is dated by " +
+            "the newest entry in the tables it is built from, which is what it actually describes. " +
+            "Two runs two seconds apart produce identical bytes, and the date moves only when the " +
+            "product does."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

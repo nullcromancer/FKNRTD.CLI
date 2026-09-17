@@ -11,7 +11,7 @@ public sealed record PortalModel(
     IReadOnlyList<CommandEntry> Commands,
     IReadOnlyList<KeyBinding> Keymap,
     string ProductVersion,
-    DateTimeOffset GeneratedAt,
+    string AsOf,
     IReadOnlyList<Milestone>? Milestones = null,
     IReadOnlyList<SettingEntry>? Settings = null,
     IReadOnlyList<(string Title, string Why, string Frame)>? Screens = null);
@@ -29,9 +29,8 @@ public static class PortalWriter
         var html = new StringBuilder(64 * 1024);
         html.Append(Head);
         html.Append("<p class=edition>Version ").Append(H(model.ProductVersion))
-            .Append(" &middot; Generated <time datetime=\"")
-            .Append(H(model.GeneratedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)))
-            .Append("\">").Append(H(model.GeneratedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture)))
+            .Append(" &middot; Describes the product as of <time datetime=\"")
+            .Append(H(model.AsOf)).Append("\">").Append(H(model.AsOf))
             .Append("</time></p>");
         html.Append(Introduction);
         RenderPipeline(html);

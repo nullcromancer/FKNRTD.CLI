@@ -233,12 +233,7 @@ internal static class HelpCommand
         var accepted = entry.Options
             .Where(candidate => candidate.Name.StartsWith('-'))
             .ToArray();
-        var near = accepted
-            .Select(candidate => (candidate, distance: Distance(option, candidate.Name.TrimStart('-'))))
-            .Where(item => item.distance <= (option.Length <= 4 ? 1 : 2))
-            .OrderBy(item => item.distance)
-            .Select(item => item.candidate)
-            .ToArray();
+        var near = NearOptions(option, accepted);
 
         if (near.Length > 0)
         {
@@ -317,6 +312,47 @@ internal static class HelpCommand
     /// far from "task" as it is from nothing, and the suggestion that would have helped is dropped.
     /// Command names are a handful of characters, so a plain matrix is the clearest thing that works.
     /// </summary>
+    /// <summary>
+    /// The accepted options closest to one a command refused, best first, or none.
+    /// </summary>
+    /// <remarks>
+    /// An abbreviation is not a typo, and edit distance scores one worst exactly when it is
+    /// shortest and most deliberate: <c>-y</c> for <c>-yes</c> is two insertions, which no
+    /// threshold that still rejects noise can admit. So the most universal abbreviation in the
+    /// language got the least help — six options listed, and the reader left to notice that one of
+    /// them was the word they had already typed the first letter of. A prefix is matched on its own
+    /// terms and ranks ahead of a spelling near-miss, being the more confident signal: somebody
+    /// writing <c>-q</c> knows which option they want.
+    ///
+    /// A prefix is still refused rather than accepted. Accepting one would mean that adding an
+    /// option later silently changed what an existing script's <c>-y</c> referred to, and this
+    /// check exists because an option that is read wrongly and reported as success is the damage.
+    /// </remarks>
+    internal static CommandOption[] NearOptions(string option, IReadOnlyList<CommandOption> accepted)
+    {
+        return accepted
+            .Select(candidate => (candidate, rank: Rank(option, candidate.Name.TrimStart('-'))))
+            .Where(item => item.rank >= 0)
+            .OrderBy(item => item.rank)
+            .ThenBy(item => item.candidate.Name.Length)
+            .Select(item => item.candidate)
+            .ToArray();
+
+        // Below zero is "not close enough to offer". A prefix sorts first, then a near spelling by
+        // how near it is. The threshold stays tighter for a short option because at two or three
+        // characters almost everything is within two edits of almost everything else.
+        static int Rank(string typed, string name)
+        {
+            if (typed.Length > 0 && name.StartsWith(typed, StringComparison.OrdinalIgnoreCase))
+            {
+                return 0;
+            }
+
+            var distance = Distance(typed, name);
+            return distance <= (typed.Length <= 4 ? 1 : 2) ? distance : -1;
+        }
+    }
+
     internal static int Distance(string left, string right)
     {
         if (left.Length == 0 || right.Length == 0)

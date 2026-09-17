@@ -19,7 +19,7 @@ internal static class PortalCommand
     {
         var destination = Path.GetFullPath(
             arguments.Get("out") ?? arguments.Positional(1) ?? DefaultFileName);
-        var html = Render(DateTimeOffset.UtcNow);
+        var html = Render();
 
         var directory = Path.GetDirectoryName(destination);
         if (!string.IsNullOrEmpty(directory))
@@ -36,13 +36,21 @@ internal static class PortalCommand
         return 0;
     }
 
-    /// <summary>The document itself, with the clock supplied so the output is testable.</summary>
-    internal static string Render(DateTimeOffset generatedAt) => PortalWriter.Render(new PortalModel(
+    /// <summary>The document itself. It takes no clock, which is what makes it reproducible.</summary>
+    /// <remarks>
+    /// This used to stamp <c>DateTimeOffset.UtcNow</c>, and the file is committed, so regenerating it
+    /// produced a one-line diff whether or not a word of it had changed — and the test that was meant
+    /// to catch that held the timestamp fixed and compared two renders, proving the renderer pure
+    /// while the command it backed was not. The portal describes a set of tables, so it is dated by
+    /// the newest thing in them: the same tables now give the same bytes, and the date moves only
+    /// when the product it describes does.
+    /// </remarks>
+    internal static string Render() => PortalWriter.Render(new PortalModel(
         Glossary.All,
         CommandCatalog.All,
         Keymap.All,
         CommandDispatcher.Version,
-        generatedAt,
+        Milestones.All.Select(milestone => milestone.Date).Max() ?? "",
         Milestones.All,
         SettingsCatalog.All,
         Screens()));

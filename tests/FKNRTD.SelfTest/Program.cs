@@ -294,6 +294,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every label on the main screen leads somewhere", TestEveryLabelOnTheMainScreenLeadsSomewhereAsync),
     ("The log window is right at scale and at its edges", TestLogWindowAtScaleAsync),
     ("Documented examples survive the option check", TestDocumentedExamplesSurviveTheOptionCheckAsync),
+    ("A mistyped option names the one they meant", TestAMistypedOptionNamesTheOneTheyMeantAsync),
     ("A failed creation hands the form back", TestAFailedCreationHandsTheFormBackAsync),
     ("A hand-edited config is checked", TestAHandEditedConfigIsCheckedAsync),
     ("Looking up a word leads with the answer", TestLookingUpAWordLeadsWithTheAnswerAsync),
@@ -1798,11 +1799,19 @@ static Task TestCommandCatalogAsync()
 /// </summary>
 static Task TestPortalAsync()
 {
-    var generatedAt = new DateTimeOffset(2026, 9, 17, 10, 15, 0, TimeSpan.Zero);
-    var html = PortalCommand.Render(generatedAt);
+    var html = PortalCommand.Render();
 
-    // Deterministic: same input, same bytes. Documentation that churns on every run is unreviewable.
-    Equal(html, PortalCommand.Render(generatedAt), "Portal render is deterministic");
+    // Deterministic, and note what is no longer being held still to get that. The old version of this
+    // assertion pinned a timestamp and rendered twice with it, which proves the renderer is a pure
+    // function of its model and says nothing about the command, because the command was passing
+    // DateTimeOffset.UtcNow. The committed file therefore changed on every regeneration, so the one
+    // diff that should have been reviewable was noise. Render() takes no clock now, and this asserts
+    // the property the invariant actually claims: run it twice, get the same file.
+    Equal(html, PortalCommand.Render(), "The portal command is deterministic, not just its renderer");
+
+    // The date it carries has to come from the content, or the line is decorative.
+    True(html.Contains("Describes the product as of " + "<time datetime=\"" + Milestones.All.Select(m => m.Date).Max() + "\">", StringComparison.Ordinal),
+        "and is dated by the newest entry in the tables it was built from");
 
     // Offline: the only permitted absolute URL is the SVG namespace, which is an identifier and not
     // a fetch. Anything else would make the guide fail exactly when it is needed most.
@@ -1863,7 +1872,7 @@ static Task TestPortalAsync()
             [new CommandOption(hostile, hostile, hostile)], [hostile], [])],
         [new KeyBinding(hostile, hostile, hostile)],
         hostile,
-        generatedAt,
+        hostile,
         [new Milestone(hostile, hostile, hostile, hostile, hostile)],
         [new SettingEntry(hostile, hostile, hostile, hostile, hostile, hostile, hostile, "brief")]));
     // The property that matters is that nothing supplied can become an element or an attribute.
@@ -1895,7 +1904,7 @@ static Task TestPortalAsync()
     }
 
     // Empty input must still produce a valid page rather than throwing.
-    var empty = PortalWriter.Render(new PortalModel([], [], [], "0.0.0", generatedAt));
+    var empty = PortalWriter.Render(new PortalModel([], [], [], "0.0.0", "2026-09-17"));
     True(empty.Contains("</html>", StringComparison.Ordinal), "Portal renders with nothing to say");
     return Task.CompletedTask;
 }
@@ -3328,7 +3337,7 @@ static Task TestHelpWritesThePageAsync()
     }
 
     // The document it writes is the real one, with every table in it.
-    var page = PortalCommand.Render(DateTimeOffset.UnixEpoch);
+    var page = PortalCommand.Render();
     True(page.Contains("FKNRTD", StringComparison.Ordinal), "The page names the product");
     foreach (var binding in Keymap.All)
     {
@@ -3716,7 +3725,7 @@ static Task TestEveryDrawnStateIsExplainedAsync()
 /// </summary>
 static Task TestPortalShowsRealScreensAsync()
 {
-    var page = PortalCommand.Render(DateTimeOffset.UnixEpoch);
+    var page = PortalCommand.Render();
 
     True(page.Contains("id=screens", StringComparison.Ordinal), "The guide has a screens section");
     True(page.Contains("What it looks like", StringComparison.Ordinal), "And it is in the navigation");
@@ -4075,7 +4084,7 @@ static Task TestCorrectedClaimsStayCorrectedAsync()
             "it names an internal condition rather than what happened")
     };
 
-    var page = PortalCommand.Render(DateTimeOffset.UnixEpoch);
+    var page = PortalCommand.Render();
     foreach (var (claim, why) in retired)
     {
         True(!page.Contains(claim, StringComparison.OrdinalIgnoreCase),
@@ -5263,6 +5272,51 @@ static Task TestDocumentedExamplesSurviveTheOptionCheckAsync()
     // better message than this one could give.
     var (missing, _) = CommandDispatcher.FirstUnacceptedOption(new CliArguments(["taks", "-jsno"]));
     Equal(null, missing?.Name, "An unknown command is left for the command check to report");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// A refused option is answered with the option they meant, including an abbreviation.
+/// </summary>
+/// <remarks>
+/// Refusing was the half that shipped first. The other half is that the message has to leave the
+/// reader able to fix it, and the ranking behind it could not: it is edit distance, and edit
+/// distance is worst at exactly the case a person is most confident about. Typing -y for -yes cost
+/// two insertions, over a threshold of one, so the single most universal abbreviation in the
+/// language was handed the full option list and left to spot the word it was the first letter of.
+/// </remarks>
+static Task TestAMistypedOptionNamesTheOneTheyMeantAsync()
+{
+    // Refusing is half the job; naming the option they meant is the other half. An abbreviation is
+    // the case edit distance is worst at, because a prefix costs one insertion per missing letter
+    // and -y is the shortest and most confident thing anybody types.
+    var initOptions = CommandCatalog.Find("init")!.Options;
+    foreach (var (typed, expected, shape) in new[]
+             {
+                 ("y", "-yes", "the most universal abbreviation there is"),
+                 ("q", "-quiet", "a one-letter prefix"),
+                 ("standalon", "-standalone", "a dropped last letter"),
+                 ("standlaone", "-standalone", "a transposition")
+             })
+    {
+        var suggestions = HelpCommand.NearOptions(typed, initOptions);
+        True(suggestions.Length > 0, $"-{typed} is offered a suggestion, being {shape}");
+        Equal(expected, suggestions[0].Name, $"and -{typed} leads with {expected}");
+    }
+
+    // The threshold still has to mean something: noise gets the full list instead of a wrong guess.
+    Equal(0, HelpCommand.NearOptions("zzz", initOptions).Length,
+        "Noise is not dressed up as a near miss");
+
+    // A prefix outranks a spelling near-miss, because somebody who typed it knows what they want.
+    var ambiguous = new[]
+    {
+        new CommandOption("-force", "", "prefix match"),
+        new CommandOption("-forck", "", "one edit away")
+    };
+    Equal("-force", HelpCommand.NearOptions("forc", ambiguous)[0].Name,
+        "A prefix is offered before a near spelling");
 
     return Task.CompletedTask;
 }

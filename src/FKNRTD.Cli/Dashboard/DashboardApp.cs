@@ -1907,7 +1907,7 @@ internal sealed class DashboardApp
                 PortalCommand.DefaultFileName);
             try
             {
-                File.WriteAllText(destination, PortalCommand.Render(DateTimeOffset.UtcNow),
+                File.WriteAllText(destination, PortalCommand.Render(),
                     new UTF8Encoding(false));
                 _toast = $"Wrote the whole reference to {destination}. Open it in a browser; it " +
                          "needs no network.";
