@@ -211,6 +211,60 @@ internal sealed class DashboardApp
         Console.Write(RenderCurrent(snapshot, frame.Width, frame.Height, frame.UseColor));
     }
 
+    /// <summary>The smallest window the dashboard will draw itself into.</summary>
+    /// <remarks>
+    /// Below this the layout does not degrade, it overflows: the panels have fixed furniture and a
+    /// narrower terminal wraps every row of it. Saying so is the only honest option, and it is also
+    /// the useful one, because the fix is entirely in the reader's hands.
+    /// </remarks>
+    internal const int MinimumWidth = 60;
+
+    /// <inheritdoc cref="MinimumWidth"/>
+    internal const int MinimumHeight = 20;
+
+    /// <summary>
+    /// What to draw when the window is too small to draw anything else: what is needed, what there
+    /// is, and the one action that resolves it.
+    /// </summary>
+    /// <remarks>
+    /// Written to fit whatever space actually exists rather than to a minimum of its own, because a
+    /// notice about the window being too small that is itself too big to read would be the same
+    /// fault twice. At a handful of columns it degrades to as much of the first line as fits, which
+    /// is still more use than a wrapped frame.
+    /// </remarks>
+    internal static string RenderTooSmall(int width, int height, bool useColor)
+    {
+        var canvas = new Canvas(Math.Max(1, width), Math.Max(1, height));
+        var inner = Math.Max(1, width - 2);
+        var row = 0;
+
+        row = canvas.DrawWrapped(1, row, inner, Math.Max(0, height - row), "Window too small",
+            Theme.Amber, bold: true);
+
+        // Each of these is dropped rather than truncated when there is no room, so what survives
+        // at a very small size is the part that matters most, in order.
+        foreach (var line in new[]
+                 {
+                     string.Empty,
+                     $"The dashboard needs {MinimumWidth} by {MinimumHeight}. This window is {width} by {height}.",
+                     string.Empty,
+                     "Make the window bigger and it redraws by itself.",
+                     "Q quits."
+                 })
+        {
+            if (row >= height)
+            {
+                break;
+            }
+
+            row = line.Length == 0
+                ? row + 1
+                : canvas.DrawWrapped(1, row, inner, height - row, line, Theme.Foreground);
+        }
+
+        return canvas.Render(useColor);
+    }
+
     private string RenderFrame(
         DashboardSnapshot snapshot,
         int width,
@@ -221,8 +275,15 @@ internal sealed class DashboardApp
         string toast,
         IOverlay? overlay)
     {
-        width = Math.Max(60, width);
-        height = Math.Max(20, height);
+        // A window smaller than the dashboard needs is told so, rather than drawn over. Clamping
+        // silently meant a 40-column terminal got 60 columns of frame: every row wrapped, every
+        // panel border landed mid-sentence, and nothing on the screen said what was wrong or that
+        // making the window bigger would fix it.
+        if (width < MinimumWidth || height < MinimumHeight)
+        {
+            return RenderTooSmall(width, height, useColor);
+        }
+
         var canvas = new Canvas(width, height);
         RenderHeader(canvas, snapshot, new Rect(0, 0, width, 4));
         var footer = new Rect(0, height - 2, width, 2);

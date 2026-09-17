@@ -543,6 +543,23 @@ public static class Milestones
             "paragraphs somebody remembered and wrong on the rest. The test compares each " +
             "continuation against its own step's column, so it never needs to know where the panel " +
             "begins."),
+
+        new("2026-09-17",
+            "Telling a window it is too small instead of drawing over it",
+            "The dashboard needs sixty columns by twenty rows. A smaller window had its size " +
+            "clamped up to that and was drawn into anyway, which is a decision made once and never " +
+            "looked at again.",
+            "A forty-column terminal therefore received sixty columns of panel furniture. Every row " +
+            "wrapped, every border landed in the middle of a sentence, and nothing anywhere said " +
+            "what was wrong - even though the fix was entirely in the reader's hands and took one " +
+            "drag of a window edge.",
+            "It now says what it needs, what the window is, and that making it bigger redraws by " +
+            "itself. The notice fits whatever space exists rather than having a minimum of its own, " +
+            "because a message about the window being too small that is itself too big to read " +
+            "would be the same fault twice; at very few columns it keeps the headline and drops the " +
+            "rest. The renderer's invariant got simpler rather than weaker - a frame is now exactly " +
+            "the size it was asked for at every size, with no point where the frame and the window " +
+            "disagree, and all 11,660 fuzzed renders hold it."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

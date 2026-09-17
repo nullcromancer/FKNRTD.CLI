@@ -167,8 +167,14 @@ if (args.FirstOrDefault() == "fuzz")
             foreach (var height in heights)
             {
                 checkedRenders++;
-                var expectedWidth = Math.Max(60, width);
-                var expectedHeight = Math.Max(20, height);
+                // A frame is exactly the size it was asked for, at every size. It used to be
+                // clamped up to the dashboard's minimum, which drew 60 columns of panel furniture
+                // into whatever the terminal actually had; below the minimum the product now says
+                // the window is too small, in the space there is. That makes the invariant simpler
+                // rather than weaker - there is no longer any size at which the frame and the
+                // window disagree.
+                var expectedWidth = Math.Max(1, width);
+                var expectedHeight = Math.Max(1, height);
                 try
                 {
                     var lines = Scenes.Render(scene, width, height, colour: false)
@@ -291,7 +297,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A failed creation hands the form back", TestAFailedCreationHandsTheFormBackAsync),
     ("A hand-edited config is checked", TestAHandEditedConfigIsCheckedAsync),
     ("Looking up a word leads with the answer", TestLookingUpAWordLeadsWithTheAnswerAsync),
-    ("A wrapped list item stays inside its item", TestAWrappedListItemStaysInsideItsItemAsync)
+    ("A wrapped list item stays inside its item", TestAWrappedListItemStaysInsideItsItemAsync),
+    ("A too-small window says so", TestATooSmallWindowSaysSoAsync)
 };
 
 var failures = new List<string>();
@@ -5589,5 +5596,74 @@ static Task TestAWrappedListItemStaysInsideItsItemAsync()
 
     Equal(6, numbered, "The summary is six steps, however narrow the window");
     True(wrapped >= 3, $"The screen was narrow enough for steps to wrap ({wrapped} continuations)");
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// A window too small for the dashboard is told so, in the space it has.
+/// </summary>
+/// <remarks>
+/// The size was clamped up to the minimum and drawn anyway, so a 40-column terminal received 60
+/// columns of panel furniture: every row wrapped, every border landed mid-sentence, and nothing on
+/// the screen said what was wrong. The fix is entirely in the reader's hands, which is exactly the
+/// case where saying so is worth most.
+/// </remarks>
+static Task TestATooSmallWindowSaysSoAsync()
+{
+    // Just inside the minimum: the dashboard proper, with its frame.
+    var enough = DashboardApp.RenderTooSmall(DashboardApp.MinimumWidth, DashboardApp.MinimumHeight, false);
+    True(enough.Length > 0, "The notice renders at the minimum size too");
+
+    var frame = Scenes.Render("overview", DashboardApp.MinimumWidth, DashboardApp.MinimumHeight, colour: false);
+    True(frame.Contains("FKNRTD COMMAND CENTER", StringComparison.Ordinal),
+        $"At {DashboardApp.MinimumWidth}x{DashboardApp.MinimumHeight} the dashboard itself is drawn");
+    True(!frame.Contains("Window too small", StringComparison.Ordinal),
+        "and is not called too small at the size it declares it needs");
+
+    // One column short in either direction is too small, and says which.
+    foreach (var (width, height) in new[]
+             {
+                 (DashboardApp.MinimumWidth - 1, DashboardApp.MinimumHeight),
+                 (DashboardApp.MinimumWidth, DashboardApp.MinimumHeight - 1)
+             })
+    {
+        var narrow = Scenes.Render("overview", width, height, colour: false);
+        True(narrow.Contains("Window too small", StringComparison.Ordinal),
+            $"{width}x{height} is refused rather than drawn over");
+        True(narrow.Contains($"{width} by {height}", StringComparison.Ordinal),
+            $"and the notice states the size the window actually is ({width} by {height})");
+        True(narrow.Contains($"{DashboardApp.MinimumWidth} by {DashboardApp.MinimumHeight}", StringComparison.Ordinal),
+            "and the size it would need");
+        True(!narrow.Contains("PIPELINE", StringComparison.Ordinal),
+            "with none of the layout it could not have fitted");
+    }
+
+    // The notice fits the window rather than having a minimum of its own, which would be the same
+    // fault twice. Every row is exactly as wide as asked for, at every size down to one column.
+    foreach (var width in new[] { 1, 2, 5, 12, 24, 40, 59 })
+    {
+        foreach (var height in new[] { 1, 2, 4, 8, 19 })
+        {
+            var lines = Scenes.Render("overview", width, height, colour: false)
+                .Split([(char)13, (char)10], StringSplitOptions.RemoveEmptyEntries);
+            Equal(height, lines.Length, $"A {width}x{height} window gets {height} rows");
+            foreach (var line in lines)
+            {
+                Equal(width, Text.DisplayWidth(line),
+                    $"and every row of a {width}x{height} window is {width} columns");
+            }
+        }
+    }
+
+    // What survives when there is almost no room is the part that matters most, in order: the
+    // headline first, then the sizes, then what to do.
+    var tiny = DashboardApp.RenderTooSmall(30, 1, false);
+    True(tiny.Contains("Window", StringComparison.Ordinal),
+        "One row of a small window still carries the headline");
+
+    var roomier = DashboardApp.RenderTooSmall(40, 12, false);
+    True(roomier.Contains("Q quits", StringComparison.Ordinal),
+        "and a window with room for it is told how to leave");
+
     return Task.CompletedTask;
 }
