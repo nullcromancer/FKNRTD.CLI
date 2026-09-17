@@ -268,9 +268,19 @@ internal sealed class DashboardApp
 
         var claude = snapshot.Usage.FirstOrDefault(item => item.AgentId.Equals("claude", StringComparison.OrdinalIgnoreCase));
         var codex = snapshot.Usage.FirstOrDefault(item => item.AgentId.Equals("codex", StringComparison.OrdinalIgnoreCase));
-        var line = $"CTX {Percent(claude?.ContextRemainingPercent)} left  |  Claude 5h {Percent(claude?.FiveHourRemainingPercent)} 7d {Percent(claude?.WeeklyRemainingPercent)}  |  Codex 5h {Percent(codex?.FiveHourRemainingPercent)} 7d {Percent(codex?.WeeklyRemainingPercent)}";
-        canvas.DrawText(inner.X, inner.Y + 1, Text.Truncate(line, inner.Width), Theme.Foreground,
-            maxWidth: inner.Width);
+        // A row of N/A is what a first-time operator sees, and it reads as broken rather than as
+        // "nothing has reported yet". Saying which key fetches it costs the same line.
+        var known = new[]
+        {
+            claude?.ContextRemainingPercent, claude?.FiveHourRemainingPercent,
+            claude?.WeeklyRemainingPercent, codex?.FiveHourRemainingPercent, codex?.WeeklyRemainingPercent
+        }.Any(value => value is not null);
+        var line = known
+            ? $"CTX {Percent(claude?.ContextRemainingPercent)} left  |  Claude 5h {Percent(claude?.FiveHourRemainingPercent)} 7d {Percent(claude?.WeeklyRemainingPercent)}  |  Codex 5h {Percent(codex?.FiveHourRemainingPercent)} 7d {Percent(codex?.WeeklyRemainingPercent)}"
+            : "Rate-limit budget unknown — press U to ask Codex, or install the Claude statusline with " +
+              "'fknrtd integration install-claude-statusline'";
+        canvas.DrawText(inner.X, inner.Y + 1, Text.Truncate(line, inner.Width),
+            known ? Theme.Foreground : Theme.Muted, maxWidth: inner.Width);
     }
 
     private void RenderAgents(Canvas canvas, DashboardSnapshot snapshot, Rect rect)
@@ -840,6 +850,7 @@ internal sealed class DashboardApp
             ConsoleKey.A => "A",
             ConsoleKey.D => "D",
             ConsoleKey.E => "E",
+            ConsoleKey.K => "K",
             ConsoleKey.Tab => "Tab",
             // '?' and '/' have no ConsoleKey of their own and arrive differently on different
             // keyboard layouts, so they are matched on the character instead.
@@ -931,6 +942,9 @@ internal sealed class DashboardApp
                 _overlay = Reference.Events(
                     await _store.LoadEventsAsync(500, cancellationToken).ConfigureAwait(false),
                     snapshot.CapturedAt);
+                break;
+            case "K":
+                _overlay = Reference.Coordination(snapshot);
                 break;
             case "?":
                 _overlay = Reference.Help();

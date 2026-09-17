@@ -56,6 +56,10 @@ public static class Keymap
         new("A", "agents",
             "Lists the configured agents: which are enabled, which can actually be found on PATH, " +
             "and which are equipped to act as an auditor."),
+        new("K", "coordination",
+            "Shows what the agents have reserved and where they overlap: every live file claim, " +
+            "every conflict the sentinel has raised, and the message bus. This is the surface that " +
+            "answers why a task is waiting rather than working."),
         new("E", "events",
             "Opens the workspace history: every task created, stage started and finished, conflict " +
             "raised and agent check-in, newest first and searchable. This is where you look when " +

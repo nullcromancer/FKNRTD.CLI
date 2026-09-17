@@ -216,6 +216,104 @@ internal static class Reference
         _ => Theme.Foreground
     };
 
+    /// <summary>
+    /// What the agents have reserved and where they overlap, behind <c>K</c>. The overview shows the
+    /// worst conflict in three words; this says which paths, which agents, and what to do about it.
+    /// </summary>
+    public static InfoPanel Coordination(DashboardSnapshot snapshot)
+    {
+        var blocks = new List<InfoBlock>();
+
+        blocks.Add(new InfoHeading("Overlaps"));
+        if (snapshot.Conflicts.Count == 0)
+        {
+            blocks.Add(new InfoParagraph(
+                "No overlap. Nothing that is running is about to write a file that something else " +
+                "is also working on.", Theme.Green));
+        }
+        else
+        {
+            foreach (var conflict in snapshot.Conflicts)
+            {
+                var entry = Glossary.Find("conflict." + conflict.Kind.ToString().ToLowerInvariant());
+                blocks.Add(new InfoLine(
+                    conflict.Kind == ConflictKind.Collision ? "COLLISION" : conflict.Kind.ToString(),
+                    conflict.Summary,
+                    conflict.Kind == ConflictKind.Collision ? Theme.Red : Theme.Amber,
+                    Bold: conflict.Kind == ConflictKind.Collision));
+                blocks.Add(new InfoParagraph("Paths: " + string.Join(", ", conflict.Paths), Theme.Foreground,
+                    Indent: 2));
+                if (conflict.AgentIds.Count > 0)
+                {
+                    blocks.Add(new InfoParagraph("Between: " + string.Join(" and ", conflict.AgentIds),
+                        Theme.Muted, Indent: 2));
+                }
+
+                if (entry is not null)
+                {
+                    blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted, Indent: 2));
+                }
+            }
+        }
+
+        blocks.Add(new InfoHeading("Reservations"));
+        if (snapshot.Claims.Count == 0)
+        {
+            blocks.Add(new InfoParagraph(
+                "No agent has reserved any path. Claims are optional: an agent that does not declare " +
+                "what it is about to touch simply cannot be warned about an overlap in advance.",
+                Theme.Muted));
+        }
+        else
+        {
+            foreach (var claim in snapshot.Claims.OrderBy(item => item.AgentId, StringComparer.Ordinal))
+            {
+                var remaining = claim.ExpiresAt - snapshot.CapturedAt;
+                var expiry = remaining <= TimeSpan.Zero
+                    ? "expired"
+                    : $"{remaining.TotalSeconds:0}s left";
+                blocks.Add(new InfoLine(
+                    $"{claim.AgentId} · {claim.Mode.ToString().ToLowerInvariant()}",
+                    string.Join(", ", claim.Paths),
+                    remaining <= TimeSpan.Zero ? Theme.Muted : Theme.Foreground));
+                blocks.Add(new InfoParagraph(expiry, Theme.Muted, Indent: 2));
+            }
+        }
+
+        blocks.Add(new InfoHeading("Messages"));
+        if (snapshot.Messages.Count == 0)
+        {
+            blocks.Add(new InfoParagraph(
+                "Nothing on the message bus. Press M to record a hand-off between agents.", Theme.Muted));
+        }
+        else
+        {
+            foreach (var message in snapshot.Messages)
+            {
+                blocks.Add(new InfoLine(
+                    $"{message.FromAgentId} to {message.ToAgentId}",
+                    message.Text,
+                    message.Delivery == MessageDelivery.Acknowledged ? Theme.Muted : Theme.Foreground));
+                blocks.Add(new InfoParagraph(
+                    $"{message.Delivery.ToString().ToLowerInvariant()} · " +
+                    $"{Text.Age(message.CreatedAt, snapshot.CapturedAt)} ago",
+                    Theme.Muted, Indent: 2));
+            }
+        }
+
+        var claimEntry = Glossary.Find("claim");
+        if (claimEntry is not null)
+        {
+            blocks.Add(new InfoHeading("How this works"));
+            blocks.Add(new InfoParagraph(claimEntry.Detail, Theme.Muted));
+        }
+
+        var worst = snapshot.Conflicts.FirstOrDefault();
+        return new InfoPanel("COORDINATION",
+            worst is null ? Theme.Green : worst.Kind == ConflictKind.Collision ? Theme.Red : Theme.Amber,
+            blocks);
+    }
+
     /// <summary>The pre-flight checks behind <c>D</c>, with what a failure would actually cost.</summary>
     public static InfoPanel Doctor(IReadOnlyList<DoctorCheck> checks)
     {
