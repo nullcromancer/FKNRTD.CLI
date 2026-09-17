@@ -333,6 +333,22 @@ public static class Milestones
             "reassurance and then thrown it away. This is the same defect as a panel whose measure " +
             "disagrees with its draw, one layer up: the state said one thing and the pixels said " +
             "another, and only the pixels are the product."),
+
+        new("2026-09-17",
+            "The log view stopped showing JSON",
+            "The shipped agents are launched with machine-readable output so that their progress " +
+            "can be followed, and the stage log is their stdout exactly as it arrived. Pressing L " +
+            "on a running task therefore showed a wall of JSON, one object per line, in which the " +
+            "sentence the agent had just written was a quoted field somewhere past column ninety.",
+            "The log view now reads those bytes rather than printing them: what the agent said, " +
+            "the tools it used and the file or command each one was about, its errors, and its " +
+            "final answer. Anything unrecognised is shown exactly as it arrived, so an agent whose " +
+            "format nobody has taught it about is no worse off than before, and plain build output " +
+            "keeps its indentation because a failing assertion lines its values up under each other.",
+            "Nothing on disk changed. The raw stream is still the file, which is what you want when " +
+            "you are debugging the agent rather than the work. The reason this went unnoticed so " +
+            "long is that the log panel had never been rendered with a log in it - the scene set " +
+            "covered the empty case only, so the entire drawing path was exercised nowhere."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

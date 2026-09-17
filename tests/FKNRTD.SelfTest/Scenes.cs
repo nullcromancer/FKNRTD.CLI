@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
     ];
 
     /// <summary>
@@ -43,8 +43,24 @@ internal static class Scenes
             WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
         if (name == "logs")
         {
-            // Index 2 is the failed task, which is the state the log view exists to serve.
+            // Deliberately without a log on disk: "nothing has been written yet" is one of several
+            // different situations and saying which one applies is the point of the panel.
             return renderer.RenderLog(snapshot, width, height, selectedTaskIndex: 2, colour);
+        }
+
+        if (name is "logs-plain" or "logs-json")
+        {
+            // Index 2 is the failed task, which is the state the log view exists to serve. The log
+            // view had never been rendered with a log in it, so the whole reading path - the part
+            // that turns an agent's JSON stream into sentences - was drawn nowhere.
+            // Its own directory, not the shared temp root every other scene borrows: writing a
+            // sample log into that root made a real log appear for a test that was checking what an
+            // absent one says.
+            var root = Path.Combine(Path.GetTempPath(), "fknrtd-scene-logs");
+            var store = new StateStore(WorkspaceLocator.ForRoot(root));
+            WriteSampleLog(store, snapshot.Tasks[2], name == "logs-json");
+            var reader = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+            return reader.RenderLog(snapshot, width, height, selectedTaskIndex: 2, colour);
         }
 
         if (name == "quit-while-running")
@@ -358,6 +374,47 @@ internal static class Scenes
         }
 
         return restated;
+    }
+
+    /// <summary>
+    /// Writes a stage log for a scene: either an agent's real machine-readable stream, or the plain
+    /// output a shell verification command produces. Both have to be readable on screen.
+    /// </summary>
+    private static void WriteSampleLog(StateStore store, WorkflowTask task, bool asJson)
+    {
+        var path = store.TaskLogPath(task.Id, task.CurrentStage, task.RepairRound);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        // Exactly the shapes the shipped agents emit, including the housekeeping lines that make up
+        // most of a real log and say the least.
+        var json = new[]
+        {
+            """{"type":"system","subtype":"init","session_id":"3f9c","tools":["Read","Edit","Bash"]}""",
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"Reading Schedule.cs to find where the timezone is applied."}]}}""",
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"src/Reports/Schedule.cs"}}]}}""",
+            """{"type":"user","message":{"content":[{"type":"tool_result","content":"..."}]}}""",
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"ToLocalTime uses the machine zone. The workspace zone should be used instead."}]}}""",
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/Reports/Schedule.cs","old_string":"ToLocalTime()"}}]}}""",
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"dotnet test --no-build"}}]}}""",
+            """{"type":"error","message":"ScheduleTests.RespectsWorkspaceZone failed: expected 09:00, got 04:00"}""",
+            """{"type":"result","subtype":"success","result":"Changed Schedule.cs to use the workspace zone. One test still fails."}"""
+        };
+
+        var plain = new[]
+        {
+            "  Determining projects to restore...",
+            "  All projects are up-to-date for restore.",
+            "  aurora-api -> /src/aurora-api/bin/Debug/net10.0/aurora-api.dll",
+            "Test run for /src/aurora-api/bin/Debug/net10.0/aurora-api.Tests.dll",
+            "  Failed ScheduleTests.RespectsWorkspaceZone [4 ms]",
+            "  Error Message:",
+            "   Assert.Equal() Failure: Values differ",
+            "   Expected: 09:00",
+            "   Actual:   04:00",
+            "Failed!  - Failed: 1, Passed: 42, Skipped: 0, Total: 43"
+        };
+
+        File.WriteAllLines(path, asJson ? json : plain, new System.Text.UTF8Encoding(false));
     }
 
     public static FknrtdConfig SampleConfig() => new()

@@ -139,7 +139,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A task naming a missing agent says so", TestOrphanedAgentIsFlaggedAsync),
     ("The busy repaint stays inside the dashboard loop", TestBusyRepaintStaysInsideTheLoopAsync),
     ("Nothing on screen tells you to leave the dashboard", TestNothingTellsYouToLeaveAsync),
-    ("Quitting asks when work is running", TestQuittingAsksWhenWorkIsRunningAsync)
+    ("Quitting asks when work is running", TestQuittingAsksWhenWorkIsRunningAsync),
+    ("A stage log reads as sentences, not JSON", TestLogIsReadableAsync)
 };
 
 var failures = new List<string>();
@@ -3278,4 +3279,87 @@ static async Task TestQuittingAsksWhenWorkIsRunningAsync()
         await busy.HandleKeyAsync(Key(ConsoleKey.Enter), snapshot, CancellationToken.None).ConfigureAwait(false);
         True(busy.WantsToQuit, "Choosing to stop them and quit does quit");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// Reading a stage log. The shipped agents are launched with machine-readable output so their
+/// progress can be followed, which makes the file on disk a stream of JSON objects. Keeping that is
+/// right; putting it on a screen is not, and pressing L on a running task used to show a wall of it
+/// with the sentence the agent had just written quoted somewhere past column ninety.
+/// </summary>
+static Task TestLogIsReadableAsync()
+{
+    // What the agent said, did, and concluded, from the shapes it really emits.
+    var cases = new (string Raw, string Expected, LogKind Kind)[]
+    {
+        ("""{"type":"assistant","message":{"content":[{"type":"text","text":"Reading Schedule.cs."}]}}""",
+            "Reading Schedule.cs.", LogKind.Said),
+        ("""{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/A.cs"}}]}}""",
+            "> Edit  src/A.cs", LogKind.Did),
+        ("""{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"dotnet test"}}]}}""",
+            "> Bash  dotnet test", LogKind.Did),
+        ("""{"type":"result","subtype":"success","result":"Done."}""", "√ Done.", LogKind.Finished),
+        ("""{"type":"error","message":"it broke"}""", "× it broke", LogKind.Failed),
+        ("""{"type":"system","subtype":"init","session_id":"3f9c"}""", "session init", LogKind.Noise),
+        ("""{"type":"item.completed","item":{"type":"command_execution","command":"ls -la"}}""",
+            "> ls -la", LogKind.Did),
+        ("""{"type":"item.completed","item":{"type":"agent_message","text":"Finished the edit."}}""",
+            "Finished the edit.", LogKind.Said)
+    };
+
+    foreach (var (raw, expected, kind) in cases)
+    {
+        var line = LogFormat.Read(raw);
+        Equal(expected, line.Text, "Reading " + Text.Truncate(raw, 60));
+        Equal(kind, line.Kind, "Kind of " + Text.Truncate(raw, 60));
+    }
+
+    // Anything not recognised is shown exactly as it arrived, including its indentation: build and
+    // test tools indent to show structure, and an assertion's expected and actual line up under
+    // each other. An agent whose format is unknown must be no worse off than before.
+    foreach (var plain in new[]
+             {
+                 "  Determining projects to restore...",
+                 "   Expected: 09:00",
+                 "Failed!  - Failed: 1, Passed: 42",
+                 "{ this is not json",
+                 "[not json either"
+             })
+    {
+        var line = LogFormat.Read(plain);
+        Equal(plain, line.Text, "Plain output survives unchanged");
+        Equal(LogKind.Plain, line.Kind, "And is treated as plain");
+    }
+
+    // Never throws, whatever it is handed. A log is read while it is being written, so half a line
+    // is a normal thing to meet.
+    foreach (var awkward in new[]
+             {
+                 "", "   ", "{", "{}", "[]", "null", """{"type":"assistant","message":{"content":[]}}""",
+                 """{"type":"assistant","message":{"content":"a bare string"}}""",
+                 """{"result":42}""", """{"type":"assistant","message":{"content":[{"type":"tool_use"}]}}"""
+             })
+    {
+        var line = LogFormat.Read(awkward);
+        True(line.Text.Length <= 2100, "A read line is bounded: " + awkward);
+    }
+
+    // A multi-line message becomes one row, because a row is one line by definition. The JSON is
+    // built rather than written out, so the newlines in it are real ones.
+    var multiLine = "one" + (char)10 + "two" + (char)10 + "three";
+    var wrapped = LogFormat.Read(System.Text.Json.JsonSerializer.Serialize(new
+    {
+        type = "assistant",
+        message = new { content = new[] { new { type = "text", text = multiLine } } }
+    }));
+    Equal("one two three", wrapped.Text, "A multi-line message is flattened onto its row");
+
+    // And the whole thing is rendered somewhere, so the path is exercised at every size.
+    var frame = Scenes.Render("logs-json", 100, 26, colour: false);
+    True(frame.Contains("> Edit  src/Reports/Schedule.cs", StringComparison.Ordinal),
+        "The log view shows what the agent did");
+    True(!frame.Contains("\"type\":\"assistant\"", StringComparison.Ordinal),
+        "And does not show the JSON it was written as");
+
+    return Task.CompletedTask;
 }

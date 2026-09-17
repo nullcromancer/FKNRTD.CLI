@@ -727,17 +727,33 @@ internal sealed class DashboardApp
             _logScroll == 0 ? Theme.Muted : Theme.Amber,
             maxWidth: inner.Width);
 
-        foreach (var line in lines)
+        foreach (var raw in lines)
         {
             if (row >= inner.Bottom)
             {
                 break;
             }
 
-            canvas.DrawText(inner.X, row++, Text.Truncate(line, inner.Width), LogLineColour(line),
+            // The shipped agents are launched with machine-readable output so their progress can be
+            // followed, which makes the file on disk a stream of JSON. Keeping that is right; showing
+            // it is not, so what is drawn is a reading of the same bytes.
+            var line = LogFormat.Read(raw);
+            canvas.DrawText(inner.X, row++, Text.Truncate(line.Text, inner.Width), Colour(line),
+                bold: line.Kind is LogKind.Finished or LogKind.Failed,
                 maxWidth: inner.Width);
         }
     }
+
+    /// <summary>What colour a read log line is drawn in.</summary>
+    private static Rgb Colour(LogLine line) => line.Kind switch
+    {
+        LogKind.Said => Theme.Foreground,
+        LogKind.Did => Theme.Cyan,
+        LogKind.Finished => Theme.Green,
+        LogKind.Failed => Theme.Red,
+        LogKind.Noise => Theme.Muted,
+        _ => LogLineColour(line.Text)
+    };
 
     /// <summary>
     /// The log for the stage the task is on, falling back to the most recent log it has. A task that

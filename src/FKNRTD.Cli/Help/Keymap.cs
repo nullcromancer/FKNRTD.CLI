@@ -40,7 +40,11 @@ public static class Keymap
             InFooter: true),
         new("L", "logs",
             "Switches between the overview and the live output of the highlighted task's current " +
-            "stage. This is where you look when something is taking a long time or has failed.",
+            "stage. This is where you look when something is taking a long time or has failed. The " +
+            "shipped agents write a stream of JSON so their progress can be followed; what is shown " +
+            "here is a reading of it - what the agent said, the tools it used and the files it " +
+            "touched - with anything unrecognised left exactly as it arrived. The file on disk is " +
+            "always the raw output.",
             InFooter: true),
         new("F", "find a task",
             "Searches every task in the workspace by title, status or id and selects the one you " +
