@@ -731,6 +731,7 @@ internal static class CommandDispatcher
         return arguments.Subcommand switch
         {
             "list" or "ls" or "" => await ListAgentsAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
+            "new" => await NewAgentAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "add" => await AddAgentAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "enable" => await SetAgentEnabledAsync(runtime, arguments, true, cancellationToken).ConfigureAwait(false),
             "disable" => await SetAgentEnabledAsync(runtime, arguments, false, cancellationToken).ConfigureAwait(false),
@@ -755,6 +756,43 @@ internal static class CommandDispatcher
         foreach (var agent in config.Agents)
         {
             Console.WriteLine($"{agent.Id,-12} {(agent.Enabled ? "yes" : "no"),-8} {(ExecutableLocator.Find(agent.Executable) is not null ? "yes" : "no"),-6} {agent.Kind,-10} {agent.Executable}");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// <c>fknrtd agent new</c>. The guided form for registering a coding CLI. `agent add` still
+    /// exists and is what a script should use; this is what a person should use, because the option
+    /// list it replaces is the most cryptic thing the product asks anyone to type.
+    /// </summary>
+    private static async Task<int> NewAgentAsync(
+        FknrtdRuntime runtime,
+        CliArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+        var wizard = AgentWizard.Create(config);
+        var completed = await OverlayHost
+            .RunAsync(wizard, $"{config.ProjectName} - registering a coding CLI", UseColor(arguments),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!completed)
+        {
+            Console.WriteLine("Cancelled. No agent was registered.");
+            return 0;
+        }
+
+        var agent = AgentWizard.Build(wizard);
+        ValidateAgentDefinition(agent);
+        await runtime.Store
+            .SaveConfigAsync(config with { Agents = config.Agents.Append(agent).ToList() }, cancellationToken)
+            .ConfigureAwait(false);
+
+        Console.WriteLine($"✓ Registered {agent.DisplayName}");
+        foreach (var line in AgentWizard.Report(agent, wizard.Value("audit") == "yes"))
+        {
+            Console.WriteLine(line);
         }
 
         return 0;

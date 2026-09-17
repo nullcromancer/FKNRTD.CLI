@@ -1110,7 +1110,8 @@ static Task TestWizardStepsAreExplainedAsync()
              {
                  TaskWizard.Create(config),
                  TaskWizard.Message(config),
-                 SetupWizard.Create(Scenes.SampleDetection())
+                 SetupWizard.Create(Scenes.SampleDetection()),
+                 AgentWizard.Create(Scenes.SampleConfig())
              })
     {
         // Walk the whole form by accepting each default, and require an explanation at every step.

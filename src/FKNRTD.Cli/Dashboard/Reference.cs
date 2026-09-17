@@ -221,6 +221,11 @@ internal static class Reference
             blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted));
         }
 
+        blocks.Add(new InfoHeading("Adding another"));
+        blocks.Add(new InfoParagraph(
+            "Quit the dashboard and run 'fknrtd agent new'. It asks what to call the agent, which " +
+            "program runs it and how that program wants its prompt, explaining each as it goes."));
+
         return new InfoPanel("AGENTS", Theme.Violet, blocks);
     }
 

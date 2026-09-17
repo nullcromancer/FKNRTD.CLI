@@ -96,6 +96,18 @@ public static class CommandCatalog
             "Initialize your workspace with fknrtd init, then run fknrtd doctor.",
             [], ["fknrtd help"], ["fknrtd", "workspace"], workspace: false),
 
+        Entry("fknrtd task new", "task new", Tasks,
+            "Describe a piece of work through a guided form that explains every field.",
+            "Opens the same builder the dashboard opens for N, on its own. Each question arrives " +
+            "with its definition and a worked example, and each field has a default that is already " +
+            "correct for this workspace, so pressing Enter through the form produces a valid task. " +
+            "A refused answer says what was wrong with it. Nothing is written until the last step, " +
+            "and backing out with Esc creates nothing. Needs an interactive terminal; use " +
+            "'task create' from a script.",
+            "The form ends by offering to run the task immediately, or you can press Enter on it later.",
+            [], ["fknrtd task new"],
+            ["title", "brief", "lead", "implementer", "auditor", "verification", "repair-round"]),
+
         Entry("fknrtd task create \"Title\" -brief \"What to build\" -verify \"dotnet build\"", "task create", Tasks,
             "Record a task with an explicit brief, agent roles and acceptance commands.",
             "Writes a queued task record under .fknrtd/tasks. Creation alone does not launch " +
@@ -189,6 +201,19 @@ public static class CommandCatalog
             "start a coding task, install software or change the configuration.",
             "Run fknrtd doctor if an enabled agent cannot be found or launched.",
             [], ["fknrtd agent list"], ["agent", "profile", "doctor"]),
+
+        Entry("fknrtd agent new", "agent new", Agents,
+            "Register a coding CLI through a guided form instead of an option list.",
+            "Asks what to call the agent, which program runs it, how that program wants to be given " +
+            "a prompt, what arguments launch it, and whether it may audit. It explains why the " +
+            "{prompt} placeholder exists and why an auditor needs verdict markers, then writes a " +
+            "complete definition with plan, implement and audit profiles. It reports whether the " +
+            "executable is actually on PATH, because a registration that looks fine but names a " +
+            "missing program fails much later, inside a task. Needs an interactive terminal; use " +
+            "'agent add' from a script.",
+            "Run fknrtd doctor to confirm the new agent can be launched, then assign it in fknrtd task new.",
+            [], ["fknrtd agent new"],
+            ["agent", "profile", "prompt-delivery", "verdict"]),
 
         Entry("fknrtd agent add -id <id> -exe <path>", "agent add", Agents,
             "Register an existing coding CLI and its prompt profiles.",

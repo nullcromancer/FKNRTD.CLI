@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -94,6 +94,8 @@ internal static class Scenes
                 return Reference.Welcome(config);
             case "setup":
                 return SetupWizard.Create(SampleDetection());
+            case "agent":
+                return AgentWizard.Create(config);
             case "palette":
                 return Palette.For(Populated(), null, running: 0);
             case "palette-search":
