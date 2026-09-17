@@ -219,3 +219,65 @@ worked: name the two files, name the code to check each claim against, ask for e
 only, and keep the prompt short. Long prompts stalled; short ones returned.
 
 Local suite: 36/36 passing, Release build clean.
+
+---
+
+## 2026-09-17 05:58 — Codex's glossary fact-check, and what it cost
+
+The window reopened at 05:50 and the queued dispatch fired. It returned **26 documented errors of
+fact** in `Glossary.cs`, each with a file and line to check it against. This is the largest single
+correction the project has taken, and every one of them was the author's own writing.
+
+Claude verified eleven of the twenty-six directly against the cited code before applying anything,
+because a previous round had produced a *correction* that was itself wrong. All eleven checked out,
+so the rest were treated as accurate and rewritten conservatively — saying only what the code
+demonstrably does.
+
+The findings fell into three kinds, and the kinds matter more than the count:
+
+**1. Described behaviour that no code implements.** `WorkflowStatus.Waiting` is assigned nowhere in
+`src/`; the only reference is the dashboard's glyph table. The glossary described it as the state a
+task enters when it is waiting on another agent's claim. Claims are advisory and the orchestrator
+never consults them. `AgentActivityState.Blocked` is the same: nothing inside the product sets it,
+and the entry promised that "the events panel records what it ran into" when no event is recorded at
+all. Both entries were confident, specific, and about a feature that does not exist.
+
+**2. A guarantee that is really a default.** Six entries said the lead and the auditor *cannot* write
+to the worktree. What is true is that the shipped Claude and Codex profiles pass flags asking those
+tools not to edit. `AgentRunner` launches whatever arguments a profile holds and checks nothing, and
+an agent with no `audit` profile falls back to `default`. The distinction is the difference between
+a sandbox and a request, and the product was claiming the first. Likewise the front-page claim that
+"no single agent both writes the change and decides the change is good" — `TaskService` validates
+each role separately and nothing stops one agent filling all three.
+
+**3. Right about the common case, wrong about the one that matters.** `land` said a task becomes
+landable "only after verification passed". A task with no verification commands has its verify stage
+marked **Skipped**, and a passing audit still makes it landable — so the sentence was reassuring
+precisely when the reassurance was unearned. `cleanup` promised the branch is kept; it is deleted
+when the task has already landed. `conflict` said Safe means no overlap at all; same-agent and
+read/read overlaps are not conflicts. `stagestate.failed` said "the task stopped here"; a failed
+verification is handed straight back for repair while the budget lasts.
+
+42 corrections applied across `Glossary.cs`, `CommandCatalog.cs`, `Keymap.cs` and `Reference.cs`.
+
+### What this says about the collaboration
+
+The shape that works is now clearly: **Claude implements, Codex reviews read-only, Claude verifies
+the review against the code and fixes.** Three audits, three sets of real findings, none of which
+the author could see. That is the product's own premise — a second model reading the first model's
+work catches what the first cannot — being demonstrated on the product's own documentation. It
+belongs in the build log for that reason and not as a curiosity.
+
+The verification step is not optional. Codex's citations were accurate every time they were checked,
+but the round before this one produced a correction that was itself wrong, and only a second pass
+caught it. Reviewing is cheaper than writing; checking a review is cheaper than trusting it.
+
+### Prompt shape, confirmed again
+
+Short, named files, named code to check against, errors of fact only. The dispatch that returned all
+26 findings was four sentences. Long prompts stalled.
+
+**Next**: the same fact-check against `CommandCatalog.cs` — 44 commands, none of which have been
+audited against the dispatcher.
+
+Local suite: 47/47 passing, Release build clean, renderer sweep 8,140 renders across 37 scenes.

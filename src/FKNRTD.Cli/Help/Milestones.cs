@@ -254,6 +254,23 @@ public static class Milestones
             "served its worked example before its explanation, starving a long explanation down " +
             "to one clipped line. A step can now carry its own explanation instead of borrowing " +
             "the general term it belongs to."),
+
+        new("2026-09-17",
+            "Twenty-six things this page was wrong about",
+            "Every explanation in this product reads from one glossary, which makes it the single " +
+            "most load-bearing text here and the one nobody could check. Its author wrote it and " +
+            "then read it back, which is not a check.",
+            "A second model read every entry against the services it describes and returned " +
+            "twenty-six errors of fact with a line number for each. Eleven were verified directly " +
+            "before anything was changed; all eleven held. Forty-two corrections followed.",
+            "The three kinds are worth knowing, because the first is the one that should worry you " +
+            "most. Some entries described behaviour no code implements at all: the Waiting status " +
+            "is assigned nowhere, and the Blocked agent state promised an event that is never " +
+            "recorded. Some turned a default into a guarantee: the lead and auditor were said to " +
+            "be unable to write, when what is true is that their shipped profiles ask the tool not " +
+            "to. And some were right about the ordinary case and wrong about the dangerous one - " +
+            "landing was said to require verification to have passed, when a task with no " +
+            "verification commands skips that stage and lands on the audit alone."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

@@ -73,7 +73,9 @@ public static class Keymap
             "verified and passed its audit."),
         new("X", "clean up",
             "Removes the highlighted task's worktree directory after asking you to type REMOVE. The " +
-            "task record, its logs and its Git branch are all kept."),
+            "task record and its logs are kept. Its branch is kept too, unless the task has already " +
+            "landed — a landed branch is deleted, which 'git branch -d' will only do once it is " +
+            "merged."),
         new("M", "message",
             "Records a note from one agent to another on the message bus."),
         new("U", "budget",

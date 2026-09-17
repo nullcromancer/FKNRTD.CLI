@@ -41,19 +41,25 @@ public static class Glossary
             "FKNRTD.CLI does not write code itself. It drives the coding agents you already have " +
             "installed — Claude Code, OpenAI Codex CLI, or anything else you register — through a " +
             "fixed pipeline: one agent plans, another implements, your own commands verify the " +
-            "result, and a third agent audits it without write access. Nothing reaches your base " +
-            "branch until you type the confirmation yourself. The point is that no single agent " +
-            "both writes the change and decides the change is good.",
+            "result, and a third agent audits it. Nothing reaches your base " +
+            "branch until you type the confirmation yourself. The point is to keep the agent that " +
+            "writes the change apart from the agent that judges it. That separation is a default " +
+            "and not a rule: the task builder offers a different implementer from the lead, but " +
+            "nothing stops you naming one agent for all three roles, and nothing warns you if you " +
+            "do.",
             "fknrtd            opens the command center for the folder you are standing in"),
 
         new("workspace", "Workspace", Concepts,
             "One folder that FKNRTD.CLI manages, holding its state in a .fknrtd directory.",
             "A workspace is any folder you have pointed FKNRTD.CLI at. Everything it knows about " +
             "that folder — configuration, tasks, events, logs, messages — lives in a .fknrtd " +
-            "directory at the folder's root. Nothing is written anywhere else, so deleting .fknrtd " +
-            "returns the folder to exactly its previous state. Running fknrtd in a folder that has " +
-            "no workspace yet creates one with sensible defaults rather than asking you to " +
-            "configure anything first.",
+            "directory at the folder's root, and deleting it forgets everything FKNRTD.CLI recorded. " +
+            "It does not undo the work: a standalone workspace's agents edit the folder itself, a " +
+            "Git workspace's tasks create branches and merge them into your base branch, and " +
+            "'fknrtd integration install-claude-statusline' writes .claude/settings.json. Those are " +
+            "changes to your project, not to .fknrtd. Running fknrtd in a folder that has no " +
+            "workspace yet creates one with sensible defaults rather than asking you to configure " +
+            "anything first.",
             "<your project>/.fknrtd/config.json"),
 
         new("what-to-commit", "What to commit", Concepts,
@@ -83,7 +89,9 @@ public static class Glossary
             "same repository. FKNRTD.CLI creates one per task so an agent can edit, build and break " +
             "things without touching the files you have open. Your own working copy never changes " +
             "while a task runs. When the task lands, its branch merges into the base branch; when " +
-            "you clean the task up, the worktree directory is removed and the branch is kept.",
+            "you clean the task up, the worktree directory is removed. The branch is kept too, " +
+            "unless the task has already landed, in which case cleanup deletes it with 'git branch " +
+            "-d' — which refuses to remove a branch that is not already merged.",
             ".fknrtd/worktrees/FKN-20260917-101500-a1b2"),
 
         new("base-ref", "Base branch", Concepts,
@@ -100,25 +108,31 @@ public static class Glossary
             "A task is the only thing FKNRTD.CLI executes. It carries the brief you wrote, the " +
             "three agents assigned to it, the commands that decide whether the work is correct, " +
             "and a record of every stage it has been through. Tasks are durable: they survive " +
-            "restarts, they can be re-run and retried, and the full log of each stage stays on " +
-            "disk. Task identifiers encode the UTC moment of creation so they sort chronologically.",
+            "restarts, and they can be re-run and retried. Their logs are not archived — a stage " +
+            "that runs again at the same repair round writes over its previous log, so if you need " +
+            "to keep the output of a failed run, copy it out before you press R. Task identifiers " +
+            "encode the UTC moment of creation so they sort chronologically.",
             "FKN-20260917-101500-a1b2c3d4e5"),
 
         new("land", "Landing", Concepts,
             "Merging a verified, audited task branch into the base branch. Always manual.",
             "Landing is the only step that changes your base branch, and it is the only step " +
-            "FKNRTD.CLI will never take on its own. A task becomes landable only after " +
-            "verification passed and an auditor that could not write to the worktree returned a " +
-            "PASS verdict. Even then you have to confirm by typing the word LAND in full — not y, " +
-            "not Enter — because a typo should not be able to merge anything.",
+            "FKNRTD.CLI will never take on its own. A task becomes landable once its audit returns " +
+            "a PASS verdict and verification did not fail. Those are not the same thing: a task with " +
+            "no verification commands configured has its verify stage marked Skipped rather than " +
+            "Passed, and a passing audit still makes it landable. Read the checks row before you " +
+            "land something — three pending markers can mean nothing ran, not that nothing broke. " +
+            "Even then you have to confirm by typing the word LAND in full — not y, not Enter — " +
+            "because a typo should not be able to merge anything.",
             "fknrtd task land FKN-... -confirm LAND"),
 
         new("cleanup", "Cleanup", Concepts,
-            "Removing a finished task's worktree directory while keeping its branch and record.",
-            "Cleanup deletes the worktree directory a task was working in. It does not delete the " +
-            "task's record, its logs, or its Git branch, so nothing you might want to read later is " +
-            "lost — it only reclaims the disk space of a second checkout. A running task cannot be " +
-            "cleaned up. Like landing, it requires a typed confirmation.",
+            "Removing a finished task's worktree directory while keeping its record and its logs.",
+            "Cleanup deletes the worktree directory a task was working in. The task's record and its " +
+            "logs are kept, so nothing you might want to read later is lost. Its branch is kept too, " +
+            "unless the task has already landed — a landed branch is deleted with 'git branch -d', " +
+            "which refuses to delete anything not already merged. A running task cannot be cleaned " +
+            "up. Like landing, it requires a typed confirmation.",
             "fknrtd task cleanup FKN-... -confirm REMOVE"),
 
         new("doctor", "Doctor", Concepts,
@@ -127,8 +141,10 @@ public static class Glossary
             "failing, or optional: whether the workspace is readable, whether Git is present when " +
             "the mode needs it, whether each configured agent's executable can actually be found " +
             "and launched, and whether the configuration parses. Run it after installing or " +
-            "reconfiguring anything. A required check that fails will stop a task; an optional one " +
-            "that fails only removes a capability.",
+            "reconfiguring anything. It reports and does not gate: nothing consults doctor before " +
+            "running a task, so a failed required check is a warning that something is likely to go " +
+            "wrong, not a lock. It can also fail on an enabled agent that the task you are about to " +
+            "run does not name — which is worth knowing before you go looking for the wrong fault.",
             "fknrtd doctor"),
 
         // Task fields
@@ -171,7 +187,9 @@ public static class Glossary
             "The marker is that category's worst result, so one failing command among three shows " +
             "as a failure. A category with no command matching it stays pending forever, which is " +
             "why a project verified only by 'make check' shows TEST and nothing else. All three " +
-            "pending simply means the task has not reached its verify stage yet.",
+            "pending usually means the task has not reached its verify stage — but it also happens " +
+            "when verification ran and every command was filed under types or security, which have " +
+            "no marker of their own on this row. Press I to see what actually ran.",
             "dotnet build -> BUILD,  dotnet test -> TEST,  npm run lint -> LINT"),
 
         new("repair-round", "Repair rounds", TaskFields,
@@ -195,7 +213,8 @@ public static class Glossary
 
         new("lead", "Lead", Roles,
             "Reads the brief and writes the plan. Does not change any files.",
-            "The lead runs first, with read-only access to the worktree, and turns your brief into a " +
+            "The lead runs first, with a profile that for the shipped agents asks them not to edit, " +
+            "and turns your brief into a " +
             "plan the implementer will follow. Its value is that it reads the actual codebase before " +
             "anything is written, so the implementer starts from a plan grounded in the real " +
             "structure rather than an assumed one. Pick the model you trust most with judgement " +
@@ -203,9 +222,9 @@ public static class Glossary
             "claude"),
 
         new("implementer", "Implementer", Roles,
-            "The only agent allowed to write files. Follows the plan and makes the change.",
+            "The agent asked to write files. Follows the plan and makes the change.",
             "The implementer works from the lead's plan inside the task's worktree, and it is the " +
-            "single role with write access. If verification fails, this is the agent handed the " +
+            "one role whose profile asks it to edit. If verification fails, this is the agent handed the " +
             "failure output for the repair round. Choosing a different agent here from the lead is " +
             "the point of the tool rather than a quirk of it: a second model reading the first " +
             "model's plan catches assumptions that the model which wrote them cannot see.",
@@ -213,12 +232,15 @@ public static class Glossary
 
         new("auditor", "Auditor", Roles,
             "Independently judges the finished work read-only and returns PASS or FAIL.",
-            "The auditor runs last, after verification has already passed, and cannot write to the " +
-            "worktree. It compares the finished diff against the original brief and answers one " +
+            "The auditor runs last, after verification has finished. It compares the finished diff " +
+            "against the original brief and answers one " +
             "question: does this actually do what was asked, without doing anything that was not? " +
             "It signals its answer with a verdict marker in its output. A FAIL blocks landing " +
             "regardless of how green the tests are, which is the entire reason the role exists — " +
-            "tests confirm the code does what it does, not that it does what you wanted.",
+            "tests confirm the code does what it does, not that it does what you wanted. Its " +
+            "read-only posture comes from the audit profile shipped for Claude and Codex, which ask " +
+            "those tools not to edit. FKNRTD.CLI launches whatever arguments the profile holds and " +
+            "does not enforce it, so an agent you configure yourself is as restricted as you make it.",
             "claude"),
 
         new("verdict", "Audit verdict", Roles,
@@ -228,8 +250,10 @@ public static class Glossary
             "on none, so neither silence nor a hedged answer that prints both can be read as " +
             "consent. The match ignores case and tolerates a line wrapped in quoting, a list bullet " +
             "or Markdown emphasis, because agents format their conclusions. The prompt itself " +
-            "contains the marker text, so lines that merely echo the instruction are stripped before " +
-            "the count and only the agent's own conclusion is read.",
+            "contains the marker text, so a copy of the whole prompt appearing in the report is " +
+            "removed before the count. That handles an agent that echoes its instructions back " +
+            "verbatim; an agent that quotes only part of them can still leave a marker behind, so " +
+            "read the audit log rather than trusting a surprising verdict.",
             "FKNRTD_VERDICT: PASS"),
 
         new("profile", "Command profile", Roles,
@@ -252,9 +276,11 @@ public static class Glossary
         // Workflow stages
         new("stage.brief", "Stage 1 — Brief", Stages,
             "The task is recorded with its brief, agents and verification commands. Nothing runs yet.",
-            "The first stage simply confirms the task is complete and coherent before anything " +
-            "expensive starts: the brief is present, the three named agents exist and are enabled, " +
-            "and the base branch resolves. A task sits here from creation until you run it."),
+            "Creating the task is what checks it is coherent: that the brief is present, that the " +
+            "three named agents exist and are enabled, and that the base branch resolves. A task " +
+            "that exists has already passed all of that. The stage itself writes the brief into the " +
+            "task's artifacts as brief.md, so the agents and you are reading the same text, and " +
+            "passes. A task sits here from creation until you run it."),
 
         new("stage.worktree", "Stage 2 — Worktree", Stages,
             "A branch and an isolated checkout are created for this task.",
@@ -265,14 +291,18 @@ public static class Glossary
 
         new("stage.plan", "Stage 3 — Plan", Stages,
             "The lead agent reads the code and the brief, and writes the plan. Read-only.",
-            "The lead is launched against the worktree with its plan profile, which is configured " +
-            "read-only. Its full output is written to the task's log and carried forward into the " +
-            "implementer's prompt."),
+            "The lead is launched against the worktree with its plan profile, which for the shipped " +
+            "agents asks them not to edit. Its whole output stream goes to the task's log. What is " +
+            "carried forward is not that stream: the final answer is extracted from it, saved as " +
+            "plan.md, and it is plan.md that the implementer's prompt quotes. Press P to read the " +
+            "prompt the implementer will actually be sent."),
 
         new("stage.implement", "Stage 4 — Implement", Stages,
-            "The implementer makes the change in the worktree. The only stage that writes files.",
-            "The implementer is launched with the brief and the plan, and is the one agent given " +
-            "write access to the worktree. Its work is not committed here: if the workspace commits " +
+            "The implementer makes the change in the worktree. The only agent asked to write files.",
+            "The implementer is launched with the brief and the plan, and is the one agent whose " +
+            "profile asks it to edit. It is not the only thing that writes to the worktree — your " +
+            "verification commands run there too, and a build or a test writes whatever a build or " +
+            "a test writes. Its work is not committed here: if the workspace commits " +
             "agent changes automatically, that happens once verification and the audit have both " +
             "passed, immediately before the task becomes landable."),
 
@@ -284,9 +314,9 @@ public static class Glossary
 
         new("stage.audit", "Stage 6 — Audit", Stages,
             "The auditor judges the finished work read-only and must return PASS.",
-            "The auditor sees the brief and the finished state of the worktree, and cannot change " +
-            "either. Anything other than an explicit PASS verdict — a FAIL, no verdict at all, a " +
-            "crash — leaves the task un-landable."),
+            "The auditor sees the brief and the finished state of the worktree, and its profile " +
+            "asks it not to change either. Anything other than an explicit PASS verdict — a FAIL, " +
+            "no verdict at all, a crash — leaves the task un-landable."),
 
         new("stage.readytoland", "Stage 7 — Ready to land", Stages,
             "Verified and audited. Waiting for you, and only you, to merge it.",
@@ -310,19 +340,26 @@ public static class Glossary
 
         // Task status
         new("status.queued", "Queued", Statuses,
-            "Created but never started. Press Enter to run it.",
-            "The task exists with everything it needs and is waiting for you to start it. Nothing " +
-            "has been launched and no worktree exists yet."),
+            "Waiting for you to start it. Press Enter to run it.",
+            "The task exists with everything it needs and is waiting for you to start it. For a task " +
+            "that has never run, nothing has been launched and no worktree exists yet. A task that " +
+            "you retried with R is also Queued — there, its worktree and every stage that already " +
+            "passed are still there, and running it resumes from the first stage that has not " +
+            "passed rather than starting over."),
 
         new("status.running", "Running", Statuses,
             "An agent or a verification command is executing right now.",
             "Some stage is live. The log view shows its output as it arrives. A running task can be " +
-            "asked to cancel, which takes effect once the current external process returns."),
+            "asked to cancel: the request is noticed within about half a second, and the running " +
+            "process and everything it started are then killed rather than being waited for. " +
+            "Whatever the agent had already written to disk stays where it wrote it."),
 
         new("status.waiting", "Waiting", Statuses,
             "Paused mid-pipeline, waiting for something outside the task.",
-            "The task has not failed but cannot proceed on its own — typically a blocked resource " +
-            "or a claim held by another agent. The events panel records why."),
+            "Nothing in the pipeline sets this today. The status exists in the task format and the " +
+            "dashboard can draw it, but no stage assigns it: claims are advisory and the " +
+            "orchestrator never waits on one. If a task cannot get the agent lease it needs it " +
+            "waits briefly and then fails, rather than sitting here."),
 
         new("status.failed", "Failed", Statuses,
             "A stage failed. Read the log, fix the cause, then retry.",
@@ -336,20 +373,27 @@ public static class Glossary
             "indefinitely without costing anything."),
 
         new("status.landed", "Landed", Statuses,
-            "Merged into the base branch. Done.",
-            "The work is in your base branch. The worktree is still on disk until you clean it up, " +
-            "in case you want to look at it."),
+            "Finished. In a Git workspace, merged into the base branch.",
+            "In a Git workspace the task's branch has been merged into your base branch and the " +
+            "worktree is still on disk until you clean it up, in case you want to look at it. In a " +
+            "standalone workspace nothing is merged, because nothing was ever branched: landing " +
+            "records that the verified work already in the folder is final."),
 
         new("status.cancelled", "Cancelled", Statuses,
             "Stopped on request. Can be retried.",
-            "You asked the task to stop. Whatever the implementer had already written to the " +
-            "worktree is still there and still isolated from your checkout."),
+            "You asked the task to stop. Whatever the implementer had already written is still " +
+            "there. In a Git workspace that is its own worktree, isolated from your checkout. In a " +
+            "standalone workspace the agent was editing the folder directly, so those edits are " +
+            "sitting in your working copy right now — press V to read them before you do anything " +
+            "else."),
 
         // Stage state markers
         new("stagestate.pending", "Pending  ○", StageStates,
             "Not reached yet.",
-            "The pipeline has not reached this stage yet. It carries no outcome, and it may still end up " +
-            "being skipped rather than run."),
+            "The stage is waiting to run. It carries no outcome, and it may still end up being " +
+            "skipped rather than run. It does not always mean the pipeline has never been here: a " +
+            "repair round puts implement, verify and audit back to Pending so they can be run " +
+            "again, and R does the same to whichever stages failed."),
         new("stagestate.running", "Running  ►", StageStates,
             "Executing now.",
             "This is the stage the task is currently in. Its output is being written to the task log as it " +
@@ -359,9 +403,11 @@ public static class Glossary
             "The stage finished and met its condition: the agent exited cleanly, or every verification " +
             "command returned zero. The pipeline moved on."),
         new("stagestate.failed", "Failed  ×", StageStates,
-            "Completed unsuccessfully. The task stopped here.",
-            "The stage ran and did not meet its condition, so the task stopped here rather than carrying a " +
-            "known-bad result forward. Its log holds the full output that explains why."),
+            "Completed unsuccessfully.",
+            "The stage ran and did not meet its condition. Its log holds the full output that " +
+            "explains why. It does not necessarily mean the task stopped: a failed verification or " +
+            "audit is handed straight back for another attempt while the repair budget lasts, and " +
+            "only becomes the end of the run once that budget is gone."),
         new("stagestate.skipped", "Skipped  ◊", StageStates,
             "Deliberately not applicable — not a failure.",
             "The stage did not apply and was passed over deliberately. Two stages can be skipped: the " +
@@ -379,32 +425,41 @@ public static class Glossary
             "Present and reporting, with nothing assigned.",
             "The agent has reported in recently and has no task assigned. It is available for the next one."),
         new("agentstate.planning", "Planning  ◊", AgentStates,
-            "Reading the brief and the code, writing a plan. Read-only.",
-            "The agent is executing a plan stage. It has read access to the worktree and cannot change " +
-            "anything in it."),
+            "Reading the brief and the code, writing a plan.",
+            "The agent is executing a plan stage, with a profile that for the shipped agents asks it " +
+            "to read the worktree without editing it."),
         new("agentstate.running", "Running  ►", AgentStates,
             "Working. If it is the implementer, it is writing files.",
-            "The agent is executing an implement stage or another long operation. If it is the implementer " +
-            "on a task, this is the one point in the pipeline where files are being written."),
+            "The agent is executing an implement stage or another long operation. If it is the " +
+            "implementer on a task, this is the stage where the change itself is being written — " +
+            "though it is not the only thing that touches the worktree, since your verification " +
+            "commands run there too."),
         new("agentstate.reviewing", "Reviewing  ♦", AgentStates,
-            "Auditing finished work read-only.",
-            "The agent is executing an audit stage read-only, and will end by printing a PASS or FAIL " +
-            "verdict that decides whether the task can be landed."),
+            "Auditing finished work.",
+            "The agent is executing an audit stage, with a profile that asks it not to edit, and " +
+            "will end by printing a PASS or FAIL verdict that decides whether the task can be " +
+            "landed."),
         new("agentstate.waiting", "Waiting  ▌", AgentStates,
             "Paused for something external.",
-            "The agent has paused for something outside itself — most often an exhausted rate-limit window, " +
-            "or a path claimed by another agent."),
+            "Set when the agent's run was cancelled and its process was stopped. Despite the name " +
+            "nothing pauses an agent for a rate limit or a claimed path: the budget figures on U are " +
+            "reported, not enforced, and claims only warn."),
         new("agentstate.blocked", "Blocked  ■", AgentStates,
             "Cannot proceed. Needs attention.",
-            "The agent has hit something it cannot resolve on its own and has stopped making progress. The " +
-            "events panel records what it ran into."),
+            "Nothing inside FKNRTD.CLI sets this. It is here for an agent session the command " +
+            "center did not launch, which can report it with 'fknrtd telemetry report -state " +
+            "blocked'. That reports the state and nothing else: no event is recorded, so there is " +
+            "no stored reason to read afterwards."),
         new("agentstate.failed", "Failed  ×", AgentStates,
             "The last thing it attempted ended badly.",
             "The last thing the agent attempted ended badly. Its exit code and its full output are recorded " +
             "against the task it was working on."),
         new("agentstate.completed", "Completed  √", AgentStates,
-            "Finished its assigned stage successfully.",
-            "The agent finished its assigned stage successfully and handed the task on to the next stage."),
+            "Its process exited successfully.",
+            "The agent's process exited with a success code. That is all it means: it is set before " +
+            "anything reads what the agent actually produced. An auditor that exits cleanly while " +
+            "returning a FAIL verdict is Completed here and its audit stage is Failed, which is not " +
+            "a contradiction — the tool ran fine and the answer was no."),
 
         // Coordination
         new("claim", "Claim", Coordination,
@@ -430,24 +485,33 @@ public static class Glossary
 
         new("conflict", "Conflict", Coordination,
             "An overlap between what two agents are doing, scored by how much it matters.",
-            "FKNRTD.CLI continuously compares live claims and the paths agents report touching, and " +
-            "classifies each overlap. The header shows the worst one it currently sees. Safe means " +
-            "no overlap at all."),
+            "FKNRTD.CLI compares live claims and the paths agents report touching, and classifies " +
+            "each overlap. The header shows the worst one it currently sees. Safe does not mean no " +
+            "overlap: two claims by the same agent are ignored, and so is an overlap where both " +
+            "sides are reading. What counts is two different agents overlapping with at least one " +
+            "of them writing."),
 
         new("conflict.collision", "Collision  ×", Coordination,
-            "Two agents are writing the same path. Act now.",
-            "The highest severity. One agent is about to overwrite work the other has not finished. " +
-            "Cancel one of them or let one land before the other continues."),
+            "Two agents have claimed the same path in one worktree, and at least one is writing.",
+            "The highest severity, because both sides are working in the same directory rather than " +
+            "in separate worktrees, so one can overwrite work the other has not finished. It does " +
+            "not take two writers: one writer and one reader in the same tree counts, and a claim is " +
+            "a declaration of intent rather than evidence that anything has been written yet. Cancel " +
+            "one of them, or let one land before the other continues."),
 
         new("conflict.mergerisk", "Merge risk  ∆", Coordination,
-            "Different tasks touch the same file and will conflict at merge time.",
-            "Not urgent, but the second task to land will need a manual merge. Landing them in the " +
-            "order they finished usually avoids the worst of it."),
+            "Two worktrees have claimed the same path.",
+            "The same path is claimed from two different worktrees. This is a path overlap and not a " +
+            "demonstrated merge conflict: nothing here asks Git whether the two sides would merge, " +
+            "and nothing checks whether they edited the same part of the file. Git may well merge " +
+            "both cleanly. Treat it as somewhere to look before landing the second one."),
 
         new("conflict.staleclaim", "Stale claim  ∆", Coordination,
             "A claim outlived the agent holding it.",
-            "The claim is past its TTL, or its agent has stopped reporting. It clears on its own; " +
-            "it is shown so an unexplained block has a visible cause."),
+            "The claim is past its expiry. It is only the expiry that is checked — whether the agent " +
+            "is still alive and reporting is not. It does not clear on its own: the claim file stays " +
+            "where it is and keeps being reported until somebody renews it with 'fknrtd claim renew' " +
+            "or releases it with 'fknrtd claim release'."),
 
         new("message", "Message", Coordination,
             "A note recorded from one agent to another, with an acknowledgement state.",
@@ -516,10 +580,12 @@ public static class Glossary
             "your rate-limit budget rather than the tool."),
 
         new("auto-commit", "Auto-commit agent changes", Configuration,
-            "Commits the implementer's work to the task branch as the implement stage ends.",
+            "Commits the work to the task branch once it has passed verification and its audit.",
             "On by default in Git mode, and unavailable in standalone mode where there is no " +
-            "repository. Keeping it on means every task has an inspectable diff even if a later " +
-            "stage fails, which is almost always what you want when something goes wrong."),
+            "repository. The commit happens after verification and the audit have both succeeded, " +
+            "immediately before the task becomes ready to land — not when the implementer finishes. " +
+            "A task that fails verification therefore has its work in the worktree but not committed, " +
+            "which is what V reads when it shows you the uncommitted half of a change."),
 
         new("timeouts", "Timeouts", Configuration,
             "Per-agent and per-verification-command limits, in seconds.",
@@ -532,9 +598,13 @@ public static class Glossary
         new("config", "Configuration file", Configuration,
             "Everything about a workspace lives in .fknrtd/config.json and is safe to edit by hand.",
             "The configuration is plain JSON with no schema tricks. Agents, defaults, timeouts and " +
-            "mode all live there. Validate it after editing; validation checks the numbers are " +
-            "sane, that no agent id is defined twice, and that every agent could actually be " +
-            "launched as configured.",
+            "mode all live there. Validate it after editing. Validation is a shape check, not a " +
+            "readiness check: it confirms the file parses, that maxParallelAgents and " +
+            "dashboardRefreshMilliseconds are usable, that no agent id is defined twice or contains " +
+            "anything but letters, numbers, hyphens and underscores, and that every agent has an " +
+            "executable name and at least one command profile. It never looks for those executables " +
+            "— 'fknrtd doctor' is what does that — and it does not check the timeouts or the " +
+            "repair limit at all.",
             "fknrtd config path   then   fknrtd config validate"),
     ];
 

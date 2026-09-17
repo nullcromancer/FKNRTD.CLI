@@ -89,11 +89,11 @@ internal static class Reference
         blocks.Add(new InfoParagraph(task.Brief));
 
         blocks.Add(new InfoHeading("Who is on it"));
-        blocks.Add(new InfoLine("Lead", task.LeadAgentId + "  —  reads the code and writes the plan, read-only"));
+        blocks.Add(new InfoLine("Lead", task.LeadAgentId + "  —  reads the code and writes the plan"));
         blocks.Add(new InfoLine("Implementer",
             task.ImplementerAgentId + "  —  the only agent that may change files"));
         blocks.Add(new InfoLine("Auditor",
-            task.AuditorAgentId + "  —  judges the finished work read-only and must return PASS"));
+            task.AuditorAgentId + "  —  judges the finished work and must return PASS"));
 
         blocks.Add(new InfoHeading("Where the work happens"));
         if (config.Mode == WorkspaceMode.Git)
@@ -806,7 +806,7 @@ internal static class Reference
                                   ? " in its own worktree, so your checkout never moves."
                                   : " directly in this folder.")),
             new InfoParagraph("4. Your own commands run. Every one must exit 0 or the work goes back."),
-            new InfoParagraph("5. A third agent audits the result read-only and returns PASS or FAIL."),
+            new InfoParagraph("5. A third agent audits the result and returns PASS or FAIL."),
             new InfoParagraph("6. You read the diff and type LAND. Nothing merges without that."),
             new InfoHeading("Start here"),
             new InfoLine("N", "Describe the first piece of work. Every field explains itself as you reach it."),

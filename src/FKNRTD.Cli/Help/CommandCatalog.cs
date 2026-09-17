@@ -468,8 +468,9 @@ public static class CommandCatalog
             "Shorthand for task land. Merges a verified, audited task into its base branch.",
             "Identical to 'fknrtd task land'. This is the only command that changes your base " +
             "branch, so it refuses to act without -confirm LAND spelled exactly. It will not land a " +
-            "task that has not both passed verification and received an explicit PASS verdict from " +
-            "an auditor that could not write to the worktree.",
+            "task whose verification failed, or that has not received an explicit PASS verdict from " +
+            "its auditor. A task with no verification commands configured has nothing to fail, so a " +
+            "passing audit is enough on its own.",
             "Run fknrtd task cleanup <id> -confirm REMOVE once you no longer need the worktree.",
             [new("<id>", "<task id>", "The task to land.", Required: true),
              new("-confirm", "LAND", "Required. Typed in full, so a stray keystroke cannot merge.", Required: true)],
