@@ -293,7 +293,8 @@ internal static class CommandDispatcher
                 .Any(agent => agent.Id.Equals("claude", StringComparison.OrdinalIgnoreCase))));
 
         var completed = await OverlayHost
-            .RunAsync(wizard, $"Setting up {paths.Root}", UseColor(arguments), cancellationToken)
+            .RunAsync(wizard, $"Setting up {paths.Root}", UseColor(arguments), "fknrtd init -yes",
+                cancellationToken)
             .ConfigureAwait(false);
         return completed ? wizard : null;
     }
@@ -537,7 +538,7 @@ internal static class CommandDispatcher
         var wizard = TaskWizard.Create(config);
         var completed = await OverlayHost
             .RunAsync(wizard, $"{config.ProjectName} · {DescribeMode(config.Mode)} workspace",
-                UseColor(arguments), cancellationToken)
+                UseColor(arguments), "fknrtd task create", cancellationToken)
             .ConfigureAwait(false);
         if (!completed)
         {
@@ -775,7 +776,7 @@ internal static class CommandDispatcher
         var wizard = AgentWizard.Create(config);
         var completed = await OverlayHost
             .RunAsync(wizard, $"{config.ProjectName} - registering a coding CLI", UseColor(arguments),
-                cancellationToken)
+                "fknrtd agent add", cancellationToken)
             .ConfigureAwait(false);
         if (!completed)
         {

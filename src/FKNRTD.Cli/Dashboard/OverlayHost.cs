@@ -12,17 +12,23 @@ internal static class OverlayHost
     /// Shows <paramref name="overlay"/> until it is submitted or cancelled. Returns true when the
     /// operator completed it.
     /// </summary>
+    /// <param name="scriptable">
+    /// The command to reach for when there is no terminal to ask questions in. Naming the actual
+    /// alternative is the difference between an error that blocks a script and one that fixes it.
+    /// </param>
     public static async Task<bool> RunAsync(
         IOverlay overlay,
         string caption,
         bool useColor,
+        string scriptable,
         CancellationToken cancellationToken)
     {
         if (Console.IsInputRedirected || Console.IsOutputRedirected)
         {
             throw new InvalidOperationException(
-                "This command asks questions on screen and needs an interactive terminal. " +
-                "Pass the values as options instead — run 'fknrtd help' to see them.");
+                "This command asks its questions on screen and needs an interactive terminal; here " +
+                $"the input or output is redirected. Use '{scriptable}' instead, which takes the same " +
+                $"values as options — 'fknrtd help {scriptable[7..]}' lists them.");
         }
 
         Screen.Enter();
