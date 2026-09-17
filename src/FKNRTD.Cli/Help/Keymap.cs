@@ -5,7 +5,16 @@ namespace FKNRTD.Help;
 /// <param name="Action">Two or three words for the footer strip.</param>
 /// <param name="Detail">A sentence for the help overlay and the portal.</param>
 /// <param name="InFooter">Whether the key is common enough to earn space on the always-visible strip.</param>
-public sealed record KeyBinding(string Key, string Action, string Detail, bool InFooter = false);
+/// <param name="Essential">
+/// Whether the key must survive on a terminal too narrow for the whole strip. Quit and help are the
+/// two an operator needs most when they are lost, and they were the first to be truncated away.
+/// </param>
+public sealed record KeyBinding(
+    string Key,
+    string Action,
+    string Detail,
+    bool InFooter = false,
+    bool Essential = false);
 
 /// <summary>
 /// The dashboard's keys, in one table. The footer strip, the in-app help overlay and the generated
@@ -95,7 +104,7 @@ public static class Keymap
             InFooter: true),
         new("?", "help",
             "Opens the key reference and the searchable glossary of every term the product uses.",
-            InFooter: true),
+            InFooter: true, Essential: true),
         new("PgUp PgDn", "scroll the log",
             "In the log view, moves ten lines back or forward through the output. A failure is " +
             "often explained a long way above the last line, so the tail alone is rarely enough."),
@@ -107,7 +116,7 @@ public static class Keymap
         new("Q", "quit",
             "Leaves the dashboard and restores the terminal. Running tasks are cancelled first; " +
             "nothing is merged and nothing is lost.",
-            InFooter: true),
+            InFooter: true, Essential: true),
         new("Esc", "back",
             "Closes whatever overlay is open. With nothing open it quits, the same as Q, from the " +
             "log view as well as the overview.")
@@ -118,6 +127,21 @@ public static class Keymap
     /// <summary>The subset earning space on the always-visible strip, in the order drawn.</summary>
     public static (string Key, string Meaning)[] Footer { get; } =
         Bindings.Where(binding => binding.InFooter)
+            .Select(binding => (binding.Key, binding.Action))
+            .ToArray();
+
+    /// <summary>
+    /// The footer entries that must survive a terminal too narrow for all of them, drawn pinned to
+    /// the right while the rest fill the space that remains.
+    /// </summary>
+    public static (string Key, string Meaning)[] EssentialFooter { get; } =
+        Bindings.Where(binding => binding.InFooter && binding.Essential)
+            .Select(binding => (binding.Key, binding.Action))
+            .ToArray();
+
+    /// <summary>The rest, dropped from the end when there is not room.</summary>
+    public static (string Key, string Meaning)[] OptionalFooter { get; } =
+        Bindings.Where(binding => binding.InFooter && !binding.Essential)
             .Select(binding => (binding.Key, binding.Action))
             .ToArray();
 }

@@ -1221,7 +1221,20 @@ static Task TestGlossaryIsCompleteAsync()
 
     Equal(Keymap.All.Count, Keymap.All.Select(binding => binding.Key).Distinct(StringComparer.Ordinal).Count(),
         "Keymap keys are unique");
-    True(Keymap.Footer.Length is > 3 and < 9, "Keymap footer is a usable size");
+    True(Keymap.Footer.Length is > 3 and < 10, "Keymap footer is a usable size");
+    True(Keymap.EssentialFooter.Length is > 0 and < 4, "A few footer keys are marked essential");
+    Equal(Keymap.Footer.Length, Keymap.EssentialFooter.Length + Keymap.OptionalFooter.Length,
+        "Every footer key is either essential or optional");
+
+    // Help and quit are the two keys an operator needs at the moment they cannot find anything, so
+    // they have to survive every width the dashboard supports — they used to be the first dropped.
+    foreach (var width in new[] { 60, 62, 70, 84, 100, 120, 200 })
+    {
+        var strip = FrameLines(Scenes.Render("overview", width, 20, colour: false))[^2];
+        True(strip.Contains("? help", StringComparison.Ordinal), $"Help stays in the footer at {width}");
+        True(strip.Contains("Q quit", StringComparison.Ordinal), $"Quit stays in the footer at {width}");
+        Equal(width, Text.DisplayWidth(strip), $"The footer strip is exactly {width} wide");
+    }
     return Task.CompletedTask;
 }
 

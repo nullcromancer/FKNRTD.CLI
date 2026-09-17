@@ -783,12 +783,22 @@ internal sealed class DashboardApp
         // The legend is drawn key-by-key so the key itself reads brighter than its meaning. On a
         // narrow terminal the trailing entries are dropped rather than the whole line truncated
         // mid-word, which keeps the first and most useful keys visible at every width.
+        // The whole strip when it fits. When it does not, help and quit are pinned to the right and
+        // the middle is dropped instead — those two are what an operator needs most at the moment
+        // they cannot find anything, and truncating from the end took exactly them.
+        static int Span((string Key, string Meaning)[] entries) => entries
+            .Sum(entry => Text.DisplayWidth(entry.Key) + Text.DisplayWidth(entry.Meaning) + 3);
+
+        var essentialX = Span(Keymap.Footer) <= rect.Width
+            ? rect.Right
+            : Math.Max(rect.X, rect.Right - Span(Keymap.EssentialFooter));
+
         var x = rect.X;
-        foreach (var (key, meaning) in Keymap.Footer)
+        foreach (var (key, meaning) in Keymap.OptionalFooter)
         {
             var keyWidth = Text.DisplayWidth(key);
             var meaningWidth = Text.DisplayWidth(meaning);
-            if (x + keyWidth + meaningWidth + 3 > rect.Right)
+            if (x + keyWidth + meaningWidth + 3 > essentialX)
             {
                 break;
             }
@@ -797,6 +807,24 @@ internal sealed class DashboardApp
             x += keyWidth + 1;
             canvas.DrawText(x, rect.Y, meaning, Theme.Muted, maxWidth: meaningWidth);
             x += meaningWidth + 2;
+        }
+
+        var pinned = essentialX == rect.Right
+            ? x
+            : Math.Max(x, rect.Right - Span(Keymap.EssentialFooter));
+        foreach (var (key, meaning) in Keymap.EssentialFooter)
+        {
+            var keyWidth = Text.DisplayWidth(key);
+            var meaningWidth = Text.DisplayWidth(meaning);
+            if (pinned + keyWidth + meaningWidth + 3 > rect.Right)
+            {
+                break;
+            }
+
+            canvas.DrawText(pinned, rect.Y, key, Theme.Blue, bold: true, maxWidth: keyWidth);
+            pinned += keyWidth + 1;
+            canvas.DrawText(pinned, rect.Y, meaning, Theme.Muted, maxWidth: meaningWidth);
+            pinned += meaningWidth + 2;
         }
 
         var mode = overlay?.Mode ?? view.ToString();
