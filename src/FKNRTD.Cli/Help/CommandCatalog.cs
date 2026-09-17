@@ -226,7 +226,8 @@ public static class CommandCatalog
             "See registered agents, enabled state and executable discovery.",
             "Reads workspace agent definitions and checks executable discovery. It does not " +
             "start a coding task, install software or change the configuration.",
-            "Run fknrtd doctor if an enabled agent cannot be found or launched.",
+            "Run fknrtd doctor if an enabled agent cannot be found or launched. The dashboard shows the " +
+            "same roster, and lets you change it, on the A key.",
             [], ["fknrtd agent list"], ["agent", "profile", "doctor"]),
 
         Entry("fknrtd agent new", "agent new", Agents,
@@ -238,7 +239,8 @@ public static class CommandCatalog
             "executable is actually on PATH, because a registration that looks fine but names a " +
             "missing program fails much later, inside a task. Needs an interactive terminal; use " +
             "'agent add' from a script.",
-            "Run fknrtd doctor to confirm the new agent can be launched, then assign it in fknrtd task new.",
+            "Run fknrtd doctor to confirm the new agent can be launched, then assign it in fknrtd task " +
+            "new. The same form opens on N from the dashboard's A screen.",
             [], ["fknrtd agent new"],
             ["agent", "profile", "prompt-delivery", "verdict"]),
 
@@ -266,21 +268,24 @@ public static class CommandCatalog
             "Make a registered agent available for task assignments.",
             "Enables the named definition in .fknrtd/config.json. It does not install or " +
             "launch the agent, or start queued tasks.",
-            "Run fknrtd doctor to confirm the newly enabled executable is ready.",
+            "Run fknrtd doctor to confirm the newly enabled executable is ready. In the dashboard, A then " +
+            "Space does the same thing to the highlighted agent.",
             AgentId(), ["fknrtd agent enable codex"], ["agent", "config"]),
 
         Entry("fknrtd agent disable <id>", "agent disable", Agents,
             "Keep an agent definition while making it unavailable for new assignments.",
             "Disables the named definition in .fknrtd/config.json without uninstalling the " +
             "CLI or deleting its profiles. This is configuration, not a task cancellation request.",
-            "Review queued task role assignments and choose enabled agents before running them.",
+            "Review queued task role assignments and choose enabled agents before running them. In the " +
+            "dashboard, A then Space does the same thing to the highlighted agent.",
             AgentId(), ["fknrtd agent disable local"], ["agent", "config"]),
 
         Entry("fknrtd agent remove <id> -confirm REMOVE", "agent remove", Agents,
             "Remove an agent adapter from workspace configuration.",
             "Deletes its registration from .fknrtd/config.json after REMOVE confirmation. " +
             "It does not uninstall the external CLI or delete its own settings or credentials.",
-            "Check remaining agent definitions and task role assignments with fknrtd agent list.",
+            "Check remaining agent definitions and task role assignments with fknrtd agent list. In the " +
+            "dashboard, A then Del asks for the same confirmation.",
             [.. AgentId(), new("-confirm", "REMOVE", "Confirm removal of the adapter.", true)],
             ["fknrtd agent remove local -confirm REMOVE"], ["agent", "config"]),
 

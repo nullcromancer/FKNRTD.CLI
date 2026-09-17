@@ -225,6 +225,19 @@ public static class Milestones
             "the same bytes — so it can be committed and reviewed like anything else. A self-test " +
             "checks that every term, command and key reaches the page, and that nothing supplied " +
             "to it can become markup."),
+
+        new("2026-09-17",
+            "A roster you can act on",
+            "A was the screen an operator reached for to find out why an agent was not being " +
+            "offered to them. It answered with a list, and then left them to leave the dashboard " +
+            "and remember `fknrtd agent enable`, or to hand-edit config.json.",
+            "The agent list became the agent roster: Space enables or disables the highlighted " +
+            "agent, N adds one through the builder that already existed, and Del removes one " +
+            "after confirming by name.",
+            "Showing somebody a problem and not the fix is worse than showing them neither, " +
+            "because it costs them the trip. The panel also says, before either key is pressed, " +
+            "which of the two is reversible: disabling an agent changes nothing already recorded, " +
+            "and removing one deletes profiles and arguments that nothing else stores."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;
