@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect"
     ];
 
     /// <summary>
@@ -29,13 +29,28 @@ internal static class Scenes
 
     public static string Render(string name, int width, int height, bool colour)
     {
-        var snapshot = name == "empty" ? EmptySnapshot() : Populated();
+        // A standalone workspace has no branch, no worktrees and nothing to merge, and every
+        // surface that mentions one has to say something different. It was rendered nowhere except
+        // one diff panel, which is why three separate pieces of advice went on telling a
+        // standalone operator to clean up a worktree they do not have.
+        var snapshot = name switch
+        {
+            "empty" => EmptySnapshot(),
+            "standalone" or "standalone-inspect" => Standalone(),
+            _ => Populated()
+        };
         var renderer = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
             WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
         if (name == "logs")
         {
             // Index 2 is the failed task, which is the state the log view exists to serve.
             return renderer.RenderLog(snapshot, width, height, selectedTaskIndex: 2, colour);
+        }
+
+        if (name == "standalone-inspect")
+        {
+            return renderer.Render(snapshot, width, height, colour,
+                Reference.Task(snapshot.Tasks[0], snapshot.Config));
         }
 
         var overlay = Overlay(name, snapshot.Config);
@@ -271,6 +286,50 @@ internal static class Scenes
     /// </summary>
     private static ClaimService Detector() =>
         new(new StateStore(WorkspaceLocator.ForRoot(Path.GetTempPath())));
+
+    /// <summary>
+    /// The same workspace without Git: no branch, no worktrees, agents editing the folder itself.
+    /// Its tasks are landed and cancelled, which are the two states whose advice was wrong.
+    /// </summary>
+    private static DashboardSnapshot Standalone()
+    {
+        var populated = Populated();
+        return populated with
+        {
+            Config = populated.Config with
+            {
+                Mode = WorkspaceMode.Standalone,
+                DefaultBaseRef = string.Empty
+            },
+            Git = populated.Git with { IsRepository = false, Branch = string.Empty, Ahead = 0 },
+            Tasks = populated.Tasks.Select(Restate).ToArray()
+        };
+    }
+
+    /// <summary>
+    /// The same task as a standalone workspace would really have recorded it: no branch, no
+    /// separate checkout, and a worktree stage that was skipped rather than passed. Carrying the
+    /// Git-mode stage states over would have drawn a tick beside "a branch and an isolated
+    /// checkout are created", which is the opposite of what happened.
+    /// </summary>
+    private static WorkflowTask Restate(WorkflowTask task)
+    {
+        var restated = task with
+        {
+            BaseRef = string.Empty,
+            BranchName = string.Empty,
+            WorktreePath = "/src/aurora-api"
+        };
+
+        var worktree = restated.Stage(WorkflowStage.Worktree);
+        if (worktree.State == StageState.Passed)
+        {
+            worktree.State = StageState.Skipped;
+            worktree.Summary = "Standalone workspace: agents work in place at /src/aurora-api.";
+        }
+
+        return restated;
+    }
 
     public static FknrtdConfig SampleConfig() => new()
     {

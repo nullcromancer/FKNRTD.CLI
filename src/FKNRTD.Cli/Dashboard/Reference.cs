@@ -94,7 +94,7 @@ internal static class Reference
         blocks.Add(new InfoHeading("Who is on it"));
         blocks.Add(new InfoLine("Lead", task.LeadAgentId + "  —  reads the code and writes the plan"));
         blocks.Add(new InfoLine("Implementer",
-            task.ImplementerAgentId + "  —  the only agent that may change files"));
+            task.ImplementerAgentId + "  —  the agent asked to change files"));
         blocks.Add(new InfoLine("Auditor",
             task.AuditorAgentId + "  —  judges the finished work and must return PASS"));
 
