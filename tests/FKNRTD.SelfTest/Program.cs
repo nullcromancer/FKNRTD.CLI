@@ -3577,6 +3577,29 @@ static Task TestPortalShowsRealScreensAsync()
     True(!page.Contains("<pre class=screen><code><", StringComparison.Ordinal),
         "An embedded screen cannot open a tag");
 
+    // Every link in the navigation lands somewhere, and no anchor is defined twice. Adding a
+    // section and forgetting its nav entry - or the reverse - is the likeliest way to break this
+    // page, and it breaks silently: the link simply does nothing.
+    var ids = System.Text.RegularExpressions.Regex.Matches(page, "id=([a-z][a-z0-9-]*)")
+        .Select(match => match.Groups[1].Value)
+        .ToArray();
+    var duplicates = ids.GroupBy(id => id, StringComparer.Ordinal)
+        .Where(group => group.Count() > 1)
+        .Select(group => group.Key)
+        .ToArray();
+    Equal(0, duplicates.Length, $"No anchor is defined twice: {string.Join(", ", duplicates)}");
+
+    var targets = ids.ToHashSet(StringComparer.Ordinal);
+    var links = System.Text.RegularExpressions.Regex.Matches(page, "href=#([a-z][a-z0-9-]*)")
+        .Select(match => match.Groups[1].Value)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+    True(links.Length > 5, $"The guide has a navigation to check ({links.Length} links)");
+    foreach (var link in links)
+    {
+        True(targets.Contains(link), $"The navigation link '#{link}' lands on a section that exists");
+    }
+
     // And the screens are of the things a newcomer needs: the four surfaces this work added or
     // rebuilt, named in the page so somebody can find the one they are looking at.
     foreach (var caption in new[]

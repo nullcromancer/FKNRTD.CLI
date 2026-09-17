@@ -60,8 +60,12 @@ Also verified directly, outside the suite:
 - **Colour output.** Every rendered scene was checked to emit only reset, bold and 24-bit
   colour sequences, to hold its exact width once escapes are stripped, and to reset at the end
   of every row so a panel background cannot bleed past the frame.
-- **The generated guide.** `fknrtd-portal.html` was checked to contain no external references,
-  no broken internal links, and balanced structural tags.
+- **The generated guide.** `fknrtd-portal.html` was parsed the way a browser would parse it, with a
+  real HTML parser rather than by pattern: 101 element ids, all unique; every navigation link lands
+  on a section that exists; no tag left open and no mismatched close; one inline script, no inline
+  event handlers, no `document.write`; and no external reference of any kind. The link check is a
+  self-test now, because adding a section and forgetting its navigation entry — or the reverse —
+  breaks silently: the link simply does nothing.
 - **A renderer sweep.** `dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz` renders
   every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 9,460 frames
   across 43 scenes — and checks each for the right number of rows, the right display width on
