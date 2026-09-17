@@ -560,6 +560,21 @@ public static class Milestones
             "rest. The renderer's invariant got simpler rather than weaker - a frame is now exactly " +
             "the size it was asked for at every size, with no point where the frame and the window " +
             "disagree, and all 11,660 fuzzed renders hold it."),
+
+        new("2026-09-17",
+            "A green tick for something the workspace could not do",
+            "A machine that has just installed this tool has a workspace configured for claude and " +
+            "codex whether or not either is present. That is the ordinary first state, and nobody " +
+            "had run doctor in it.",
+            "Doctor marked both agents missing and then put a tick beside 'An agent can audit', " +
+            "naming both of them - because the check read each agent's audit profile and never " +
+            "asked whether the agent existed. Two lines of red followed by a green claim about the " +
+            "same two agents is worse than either on its own.",
+            "Auditing now requires an installed agent, and the agent checks say what to do rather " +
+            "than only what is wrong: install it, press A then E to point the entry at an " +
+            "executable you have, or disable it so it stops being offered. Repointing has no " +
+            "command-line equivalent, which is why the dashboard is what gets named - 'agent add' " +
+            "refuses an identifier that already exists."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

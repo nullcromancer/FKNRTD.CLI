@@ -101,13 +101,21 @@ public sealed class DoctorService
                       "every task its own branch and checkout"
         });
 
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var agent in config?.Agents ?? [])
         {
             var executable = FindExecutable(agent.Executable);
-            var detail = executable ?? "Not found on PATH";
+            // "Not found on PATH" states the fault and leaves the reader with it. Every other
+            // check that can fail here names what to do next, and this is the one most likely to
+            // be a new reader's first failure: the tool installs cleanly and configures two agents
+            // whether or not either is present.
+            var detail = executable ?? $"'{agent.Executable}' is not on PATH. Install it, or press " +
+                "A in the dashboard and press E to point this entry at the executable you have. " +
+                $"'fknrtd agent disable {agent.Id}' stops it being offered at all.";
             var launchSucceeded = false;
             if (executable is not null)
             {
+                installed.Add(agent.Id);
                 var result = await GetVersionAsync(
                         executable,
                         TimeSpan.FromSeconds(Math.Clamp(config!.AgentTimeoutSeconds, 1, 10)),
@@ -136,6 +144,10 @@ public sealed class DoctorService
         // doctor's entire contract is that it reports rather than throws.
         var auditors = (config?.Agents ?? [])
             .Where(agent => agent.Enabled)
+            // Installed, not merely configured. Checking the profile alone put a tick beside "An
+            // agent can audit", naming both agents, two lines under both of them being reported
+            // missing - a green claim that the workspace could do something it could not do at all.
+            .Where(agent => installed.Contains(agent.Id))
             .Where(agent =>
             {
                 var profile = agent.Profiles.TryGetValue("audit", out var audit)
@@ -153,8 +165,13 @@ public sealed class DoctorService
             Passed = auditors.Length > 0,
             Detail = auditors.Length > 0
                 ? string.Join(", ", auditors)
-                : "No enabled agent has successMarker and failureMarker in its audit profile, so no " +
-                  "task can be created — the auditor is required and must be able to return a verdict."
+                : installed.Count == 0
+                    ? "No configured agent is installed, so nothing can audit a task — and the " +
+                      "auditor is required, so no task can be created either. Install one of the " +
+                      "agents listed above, or add one you already have."
+                    : "No installed agent has successMarker and failureMarker in its audit profile, " +
+                      "so no task can be created — the auditor is required and must be able to " +
+                      "return a verdict."
         });
 
         // Not an error: a workspace can legitimately have none. But it means the audit is the only

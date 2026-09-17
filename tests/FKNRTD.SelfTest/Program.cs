@@ -298,7 +298,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A hand-edited config is checked", TestAHandEditedConfigIsCheckedAsync),
     ("Looking up a word leads with the answer", TestLookingUpAWordLeadsWithTheAnswerAsync),
     ("A wrapped list item stays inside its item", TestAWrappedListItemStaysInsideItsItemAsync),
-    ("A too-small window says so", TestATooSmallWindowSaysSoAsync)
+    ("A too-small window says so", TestATooSmallWindowSaysSoAsync),
+    ("Doctor does not tick what is not there", TestDoctorDoesNotTickWhatIsNotThereAsync)
 };
 
 var failures = new List<string>();
@@ -5666,4 +5667,65 @@ static Task TestATooSmallWindowSaysSoAsync()
         "and a window with room for it is told how to leave");
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// Doctor does not tick a capability the workspace does not have.
+/// </summary>
+/// <remarks>
+/// On a machine with neither agent installed — the ordinary state of a machine that has just
+/// installed this tool, which configures claude and codex whether or not either is present —
+/// doctor marked both agents missing and then put a tick beside "An agent can audit", naming both
+/// of them. The check read the audit profile and never asked whether the agent existed. Two lines
+/// of red followed by a green claim about the same two agents is worse than either alone.
+/// </remarks>
+static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+
+        // Two agents, both properly configured to audit, neither of them installed: the executable
+        // names are ones nothing on any machine will resolve.
+        var config = Scenes.SampleConfig() with
+        {
+            ProjectName = "nothing-installed",
+            Mode = WorkspaceMode.Standalone,
+            Agents = Scenes.SampleConfig().Agents
+                .Select(agent => agent with { Executable = "fknrtd-no-such-agent-" + agent.Id })
+                .ToList()
+        };
+
+        await store.InitializeAsync(config).ConfigureAwait(false);
+
+        var process = new ProcessRunner();
+        var checks = await new DoctorService(store, new GitService(process), process)
+            .RunAsync()
+            .ConfigureAwait(false);
+
+        var audit = checks.FirstOrDefault(check => check.Name == "An agent can audit");
+        True(audit is not null, "Doctor still reports on auditing");
+        Equal(false, audit!.Passed,
+            "An agent that is not installed cannot audit, however good its audit profile is");
+        True(audit.Detail.Contains("installed", StringComparison.OrdinalIgnoreCase),
+            "and the reason says so rather than describing a profile");
+
+        // Every agent check fails, and each says what to do rather than only what is wrong.
+        var agentChecks = checks.Where(check => check.Name.StartsWith("Agent:", StringComparison.Ordinal)).ToArray();
+        Equal(2, agentChecks.Length, "Both configured agents are reported");
+        foreach (var check in agentChecks)
+        {
+            Equal(false, check.Passed, $"{check.Name} is not installed");
+            True(check.Detail.Contains("not on PATH", StringComparison.Ordinal),
+                $"{check.Name} says what is wrong");
+            True(check.Detail.Contains("Install it", StringComparison.Ordinal) &&
+                 check.Detail.Contains("agent disable", StringComparison.Ordinal),
+                $"{check.Name} also says what to do about it");
+        }
+
+        // Nothing claims the workspace is ready when it cannot run anything.
+        var required = checks.Where(check => check.Required && !check.Passed).ToArray();
+        True(required.Length >= 3,
+            $"The failures are reported as required, not optional ({required.Length} of them)");
+    }).ConfigureAwait(false);
 }
