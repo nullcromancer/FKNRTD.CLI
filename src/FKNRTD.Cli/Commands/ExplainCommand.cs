@@ -45,9 +45,19 @@ internal static class ExplainCommand
             return 2;
         }
 
-        Console.WriteLine($"No term is called '{term}'. These mention it:");
+        // Leading with the refusal contradicted the comment above it. The words that arrive here
+        // are mostly words the product drew on the screen - BUDGET, STAGE, EVENTS are panel
+        // headings - and telling somebody that the word they were just shown does not exist,
+        // before showing them six entries that answer their question, is the wrong way round.
+        const int Shown = 8;
+        Console.WriteLine(matches.Count switch
+        {
+            1 => $"'{term}' appears in one entry:",
+            > Shown => $"'{term}' appears in {matches.Count} entries. The closest {Shown}:",
+            _ => $"'{term}' appears in {matches.Count} entries:"
+        });
         Console.WriteLine();
-        foreach (var match in matches.Take(8))
+        foreach (var match in matches.Take(Shown))
         {
             Write($"  {match.Term,-22}", Theme.Cyan, useColor);
             Console.WriteLine(Text.Truncate(match.Summary, Math.Max(20, width - 24)));

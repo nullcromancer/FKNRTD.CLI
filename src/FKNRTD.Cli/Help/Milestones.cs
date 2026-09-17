@@ -512,6 +512,21 @@ public static class Milestones
             "a negative repair budget and a zero agent timeout, neither of which anything had ever " +
             "checked. The complaint carries the current value, because a rule that says what a good " +
             "value would be still leaves the reader to go and look up the bad one."),
+
+        new("2026-09-17",
+            "Answering the question instead of refusing the word",
+            "Looking up a word that is not a glossary term ran a search instead, which was the " +
+            "right decision and had been made deliberately - the comment above the line said so. " +
+            "The line itself opened with 'No term is called', and only then listed the entries " +
+            "that answered the question.",
+            "The words that reach that path are mostly words the product had just drawn: BUDGET, " +
+            "STAGE and EVENTS are panel headings, and none is a term on its own. Somebody reading " +
+            "a heading off the screen and asking about it was told first that it did not exist, " +
+            "above seven entries that between them explained it completely.",
+            "It now leads with the answer - \"'budget' appears in 7 entries\" - and says when the " +
+            "list is longer than the page, because claiming 33 and printing 8 reads as a miscount. " +
+            "A word that matches nothing is still refused and still exits 2, since a script that " +
+            "looked something up and found nothing has to be able to tell."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

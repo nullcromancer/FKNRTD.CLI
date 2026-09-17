@@ -289,7 +289,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The log window is right at scale and at its edges", TestLogWindowAtScaleAsync),
     ("Documented examples survive the option check", TestDocumentedExamplesSurviveTheOptionCheckAsync),
     ("A failed creation hands the form back", TestAFailedCreationHandsTheFormBackAsync),
-    ("A hand-edited config is checked", TestAHandEditedConfigIsCheckedAsync)
+    ("A hand-edited config is checked", TestAHandEditedConfigIsCheckedAsync),
+    ("Looking up a word leads with the answer", TestLookingUpAWordLeadsWithTheAnswerAsync)
 };
 
 var failures = new List<string>();
@@ -5440,4 +5441,90 @@ static Task TestAHandEditedConfigIsCheckedAsync()
     True(checkable >= 7, $"The check covers every validated setting ({checkable} of them)");
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// Looking up a word the product drew leads with the answer, not with a refusal.
+/// </summary>
+/// <remarks>
+/// Most words that reach the search are words the screen showed the reader: BUDGET, STAGE and
+/// EVENTS are panel headings, and none of them is a glossary term on its own. The reply opened
+/// "No term is called 'budget'." and then listed seven entries that answered the question. The
+/// comment directly above that line already said a miss is more useful as a search than as a
+/// refusal; the line did the opposite.
+/// </remarks>
+static async Task TestLookingUpAWordLeadsWithTheAnswerAsync()
+{
+    static async Task<(int Exit, string Out, string Error)> ExplainAsync(string term)
+    {
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        try
+        {
+            Console.SetOut(output);
+            Console.SetError(error);
+            var exit = await CommandDispatcher.ExecuteAsync(
+                    new CliArguments(["explain", term, "-no-color"]),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            return (exit, output.ToString(), error.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+    }
+
+    // A word that is a term answers with the term itself and never mentions searching.
+    var direct = await ExplainAsync("brief").ConfigureAwait(false);
+    Equal(0, direct.Exit, "A term that exists is explained");
+    True(direct.Out.Contains("BRIEF", StringComparison.Ordinal), "and printed under its own name");
+    True(!direct.Out.Contains("appears in", StringComparison.Ordinal),
+        "with no search framing around it");
+
+    // A panel heading the product draws, which is not a term. These are the words this is for.
+    foreach (var heading in new[] { "budget", "stage", "events" })
+    {
+        var found = await ExplainAsync(heading).ConfigureAwait(false);
+        Equal(0, found.Exit, $"'{heading}' is answered rather than refused");
+        True(found.Out.StartsWith($"'{heading}' appears in", StringComparison.Ordinal),
+            $"and the first line of the answer to '{heading}' is the answer, not a refusal");
+        True(!found.Out.Contains("No term is called", StringComparison.Ordinal),
+            $"'{heading}' is never told it does not exist");
+        True(found.Out.Contains("fknrtd explain ", StringComparison.Ordinal),
+            $"and '{heading}' is told how to read one of them");
+    }
+
+    // A long list says it is a long list. Claiming 33 entries and printing 8 without saying so
+    // reads as a miscount.
+    var many = await ExplainAsync("run").ConfigureAwait(false);
+    var headline = many.Out.Split((char)10)[0];
+    True(headline.Contains("The closest 8", StringComparison.Ordinal),
+        $"A list longer than the page says so: {headline.Trim()}");
+
+    // A word in nothing at all is still refused, and still fails, because a script that looked
+    // something up and found nothing has to be able to tell.
+    var missing = await ExplainAsync("zzzznothingatall").ConfigureAwait(false);
+    Equal(2, missing.Exit, "A word that matches nothing exits non-zero");
+    True(missing.Error.Contains("Nothing in the FKNRTD.CLI glossary matches", StringComparison.Ordinal),
+        "and says so on the error stream");
+
+    // Every uppercase heading the main screen draws has to reach one of the two good outcomes:
+    // its own entry, or a list of entries that mention it. Neither is a dead end.
+    var frame = Scenes.Render("overview", 150, 46, colour: false);
+    var headings = System.Text.RegularExpressions.Regex.Matches(frame, "[A-Z][A-Z][A-Z]+")
+        .Select(match => match.Value.ToLowerInvariant())
+        .Where(word => word is not ("fknrtd" or "cli" or "ram" or "cpu" or "ctx" or "utc"))
+        .Distinct()
+        .ToArray();
+
+    True(headings.Length >= 6, $"The sweep read the screen's headings ({headings.Length} of them)");
+    foreach (var heading in headings)
+    {
+        var answer = await ExplainAsync(heading).ConfigureAwait(false);
+        Equal(0, answer.Exit, $"'{heading}' is drawn on the main screen, so it must lead somewhere");
+    }
 }
