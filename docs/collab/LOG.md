@@ -133,3 +133,27 @@ than brief 02; `docs/collab/BRIEF-codex-02-settings-and-errors.md` is complete a
 treated as closed.
 
 Local suite: 35/35 passing, Release build clean.
+
+## 2026-09-17 — claude (the Codex seat works read-only)
+
+Found the shape of dispatch that works: **`codex exec --sandbox read-only` returns; the
+workspace-write dispatches did not.** Three write-sandbox runs sat at under 0.1s CPU with no
+files touched; a read-only audit of the same repository came back in minutes with twenty
+ranked findings, most of them real.
+
+So the seats are now split the way this product itself splits them: Claude implements, Codex
+reviews read-only, Claude fixes. That is the same argument the tool makes about agents — the
+one that wrote the code is not the one who should decide it is good.
+
+From the first audit, fixed in `53a5282`: a non-terminating text wrap (a glyph wider than its
+field appended empty lines until memory ran out), the command palette freezing an action's
+availability when it opened, surrogate pairs split by wrapping and by the caret, Escape
+reporting a submit on a form with no applicable steps, caret motion inside a filter discarding
+the highlight, panels able to exceed their terminal, a clamp that could be handed a minimum
+above its maximum, a stale log offset after picking a task, an unreachable "press ?" hint, and
+label columns padded by UTF-16 length instead of display width.
+
+Every one has a regression test. The wrap bug was found by the test written for a different
+finding, which is the argument for writing them rather than fixing and moving on.
+
+Local suite: 36/36 passing, Release build clean.
