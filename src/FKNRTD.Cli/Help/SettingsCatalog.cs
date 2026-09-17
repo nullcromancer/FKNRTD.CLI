@@ -155,9 +155,11 @@ public static class SettingsCatalog
             "The commit is made once verification and the audit have both passed, immediately before " +
             "the task reaches ready-to-land — not when the implementer finishes. Unavailable in a " +
             "standalone workspace, where there is no repository to commit to.",
-            "Turning it off means a task that passes everything still cannot become landable while " +
-            "its worktree is dirty, because there is no commit to merge. You then have to commit in " +
-            "the worktree yourself. The work is never lost either way; it is the landing that stops.",
+            "Turning it off is a trap worth understanding. A task whose worktree still has " +
+            "uncommitted changes fails at the end — after its verification and its audit have both " +
+            "passed — because there is no commit to merge, and it is recorded as Failed rather " +
+            "than held back. The work itself is never lost: it is sitting in the worktree. Commit " +
+            "it there yourself and retry, or leave this on.",
             "auto-commit"),
 
         new("agents", "Agents", AgentFields, "Claude and Codex",

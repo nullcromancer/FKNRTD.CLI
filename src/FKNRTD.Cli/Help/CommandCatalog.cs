@@ -41,12 +41,20 @@ public static class CommandCatalog
             "Set up workspace configuration and discover suitable verification commands.",
             "Creates .fknrtd/config.json, its ignore file, and task, runtime, log, artifact and " +
             "worktree directories. Detects Git when available; otherwise creates a standalone " +
-            "workspace. It does not initialize a Git repository, launch agents, or run a task. " +
-            "Review the generated agent profiles and verification commands before using them.",
+            "workspace. It never initializes a Git repository. An existing configuration stops it " +
+            "unless you pass -force, which copies the old one into .fknrtd/runtime/backups before " +
+            "replacing it. Run interactively it then offers to install the Claude statusline, " +
+            "which writes outside .fknrtd, and to run doctor, which does launch each configured " +
+            "agent with --version to see whether it is there. Use -yes to take the defaults or " +
+            "-quiet to skip the guided setup entirely. Review the generated agent profiles and " +
+            "verification commands before using them.",
             "Run fknrtd doctor to check that the workspace and configured agent executables are ready.",
             [new("path", "<folder>", "Folder to initialize; defaults to the current location."),
              new("-standalone", "", "Force direct edits in the folder, without Git worktrees."),
-             new("-git", "", "Require an existing Git repository; fail when none is available.")],
+             new("-git", "", "Require an existing Git repository; fail when none is available."),
+             new("-force", "", "Replace an existing configuration, backing the old one up first."),
+             new("-yes", "", "Accept the guided setup's defaults without asking."),
+             new("-quiet", "", "Skip the guided setup and its follow-up offers entirely.")],
             ["fknrtd init", "fknrtd init ./notes -standalone", "fknrtd init -git"],
             ["workspace", "mode", "config", "verification"]),
 
@@ -57,7 +65,7 @@ public static class CommandCatalog
             "checks and test writable state; this does not run a coding task or repair your " +
             "configuration. Exit 0 means required checks passed; exit 2 means a required check failed.",
             "Fix each failed required check, then run doctor again before creating or running a task.",
-            [], ["fknrtd doctor"], ["doctor", "agent", "mode"]),
+            [], ["fknrtd doctor"], ["doctor", "agent", "mode"], json: true),
 
         Entry("fknrtd dashboard [-once]", "dashboard", GettingStarted,
             "See tasks, agent activity, conflicts and logs in one terminal.",
@@ -85,7 +93,7 @@ public static class CommandCatalog
              new("-height", "<rows>", "Set rendered frame height."),
              new("-no-color", "", "Disable ANSI color."),
              new("-color", "", "Request ANSI color for rendered output.")],
-            ["fknrtd status", "fknrtd status -json"], ["conflict", "telemetry", "task"]),
+            ["fknrtd status", "fknrtd status -json"], ["conflict", "telemetry", "task"], json: true),
 
         Entry("fknrtd help", "help", GettingStarted,
             "Print the command-line quick reference.",
@@ -99,9 +107,11 @@ public static class CommandCatalog
         Entry("fknrtd task new", "task new", Tasks,
             "Describe a piece of work through a guided form that explains every field.",
             "Opens the same builder the dashboard opens for N, on its own. Each question arrives " +
-            "with its definition and a worked example, and each field has a default that is already " +
-            "correct for this workspace, so pressing Enter through the form produces a valid task. " +
-            "A refused answer says what was wrong with it. Nothing is written until the last step, " +
+            "with its definition and a worked example. The title and the brief are yours to write " +
+            "and have no default — an empty title is refused, and so is a brief under fifteen " +
+            "characters, because neither is something an agent could act on. Everything after them " +
+            "is already correct for this workspace, so the rest of the form is Enter. A refused " +
+            "answer says what was wrong with it. Nothing is written until the last step, " +
             "and backing out with Esc creates nothing. Needs an interactive terminal; use " +
             "'task create' from a script.",
             "The form ends by offering to run the task immediately, or you can press Enter on it later.",
@@ -110,14 +120,19 @@ public static class CommandCatalog
 
         Entry("fknrtd task create \"Title\" -brief \"What to build\" -verify \"dotnet build\"", "task create", Tasks,
             "Record a task with an explicit brief, agent roles and acceptance commands.",
-            "Writes a queued task record under .fknrtd/tasks. Creation alone does not launch " +
-            "an agent, create its worktree or merge anything. Use -run only when you intend " +
-            "to start immediately: the implementer may then edit its worktree, or the project " +
-            "folder directly in standalone mode. Verification commands are trusted shell commands.",
+            "Writes a queued task record under .fknrtd/tasks. A title and a brief are both " +
+            "required: give the brief with -brief or -brief-file, and supplying neither is an " +
+            "error rather than an empty brief. Leaving out -verify does not mean the work goes " +
+            "unverified — the workspace's defaultVerificationCommands are copied into the task, " +
+            "so pass -verify with no value only if you mean to check nothing. Creation alone does " +
+            "not launch an agent, create its worktree or merge anything. Use -run only when you " +
+            "intend to start immediately: the implementer may then edit its worktree, or the " +
+            "project folder directly in standalone mode. Verification commands are trusted shell " +
+            "commands.",
             "Run fknrtd task run <id> using the identifier printed at creation.",
             [new("title", "<text>", "Short task title; quote it when it contains spaces.", true),
-             new("-brief", "<text>", "The goal, constraints and acceptance criteria the agents read."),
-             new("-brief-file", "<path>", "Read the brief from a text file."),
+             new("-brief", "<text>", "The goal, constraints and acceptance criteria the agents read. Required unless -brief-file is given."),
+             new("-brief-file", "<path>", "Read the brief from a text file. Required unless -brief is given."),
              new("-lead", "<agent>", "Agent that plans the change."),
              new("-implementer", "<agent>", "Agent allowed to write the change."),
              new("-auditor", "<agent>", "Independent agent that reviews the change."),
@@ -134,20 +149,26 @@ public static class CommandCatalog
             "Reads task records from .fknrtd/tasks and lists them by recency. It does not " +
             "start, reset or delete tasks, and does not change project files.",
             "Copy a task identifier into fknrtd task show <id> to inspect its stages.",
-            [], ["fknrtd task list"], ["task"]),
+            [], ["fknrtd task list"], ["task"], json: true),
 
         Entry("fknrtd task show <id>", "task show", Tasks,
             "Inspect a task's brief, stages, outcomes and verification evidence.",
             "Reads the saved task record and shows its current state. It does not rerun " +
-            "verification or ask an agent for a new opinion, and makes no project edits.",
+            "verification or ask an agent for a new opinion, and makes no project edits. It exits 3 " +
+            "when the task has failed and 0 otherwise, so a script can branch on it without parsing " +
+            "anything — except with -json, which always exits 0 and expects you to read the " +
+            "status field.",
             "For a failed stage, read its output under .fknrtd/logs/<task-id>/ before retrying.",
-            TaskId(), ["fknrtd task show FKN-<id>"], ["task", "status.failed", "verification"]),
+            TaskId(), ["fknrtd task show FKN-<id>"], ["task", "status.failed", "verification"], json: true),
 
         Entry("fknrtd task prompts <id>", "task prompts", Tasks,
             "Print the exact instruction each agent on a task will be sent.",
             "Composes the three prompts from the task's brief — the lead's, the implementer's and " +
-            "the auditor's — and prints them verbatim. The implementer's includes the lead's plan " +
-            "once the plan stage has run, and a placeholder before that. It reads the task and the " +
+            "the auditor's. The lead's is exactly what will be sent. The other two carry a " +
+            "placeholder wherever a real run would paste something that does not exist yet: the " +
+            "implementer's includes the lead's plan once the plan stage has run, and the auditor's " +
+            "always shows a placeholder where the verification results will go. A repair round " +
+            "also adds the failure evidence, which no preview can show. It reads the task and the " +
             "plan artifact and changes nothing. Knowing what an agent is about to be told is the " +
             "part of authorising it that no amount of sandboxing substitutes for.",
             "If a prompt is not what you meant, the brief is what to change; create a new task.",
@@ -157,9 +178,12 @@ public static class CommandCatalog
 
         Entry("fknrtd task diff <id>", "task diff", Tasks,
             "Print the finished change a task made, so it can be read before it is landed.",
-            "Shows everything the task committed on top of its base branch, followed by anything " +
-            "still uncommitted in its worktree — both halves, because a workspace that does not " +
-            "commit agent changes automatically has the whole change sitting uncommitted. It reads " +
+            "Shows what the task committed on top of its base branch, followed by anything still " +
+            "uncommitted in its worktree — both halves, because a workspace that does not commit " +
+            "agent changes automatically has the whole change sitting uncommitted. The uncommitted " +
+            "half is 'git diff HEAD', so a file the agent created and never staged does not appear " +
+            "here at all; 'git status' in the worktree is what finds those. Long changes stop at " +
+            "four thousand lines and say so. It reads " +
             "the worktree and changes nothing. A task with no worktree yet, or a standalone " +
             "workspace with no branch to compare against, says so rather than printing nothing. " +
             "Output is plain diff text, so it pipes into a pager or a reviewer as it stands.",
@@ -174,7 +198,10 @@ public static class CommandCatalog
             "Creates or uses the task worktree in Git mode, launches the assigned agents, " +
             "runs verification commands and writes task records, logs and artifacts. The " +
             "implementer writes project files; standalone mode writes directly in your folder. " +
-            "Configured auto-commit can commit task changes. Nothing merges automatically. " +
+            "In Git mode the verified, audited work is committed to the task branch at the end, " +
+            "unless autoCommitAgentChanges is off — in which case a worktree still holding " +
+            "uncommitted changes fails the task at that last step, after everything else has " +
+            "passed, because there would be nothing to merge. Nothing merges automatically. " +
             "Exit 0 means a successful outcome, 3 means a failed outcome, and 130 means cancellation; " +
             "an exception reports a diagnostic and exits 1.",
             "If the run fails, read its stage log under .fknrtd/logs/<task-id>/; if ready to land, inspect the diff.",
@@ -192,10 +219,13 @@ public static class CommandCatalog
 
         Entry("fknrtd task cancel <id>", "task cancel", Tasks,
             "Request that a task stop running.",
-            "Records a cancellation request under .fknrtd/runtime/cancels so the running " +
-            "workflow can observe it and stop its external process. The request does not " +
-            "roll back completed edits, remove the worktree or merge changes. A successful " +
-            "The request itself always exits 0, whether or not anything was running to receive it.",
+            "What it does depends on whether the task is running. A running task gets a " +
+            "cancellation request written under .fknrtd/runtime/cancels, which the workflow notices " +
+            "within about half a second and then kills its external process. A task that is not " +
+            "running is marked cancelled immediately and no request file is written. Either way it " +
+            "does not roll back completed edits, remove the worktree or merge anything. It exits 1 " +
+            "on a task id that does not exist, and on a task that has already landed — there is " +
+            "nothing left to cancel, and reverting a merge is a job for Git.",
             "Inspect fknrtd task show <id> and its log before choosing whether to retry.",
             TaskId(), ["fknrtd task cancel FKN-<id>"], ["status.cancelled", "task"]),
 
@@ -206,15 +236,22 @@ public static class CommandCatalog
             "checkout and task record. In standalone mode it records completion of edits " +
             "already in the folder. It does not approve a failed task or clean up its worktree. " +
             "Exit 0 means the task landed. Anything that stops it — a task that is not ready, a " +
-            "dirty checkout, a merge Git refuses — reports the reason and exits 1.",
+            "dirty checkout, a merge Git refuses — reports the reason and exits 1. A merge Git " +
+            "refuses leaves the task Failed with its land stage failed, and your base branch " +
+            "exactly where it was; fix the cause and retry it.",
             "After checking the landed result, reclaim the checkout with fknrtd task cleanup <id> -confirm REMOVE.",
             [.. TaskId(), new("-confirm", "LAND", "Explicit confirmation of landing.", true)],
             ["fknrtd task land FKN-<id> -confirm LAND"], ["land", "base-ref", "status.readytoland", "mode"]),
 
         Entry("fknrtd task cleanup <id> -confirm REMOVE", "task cleanup", Tasks,
-            "Remove a task's worktree while retaining its branch and history.",
-            "Removes the task checkout and updates its record. The Git branch, task history " +
-            "and logs remain; cleanup does not merge the branch. A running task cannot be " +
+            "Remove a task's worktree while retaining its record and history.",
+            "Removes the task checkout. The task record and its logs remain, and cleanup does not " +
+            "merge anything. It does not change the task's record at all, so a cleaned-up task " +
+            "still reads as it did. The branch remains too, unless the task has already landed: a " +
+            "landed branch is deleted with 'git branch -d', which refuses to remove anything not " +
+            "already merged. Cleanup also runs 'git worktree prune' across the whole repository, " +
+            "which clears Git's record of any worktree directory that no longer exists, including " +
+            "ones FKNRTD.CLI did not create. A running task cannot be " +
             "cleaned up. Forced cleanup can discard uncommitted checkout contents, so inspect " +
             "them before choosing -force. Standalone mode must preserve the project folder.",
             "Use fknrtd task show <id> when you need the retained record or log paths.",
@@ -228,7 +265,7 @@ public static class CommandCatalog
             "start a coding task, install software or change the configuration.",
             "Run fknrtd doctor if an enabled agent cannot be found or launched. The dashboard shows the " +
             "same roster, and lets you change it, on the A key.",
-            [], ["fknrtd agent list"], ["agent", "profile", "doctor"]),
+            [], ["fknrtd agent list"], ["agent", "profile", "doctor"], json: true),
 
         Entry("fknrtd agent new", "agent new", Agents,
             "Register a coding CLI through a guided form instead of an option list.",
@@ -260,7 +297,10 @@ public static class CommandCatalog
              new("-plan-arg", "<argument>", "Repeat to define the planning profile."),
              new("-implement-arg", "<argument>", "Repeat to define the writing profile."),
              new("-audit-arg", "<argument>", "Repeat to define the read-only auditing profile."),
-             new("-stdin", "", "Deliver the prompt on standard input.")],
+             new("-stdin", "", "Deliver the prompt on standard input."),
+             new("-name", "<text>", "Display name; defaults to the id."),
+             new("-kind", "<kind>", "claude, codex or generic. Chooses the colour and the status glyphs."),
+             new("-color", "<colour>", "Colour to draw this agent in on the dashboard.")],
             ["fknrtd agent add -file examples/generic-agent.json",
              "fknrtd agent add -id local -exe mytool -stdin"], ["agent", "profile", "prompt-delivery"]),
 
@@ -284,8 +324,11 @@ public static class CommandCatalog
             "Remove an agent adapter from workspace configuration.",
             "Deletes its registration from .fknrtd/config.json after REMOVE confirmation. " +
             "It does not uninstall the external CLI or delete its own settings or credentials.",
-            "Check remaining agent definitions and task role assignments with fknrtd agent list. In the " +
-            "dashboard, A then Del asks for the same confirmation.",
+            "Check what is left with fknrtd agent list, which shows the definitions and whether each " +
+            "executable can be found. It does not read tasks, so it will not tell you which tasks " +
+            "named the agent you removed; those tasks keep the name and fail on the stage that " +
+            "needed it. In the dashboard, A then Del asks for the same confirmation and does say " +
+            "how many tasks name it.",
             [.. AgentId(), new("-confirm", "REMOVE", "Confirm removal of the adapter.", true)],
             ["fknrtd agent remove local -confirm REMOVE"], ["agent", "config"]),
 
@@ -294,7 +337,11 @@ public static class CommandCatalog
             "Updates a runtime snapshot under .fknrtd/runtime/agents so the dashboard can " +
             "show intent and touched paths. The hook alias accepts the same report. Reporting " +
             "does not launch an agent, edit those paths or reserve them; use claims for reservations. " +
-            "A progress percentage requires a truthful basis describing what was measured.",
+            "A progress percentage requires a truthful basis describing what was measured. Each " +
+            "report replaces the whole snapshot rather than updating part of it: anything you leave " +
+            "out goes back to its default — state to running, role to observer, source to " +
+            "external-hook — even when the previous report said otherwise. Send the full picture " +
+            "every time.",
             "Use fknrtd status to check the report and any resulting conflict indications.",
             [new("-agent", "<id>", "Agent producing this report.", true),
              new("-state", "<state>", "unknown, offline, idle, planning, running, reviewing, waiting, blocked, failed or completed."),
@@ -324,16 +371,21 @@ public static class CommandCatalog
             [new("-agent", "<id>", "Agent holding the reservation.", true),
              new("-path", "<pattern>", "Path to reserve; repeat for multiple paths.", true),
              new("-mode", "read|write", "Read claims coexist; write claims conflict with overlapping work."),
-             new("-ttl", "<seconds>", "Reservation lifetime; defaults to 300 seconds.")],
+             new("-ttl", "<seconds>", "Reservation lifetime; defaults to 300 seconds."),
+             new("-worktree", "<path>", "Which checkout this is in. Defaults to the workspace root, and decides whether an overlap reads as a collision or a merge risk."),
+             new("-task", "<id>", "The task this reservation belongs to.")],
             ["fknrtd claim add -agent codex -path src/parser.cs -mode write -ttl 300"],
             ["claim", "claim-mode", "ttl", "conflict"]),
 
         Entry("fknrtd claim list", "claim list", Coordination,
             "Inspect file reservations and detected overlap risks.",
             "Reads claim and activity records to show reservations and conflicts. It does " +
-            "not resolve collisions, cancel tasks or edit the reserved files.",
+            "not resolve collisions, cancel tasks or edit the reserved files. It exits 3 when any " +
+            "detected conflict is a collision and 0 otherwise, so a script can gate on it. An " +
+            "expired reservation is not removed by expiring: it keeps being reported as a stale " +
+            "claim until 'fknrtd claim release' clears it.",
             "Coordinate overlapping writers before proceeding; renew or release your own claims as needed.",
-            [], ["fknrtd claim list"], ["claim", "conflict", "conflict.collision"]),
+            [], ["fknrtd claim list"], ["claim", "conflict", "conflict.collision"], json: true),
 
         Entry("fknrtd claim renew <id>", "claim renew", Coordination,
             "Extend a reservation while its agent is still working.",
@@ -366,10 +418,13 @@ public static class CommandCatalog
 
         Entry("fknrtd message list", "message list", Coordination,
             "Read recent agent hand-off messages.",
-            "Reads the workspace message history. Listing a message does not acknowledge " +
-            "it, deliver a new prompt or change project files.",
+            "Reads the workspace message history, most recent first, fifty at a time unless you " +
+            "ask for more. Listing a message does not acknowledge it, deliver a new prompt or " +
+            "change project files.",
             "Acknowledge a handled note with fknrtd message ack <id>.",
-            [], ["fknrtd message list"], ["message"]),
+            [new("-limit", "<count>", "How many to read. Defaults to 50."),
+             new("-json", "", "Machine-readable output instead of the table.")],
+            ["fknrtd message list", "fknrtd message list -limit 200"], ["message"]),
 
         Entry("fknrtd message ack <id>", "message ack", Coordination,
             "Record that a hand-off message has been acknowledged.",
@@ -385,7 +440,7 @@ public static class CommandCatalog
             "does not replay events, launch agents or modify project files.",
             "Inspect the affected task and its stage log when an event reports a failure.",
             [new("-limit", "<count>", "Maximum number of recent events to display.")],
-            ["fknrtd events -limit 100"], ["event", "task"]),
+            ["fknrtd events -limit 100"], ["event", "task"], json: true),
 
         Entry("fknrtd usage list", "usage list", Budget,
             "Show the latest recorded capacity figures for each agent.",
@@ -393,7 +448,7 @@ public static class CommandCatalog
             "reported values, not a promise of current quota. Listing does not refresh " +
             "remote data, launch a coding task or modify project files.",
             "Run fknrtd usage refresh codex for a fresh Codex report, or install Claude's statusline integration.",
-            [], ["fknrtd usage list"], ["usage", "context", "five-hour", "weekly"]),
+            [], ["fknrtd usage list"], ["usage", "context", "five-hour", "weekly"], json: true),
 
         Entry("fknrtd usage refresh codex", "usage refresh", Budget,
             "Ask Codex for structured rate-limit information.",
@@ -409,7 +464,10 @@ public static class CommandCatalog
             "Record explicit capacity measurements from an external source.",
             "Writes a usage snapshot under .fknrtd/runtime/usage. Values are percentages " +
             "remaining, clamped to 0 through 100. This does not query the provider, change " +
-            "your subscription or grant more quota; report measured values rather than guesses.",
+            "your subscription or grant more quota; report measured values rather than guesses. " +
+            "It replaces that agent's snapshot outright: a percentage you leave out becomes " +
+            "unknown rather than keeping its previous value, and any recorded reset times go with " +
+            "it. Pass everything you know each time.",
             "Use fknrtd usage list to check the recorded values and source.",
             [new("agent", "<id>", "Agent the measurements describe.", true),
              new("-context", "<percent>", "Conversation context remaining."),
@@ -421,15 +479,18 @@ public static class CommandCatalog
 
         Entry("fknrtd integration install-claude-statusline", "integration install-claude-statusline", Budget,
             "Connect Claude Code's statusline to workspace usage reporting.",
-            "Writes a command statusline to Claude settings, using user scope unless " +
-            "-project is selected. Existing settings are backed up before modification. " +
-            "Replacing an existing statusline requires -force. This changes settings " +
-            "outside .fknrtd and does not restart Claude or run a coding task.",
+            "Writes a command statusline to Claude's own settings. Without -project that is the " +
+            "user-scoped settings file in your home directory, which affects every project you " +
+            "open in Claude Code. With -project it is .claude/settings.json under the directory " +
+            "you are standing in — not the workspace root, so run it from the top of the project " +
+            "you mean. Existing settings are backed up before modification, and replacing an " +
+            "existing statusline requires -force. This changes settings outside .fknrtd and does " +
+            "not restart Claude or run a coding task.",
             "Restart Claude Code so its statusline begins supplying usage reports.",
             [new("-project", "", "Write project-scoped Claude settings."),
              new("-force", "", "Back up and replace an existing statusline.")],
             ["fknrtd integration install-claude-statusline",
-             "fknrtd integration install-claude-statusline -project"], ["statusline", "usage"]),
+             "fknrtd integration install-claude-statusline -project"], ["statusline", "usage"], workspace: false),
 
         Entry("fknrtd config show", "config show", Configuration,
             "Print the active workspace configuration.",
@@ -568,10 +629,24 @@ public static class CommandCatalog
     private static CommandOption[] AgentId() => [new("id", "<agent-id>", "Identifier of a configured agent.", true)];
 
     private static CommandEntry Entry(string invocation, string name, string group, string summary,
-        string detail, string next, CommandOption[] options, string[] examples, string[] terms, bool workspace = true) =>
-        new(invocation, name, group, summary, detail, next,
-            Array.AsReadOnly<CommandOption>(workspace
-                ? [.. options, new("-root", "<path>", "Select the workspace to use.")]
-                : [.. options]),
-            Array.AsReadOnly(examples), Array.AsReadOnly(terms));
+        string detail, string next, CommandOption[] options, string[] examples, string[] terms,
+        bool workspace = true, bool json = false)
+    {
+        // The options that several commands share are appended from here rather than written out on
+        // each entry. Eight commands accepted -json and not one of them documented it, because
+        // remembering to repeat an option eight times is not a thing that happens reliably.
+        var all = new List<CommandOption>(options);
+        if (json)
+        {
+            all.Add(new("-json", "", "Machine-readable output instead of the table."));
+        }
+
+        if (workspace)
+        {
+            all.Add(new("-root", "<path>", "Select the workspace to use."));
+        }
+
+        return new(invocation, name, group, summary, detail, next,
+            Array.AsReadOnly(all.ToArray()), Array.AsReadOnly(examples), Array.AsReadOnly(terms));
+    }
 }

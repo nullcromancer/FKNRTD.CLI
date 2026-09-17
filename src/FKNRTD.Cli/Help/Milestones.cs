@@ -286,6 +286,22 @@ public static class Milestones
             "reported until somebody releases it. The second was right. A screen that argues with " +
             "itself is worse than a screen that is simply wrong, because the reader cannot tell " +
             "which half to act on."),
+
+        new("2026-09-17",
+            "Twenty-one things the command list was wrong about",
+            "The same review, turned on the forty-four commands. None of them had ever been " +
+            "checked against the dispatcher that implements them.",
+            "Twenty-one findings. One was a real defect rather than a wording problem, and is " +
+            "recorded separately. The rest were corrections and, more often, omissions: exit " +
+            "codes nobody had written down, options that exist and were never listed, and effects " +
+            "a command has that its description did not mention.",
+            "The omissions were the more interesting half. Eight commands accept -json and not " +
+            "one of them said so, which is a failure of repetition rather than of knowledge - so " +
+            "the shared options are now appended from a single place, the way -root already was. " +
+            "One command advertised -root and ignored it entirely, for the same reason in reverse. " +
+            "And three commands quietly replace a whole record when you might expect them to " +
+            "update part of one: a telemetry report, a usage measurement and an agent definition " +
+            "all discard what you leave out."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

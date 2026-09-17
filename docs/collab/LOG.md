@@ -281,3 +281,43 @@ Short, named files, named code to check against, errors of fact only. The dispat
 audited against the dispatcher.
 
 Local suite: 47/47 passing, Release build clean, renderer sweep 8,140 renders across 37 scenes.
+
+---
+
+## 2026-09-17 06:20 - Codex's command-catalog fact-check
+
+Same shape, same window, turned on `CommandCatalog.cs` and the dispatcher. **21 findings.**
+
+**One was a product bug, not a documentation error.** When Git refuses the merge, `LandAsync`
+records the failure on the task and returns it rather than throwing - the same contract a failed
+run has. Both callers ignored that. `fknrtd task land` printed `/ Landed <id> on main` and exited
+**0**; the dashboard's G toasted "Landed". The one command that touches your base branch reported
+success when Git had declined to merge, and exited 0, so a script would have believed it too. Fixed
+in both callers, with a regression test that drives a landing Git genuinely refuses and asserts the
+base branch is exactly where it was.
+
+The other twenty were documentation, and the omissions outnumbered the errors:
+
+- **Eight commands accept `-json` and none of them said so.** That is a failure of repetition, not
+  of knowledge, so `Entry` now appends the shared options from one place the way it already did for
+  `-root`. The ninth command would have been forgotten too.
+- **One command advertised `-root` and ignored it.** `integration install-claude-statusline` reads
+  no workspace at all; `-root` was being appended automatically to every entry. Same mechanism,
+  opposite failure.
+- **Three commands replace a record where you would expect them to update one.** `telemetry
+  report`, `usage set` and an agent definition all discard whatever you leave out - a telemetry
+  report resets state to running and role to observer, and `usage set` turns an omitted percentage
+  into unknown and loses the reset timestamps with it.
+- **Exit codes nobody had written down.** `task show` exits 3 on a failed task but 0 with `-json`;
+  `claim list` exits 3 when any conflict is a collision.
+- **`task cancel`'s description contained a sentence that stopped mid-clause** - "A successful " and
+  then nothing. It had been shipping like that.
+
+### The pattern across both fact-checks
+
+Fifty findings between the glossary and the command list. The author wrote every wrong sentence and
+then read it back, which is not a check. Nothing here required cleverness to find; it required
+somebody who had not written it reading it against the code. That is the product's own argument,
+applied to the product's own documentation, and it has now been true three times running.
+
+Local suite: 49/49 passing, Release build clean.
