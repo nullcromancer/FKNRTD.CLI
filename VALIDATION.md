@@ -3,7 +3,7 @@
 ## 2026-09-17 — the usability programme
 
 Revision: 1.0.0
-Commit verified: `c4f65df09ae0aa437385ec2fcf87d07529b107ba`
+Commit verified: `d8c6fc871301f7d3e1785f756052e29f85c660ce`
 (branch `feature/standalone-workspaces-and-tool-management`)
 
 Environment: .NET SDK 10.0.401, Git 2.55.0.windows.4, Windows 11 (10.0.26200).
@@ -15,7 +15,7 @@ nothing is reported that was not run.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 67/67 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 71/71 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -65,7 +65,7 @@ Also verified directly, outside the suite:
 - **A renderer sweep.** `dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz` renders
   every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 9,460 frames
   across 43 scenes — and checks each for the right number of rows, the right display width on
-  every row, and no exception. All 10,560 passed. The suite itself samples five widths and three
+  every row, and no exception. All 10,780 passed. The suite itself samples five widths and three
   heights; this is the wider net.
 - **A landing Git refuses.** A task was run to ready-to-land, a conflicting version of the same
   file was committed to `main`, and the landing was attempted. The task came back Failed with
