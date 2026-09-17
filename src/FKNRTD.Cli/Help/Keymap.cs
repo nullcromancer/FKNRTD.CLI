@@ -82,9 +82,11 @@ public static class Keymap
         new("D", "doctor",
             "Runs the pre-flight checks and shows what is ready and what would fail, without leaving " +
             "the dashboard."),
-        new("A", "agents",
-            "Lists the configured agents: which are enabled, which can actually be found on PATH, " +
-            "and which are equipped to act as an auditor."),
+        new("A", "manage agents",
+            "Lists the configured agents - which are enabled, which can actually be found on PATH, " +
+            "and which are equipped to act as an auditor - and lets you change the roster: Space " +
+            "enables or disables the highlighted one, N adds another, and Del removes one after " +
+            "confirming by name."),
         new("S", "settings",
             "Explains every setting in this workspace's configuration: what it controls and what " +
             "changing it would cost, with the current value shown for each top-level one. The file " +

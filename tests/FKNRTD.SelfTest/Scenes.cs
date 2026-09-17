@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -83,7 +83,22 @@ internal static class Scenes
             case "inspect":
                 return Reference.Task(FailedTask(), config);
             case "agents":
-                return Reference.Agents(config);
+                return AgentManager.Create(Populated() with { Config = RosterConfig(config) });
+            case "agents-empty":
+                return new AgentManager([], new Dictionary<string, int>());
+            case "agents-remove":
+                return new Confirmation(
+                    "REMOVE THIS AGENT",
+                    Theme.Red,
+                    "gemini - Gemini",
+                    "This deletes its command profiles, its arguments and its environment from this " +
+                    "workspace's configuration. Nothing else stores them, so they cannot be restored " +
+                    "except by configuring the agent again. One task already names it, and would fail " +
+                    "on the stage that needed it.",
+                    "REMOVE",
+                    "agent",
+                    "If you only want it out of the task builder, press Esc and disable it with Space " +
+                    "instead. That is reversible.");
             case "doctor":
                 return Reference.Doctor(
                 [
@@ -208,6 +223,30 @@ internal static class Scenes
         "main",
         ["dotnet build", "dotnet test --no-build"],
         HasClaude: true);
+
+    /// <summary>
+    /// A roster that exercises every row the agent manager can draw: enabled, disabled, and one
+    /// that has no audit markers and so can never be an auditor. The built-in defaults are all
+    /// enabled and all able to audit, which would leave two of the three styles unrendered.
+    /// </summary>
+    private static FknrtdConfig RosterConfig(FknrtdConfig config) => config with
+    {
+        Agents =
+        [
+            .. config.Agents,
+            new AgentDefinition
+            {
+                Id = "gemini",
+                DisplayName = "Gemini",
+                Executable = "gemini",
+                Enabled = false,
+                Profiles = new Dictionary<string, AgentCommandProfile>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["default"] = new() { Arguments = ["-p", "{prompt}"] }
+                }
+            }
+        ]
+    };
 
     public static FknrtdConfig SampleConfig() => new()
     {

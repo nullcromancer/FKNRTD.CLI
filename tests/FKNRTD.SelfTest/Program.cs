@@ -127,7 +127,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The task-reading commands work end to end", TestTaskReadingCommandsAsync),
     ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync),
     ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync),
-    ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync)
+    ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync),
+    ("The agent roster lists and changes the roster", TestAgentManagerAsync)
 };
 
 var failures = new List<string>();
@@ -2304,7 +2305,7 @@ static async Task TestStatusLineAgreesWithTheDashboardAsync()
         True(!line.Contains("?", StringComparison.Ordinal),
             "The statusline never shows an unexplained state glyph");
         True(!line.Contains("  ", StringComparison.Ordinal), "The statusline has no doubled spaces");
-        True(!line.Contains(''), "The statusline honours -no-color");
+        True(!line.Contains((char)27), "The statusline honours -no-color");
     }).ConfigureAwait(false);
 }
 
@@ -2333,7 +2334,7 @@ static async Task TestAFailingActionDoesNotCrashAsync()
              })
     {
         await app.HandleKeyAsync(
-                new ConsoleKeyInfo(' ', key, false, false, false), snapshot, CancellationToken.None)
+                Key(key), snapshot, CancellationToken.None)
             .ConfigureAwait(false);
         True(app.Toast.Length > 0, $"Pressing {key} against a broken workspace leaves a message");
     }
@@ -2555,6 +2556,77 @@ static Task TestOverlayHostFrameAsync()
         True(readable.Contains("Esc", StringComparison.Ordinal),
             "The host frame says how to leave");
     }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// The agent roster. Before it existed, A answered "why is this name not offered?" with a list and
+/// no way to act on the answer; the operator had to leave the dashboard and remember a command.
+/// </summary>
+/// <summary>
+/// A keystroke with no character behind it, which is what a bare function or arrow key delivers.
+/// Spelling it out at every call site meant a literal NUL character sitting invisibly in the source.
+/// </summary>
+static ConsoleKeyInfo Key(ConsoleKey key) => new((char)0, key, false, false, false);
+
+static Task TestAgentManagerAsync()
+{
+    var snapshot = Scenes.PopulatedSnapshot();
+    var manager = AgentManager.Create(snapshot);
+    var frame = Scenes.Render("agents", 120, 40, colour: false);
+
+    foreach (var agent in snapshot.Config.Agents)
+    {
+        True(frame.Contains(agent.Id, StringComparison.Ordinal), $"The roster lists {agent.Id}");
+    }
+
+    // The consequence paragraph is the one whose whole job is to say what a keystroke costs, so it
+    // finishing its sentence is the point of measuring the panel rather than guessing at it.
+    True(frame.Contains("IF YOU TURN IT OFF", StringComparison.Ordinal),
+        "The roster says what the toggle would cost");
+    True(frame.Contains("configured for it.", StringComparison.Ordinal),
+        "The consequence paragraph reaches its final word");
+
+    // The status columns line up, which is the only reason a roster beats reading config.json.
+    var rows = FrameLines(frame)
+        .Where(line => line.Contains("enabled", StringComparison.Ordinal) ||
+                       line.Contains("disabled", StringComparison.Ordinal))
+        .Where(line => line.Contains("audit", StringComparison.Ordinal))
+        .ToArray();
+    True(rows.Length >= 2, "More than one agent row is drawn");
+    var columns = rows.Select(line => line.IndexOf("can", StringComparison.Ordinal)).Distinct().Count();
+    Equal(1, columns, "The audit column starts at the same offset on every row");
+
+    // Every key the footer offers produces the action it names.
+    Equal(OverlayResult.Submit, manager.HandleKey(Key(ConsoleKey.Spacebar)), "Space submits");
+    Equal(AgentAction.Toggle, manager.Action, "Space toggles");
+    Equal(snapshot.Config.Agents[0].Id, manager.AgentId, "Space acts on the highlighted agent");
+
+    manager = AgentManager.Create(snapshot);
+    manager.HandleKey(Key(ConsoleKey.DownArrow));
+    Equal(OverlayResult.Submit, manager.HandleKey(Key(ConsoleKey.Delete)), "Delete submits");
+    Equal(AgentAction.Remove, manager.Action, "Delete removes");
+    Equal(snapshot.Config.Agents[1].Id, manager.AgentId, "Delete acts on the highlighted agent");
+
+    manager = AgentManager.Create(snapshot);
+    Equal(OverlayResult.Submit, manager.HandleKey(Key(ConsoleKey.N)), "N submits");
+    Equal(AgentAction.Add, manager.Action, "N adds");
+    Equal(string.Empty, manager.AgentId, "Adding names no existing agent");
+
+    manager = AgentManager.Create(snapshot);
+    Equal(OverlayResult.Cancel, manager.HandleKey(Key(ConsoleKey.Escape)), "Escape leaves it alone");
+
+    // An empty roster cannot toggle or remove anything, and must not claim it can.
+    var empty = new AgentManager([], new Dictionary<string, int>());
+    Equal(OverlayResult.Continue, empty.HandleKey(Key(ConsoleKey.Spacebar)),
+        "Space does nothing with no agents");
+    Equal(OverlayResult.Continue, empty.HandleKey(Key(ConsoleKey.Delete)),
+        "Delete does nothing with no agents");
+    Equal(OverlayResult.Submit, empty.HandleKey(Key(ConsoleKey.N)), "N still adds the first agent");
+    var emptyFrame = Scenes.Render("agents-empty", 100, 30, colour: false);
+    True(!emptyFrame.Contains("Del remove", StringComparison.Ordinal),
+        "The empty roster does not offer a key that would do nothing");
 
     return Task.CompletedTask;
 }

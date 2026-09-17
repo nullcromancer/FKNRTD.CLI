@@ -1085,7 +1085,7 @@ internal sealed class DashboardApp
                     : Reference.Welcome(snapshot.Config);
                 break;
             case "A":
-                _overlay = Reference.Agents(snapshot.Config);
+                OpenAgentManager(snapshot);
                 break;
             case "D":
                 _toast = "Running the pre-flight checks...";
@@ -1448,6 +1448,126 @@ internal sealed class DashboardApp
             {
                 _toast = "Could not create the task: " + exception.Message;
             }
+        };
+    }
+
+    /// <summary>
+    /// Opens the agent roster behind A, and applies whatever it asks for. Enabling and disabling
+    /// are applied straight away because they are reversible with the same keystroke; adding opens
+    /// the builder, and removing has to be confirmed by name.
+    /// </summary>
+    private void OpenAgentManager(DashboardSnapshot snapshot)
+    {
+        _overlay = AgentManager.Create(snapshot);
+        _overlayCompleted = async (completed, current, token) =>
+        {
+            var manager = (AgentManager)completed;
+            switch (manager.Action)
+            {
+                case AgentAction.Add:
+                    OpenAgentWizard(current.Config);
+                    return;
+                case AgentAction.Toggle:
+                    await ToggleAgentAsync(current.Config, manager.AgentId, token).ConfigureAwait(false);
+                    return;
+                case AgentAction.Remove:
+                    ConfirmAgentRemoval(current, manager.AgentId);
+                    return;
+            }
+        };
+    }
+
+    /// <summary>Flips one agent's enabled flag and writes the configuration back.</summary>
+    private async Task ToggleAgentAsync(FknrtdConfig config, string agentId, CancellationToken cancellationToken)
+    {
+        var agent = config.Agents.FirstOrDefault(item =>
+            item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase));
+        if (agent is null)
+        {
+            _toast = $"'{agentId}' is no longer configured.";
+            return;
+        }
+
+        var enabled = !agent.Enabled;
+        var updated = config with
+        {
+            Agents = config.Agents
+                .Select(item => item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase)
+                    ? item with { Enabled = enabled }
+                    : item)
+                .ToList()
+        };
+        await _store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
+        _toast = enabled
+            ? $"{agentId} is enabled. New tasks can now be assigned to it."
+            : $"{agentId} is disabled. It stays out of the task builder until you turn it back on.";
+    }
+
+    /// <summary>
+    /// Asks before deleting an agent's configuration. The shell command demands -confirm REMOVE for
+    /// the same reason: the profile, arguments and environment are not recoverable from anywhere.
+    /// </summary>
+    private void ConfirmAgentRemoval(DashboardSnapshot snapshot, string agentId)
+    {
+        var agent = snapshot.Config.Agents.FirstOrDefault(item =>
+            item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase));
+        if (agent is null)
+        {
+            _toast = $"'{agentId}' is no longer configured.";
+            return;
+        }
+
+        var used = snapshot.Tasks.Count(task =>
+            task.LeadAgentId.Equals(agentId, StringComparison.OrdinalIgnoreCase) ||
+            task.ImplementerAgentId.Equals(agentId, StringComparison.OrdinalIgnoreCase) ||
+            task.AuditorAgentId.Equals(agentId, StringComparison.OrdinalIgnoreCase));
+
+        _overlay = new Confirmation(
+            "REMOVE THIS AGENT",
+            Theme.Red,
+            $"{agent.Id} - {agent.DisplayName}",
+            "This deletes its command profiles, its arguments and its environment from this " +
+            "workspace's configuration. Nothing else stores them, so they cannot be restored " +
+            "except by configuring the agent again." +
+            (used == 0
+                ? string.Empty
+                : $" {(used == 1 ? "One task already names it" : $"{used} tasks already name it")}, " +
+                  "and would fail on the stage that needed it."),
+            "REMOVE",
+            "agent",
+            "If you only want it out of the task builder, press Esc and disable it with Space " +
+            "instead. That is reversible.");
+        _overlayCompleted = async (_, current, token) =>
+        {
+            var remaining = current.Config.Agents
+                .Where(item => !item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            await _store.SaveConfigAsync(current.Config with { Agents = remaining }, token)
+                .ConfigureAwait(false);
+            _toast = $"Removed {agentId}. Press A to see what is left.";
+        };
+    }
+
+    /// <summary>Opens the agent builder, and adds whatever it describes to the configuration.</summary>
+    private void OpenAgentWizard(FknrtdConfig config)
+    {
+        _overlay = AgentWizard.Create(config);
+        _overlayCompleted = async (completed, current, token) =>
+        {
+            var agent = AgentWizard.Build((Wizard)completed);
+            if (current.Config.Agents.Any(item => item.Id.Equals(agent.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                _toast = $"'{agent.Id}' is already configured. Press A and use Space to enable it.";
+                return;
+            }
+
+            await _store
+                .SaveConfigAsync(
+                    current.Config with { Agents = current.Config.Agents.Append(agent).ToList() }, token)
+                .ConfigureAwait(false);
+            _toast = ExecutableLocator.Find(agent.Executable) is null
+                ? $"Added {agent.Id}, but {agent.Executable} is not on PATH yet. Press D to recheck."
+                : $"Added {agent.Id}. It is now offered by the task builder.";
         };
     }
 
