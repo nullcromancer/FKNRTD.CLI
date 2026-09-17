@@ -25,6 +25,13 @@ internal sealed class DashboardApp
     private bool _welcomed;
 
     /// <summary>
+    /// How many lines back from the end of the log the view is scrolled. Zero follows the live tail.
+    /// A failure is often explained a hundred lines above the last one, so the screen an operator
+    /// opens when something has gone wrong has to be able to look upwards.
+    /// </summary>
+    private int _logScroll;
+
+    /// <summary>
     /// The modal layer. Every question the dashboard asks is an overlay drawn over the frame, so the
     /// operator never drops out of the alternate screen to answer an unexplained prompt on a blank
     /// terminal — and can still see the task they are acting on while they answer.
@@ -590,6 +597,7 @@ internal sealed class DashboardApp
         }
 
         string[] lines;
+        var total = 0;
         try
         {
             using var stream = new FileStream(
@@ -598,7 +606,7 @@ internal sealed class DashboardApp
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream);
-            lines = ReadTail(reader, Math.Max(0, inner.Bottom - row));
+            (lines, total) = ReadWindow(reader, _logScroll, Math.Max(0, inner.Bottom - row - 1));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -615,6 +623,17 @@ internal sealed class DashboardApp
                 "anything yet.", Theme.Muted);
             return;
         }
+
+        var shown = Math.Min(lines.Length, Math.Max(0, inner.Bottom - row - 1));
+        var firstShown = Math.Max(1, total - _logScroll - shown + 1);
+        canvas.DrawText(inner.X, row++,
+            Text.Truncate(
+                _logScroll == 0
+                    ? $"lines {firstShown}-{total} of {total}  ·  following"
+                    : $"lines {firstShown}-{firstShown + shown - 1} of {total}  ·  End to follow again",
+                inner.Width),
+            _logScroll == 0 ? Theme.Muted : Theme.Amber,
+            maxWidth: inner.Width);
 
         foreach (var line in lines)
         {
@@ -705,25 +724,29 @@ internal sealed class DashboardApp
         _ => Theme.Cyan
     };
 
-    private static string[] ReadTail(TextReader reader, int count)
+    /// <summary>
+    /// Reads <paramref name="count"/> lines ending <paramref name="skipFromEnd"/> lines before the
+    /// end of the stream, and reports the total line count so the view can say where it is. The
+    /// whole file is walked rather than seeked because a log is being appended to while it is read,
+    /// and a byte offset into a growing UTF-8 stream is not a line boundary.
+    /// </summary>
+    internal static (string[] Lines, int Total) ReadWindow(TextReader reader, int skipFromEnd, int count)
     {
-        if (count <= 0)
-        {
-            return [];
-        }
-
-        var tail = new Queue<string>(count);
+        var all = new List<string>();
         while (reader.ReadLine() is { } line)
         {
-            if (tail.Count == count)
-            {
-                tail.Dequeue();
-            }
-
-            tail.Enqueue(line);
+            all.Add(line);
         }
 
-        return tail.ToArray();
+        if (count <= 0 || all.Count == 0)
+        {
+            return ([], all.Count);
+        }
+
+        var skip = Math.Clamp(skipFromEnd, 0, Math.Max(0, all.Count - count));
+        var end = all.Count - skip;
+        var start = Math.Max(0, end - count);
+        return (all.GetRange(start, end - start).ToArray(), all.Count);
     }
 
     private static void RenderFooter(
@@ -864,6 +887,10 @@ internal sealed class DashboardApp
             ConsoleKey.S => "S",
             ConsoleKey.F => "F",
             ConsoleKey.Tab => "Tab",
+            ConsoleKey.PageUp => "log-up",
+            ConsoleKey.PageDown => "log-down",
+            ConsoleKey.Home => "log-top",
+            ConsoleKey.End => "log-follow",
             // '?' and '/' have no ConsoleKey of their own and arrive differently on different
             // keyboard layouts, so they are matched on the character instead. ':' is accepted for the
             // palette because it is the same key as '/' on several layouts; nothing else is aliased,
@@ -897,10 +924,12 @@ internal sealed class DashboardApp
                 break;
             case "up":
                 _selectedTask = Math.Max(0, _selectedTask - 1);
+                _logScroll = 0;
                 RememberSelection(snapshot);
                 break;
             case "down":
                 _selectedTask = Math.Min(Math.Max(0, snapshot.Tasks.Count - 1), _selectedTask + 1);
+                _logScroll = 0;
                 RememberSelection(snapshot);
                 break;
             case "Enter":
@@ -936,6 +965,20 @@ internal sealed class DashboardApp
             case "L":
             case "Tab":
                 _view = _view == DashboardView.Logs ? DashboardView.Overview : DashboardView.Logs;
+                _logScroll = 0;
+                break;
+            case "log-up":
+                _logScroll += _view == DashboardView.Logs ? 10 : 0;
+                break;
+            case "log-down":
+                _logScroll = Math.Max(0, _logScroll - 10);
+                break;
+            case "log-top":
+                // Clamped against the file's real length when the frame is drawn.
+                _logScroll = _view == DashboardView.Logs ? int.MaxValue / 2 : 0;
+                break;
+            case "log-follow":
+                _logScroll = 0;
                 break;
             case "U":
                 await ShowUsageAsync(snapshot, cancellationToken).ConfigureAwait(false);

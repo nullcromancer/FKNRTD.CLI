@@ -172,7 +172,7 @@ internal sealed class Palette : IOverlay
         {
             // Ways to move around are not things to do, and listing them as commands would bury
             // the actions that actually change something.
-            if (binding.Key is "↑↓" or "Tab" or "Esc" or "/")
+            if (binding.Key is "↑↓" or "Tab" or "Esc" or "/" or "PgUp PgDn" or "Home End")
             {
                 continue;
             }

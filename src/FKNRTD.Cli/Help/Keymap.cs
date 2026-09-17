@@ -80,6 +80,12 @@ public static class Keymap
         new("?", "help",
             "Opens the key reference and the searchable glossary of every term the product uses.",
             InFooter: true),
+        new("PgUp PgDn", "scroll the log",
+            "In the log view, moves ten lines back or forward through the output. A failure is " +
+            "often explained a long way above the last line, so the tail alone is rarely enough."),
+        new("Home End", "jump in the log",
+            "In the log view, Home goes to the first line of the stage's output and End returns to " +
+            "following the live tail."),
         new("Tab", "switch view",
             "Cycles between the overview and the log view."),
         new("Q", "quit",

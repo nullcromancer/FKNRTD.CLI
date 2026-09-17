@@ -64,7 +64,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The portal is offline, deterministic and escaped", TestPortalAsync),
     ("A mistyped command names the one you meant", TestMistypedCommandAsync),
     ("Help and explain render every entry they claim", TestHelpSurfacesAsync),
-    ("The palette says why an action cannot be run", TestPaletteExplainsRefusalsAsync)
+    ("The palette says why an action cannot be run", TestPaletteExplainsRefusalsAsync),
+    ("Scrolling back through a log lands on the right lines", TestLogScrollbackAsync)
 };
 
 var failures = new List<string>();
@@ -1698,5 +1699,42 @@ static Task TestPaletteExplainsRefusalsAsync()
             $"Palette action '{action.Id}' is a documented key");
     }
 
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Scrolling back through a log has to land on the right lines and report the right position. This
+/// is the screen an operator reads when something has failed, and a window that is off by a line
+/// sends them to the wrong place in the output.
+/// </summary>
+static Task TestLogScrollbackAsync()
+{
+    var log = string.Join("\n", Enumerable.Range(1, 100).Select(number => $"line {number}"));
+
+    // Following the tail shows the last lines and reports the file's real length.
+    var (tail, total) = DashboardApp.ReadWindow(new StringReader(log), skipFromEnd: 0, count: 10);
+    Equal(100, total, "Window reports the whole file's length");
+    Equal(10, tail.Length, "Tail window size");
+    Equal("line 91", tail[0], "Tail window first line");
+    Equal("line 100", tail[^1], "Tail window last line");
+
+    // Scrolling back ten lines moves the window by exactly ten.
+    var (back, _) = DashboardApp.ReadWindow(new StringReader(log), skipFromEnd: 10, count: 10);
+    Equal("line 81", back[0], "Scrolled window first line");
+    Equal("line 90", back[^1], "Scrolled window last line");
+
+    // Scrolling past the top clamps to the first line rather than emptying the view.
+    var (top, _) = DashboardApp.ReadWindow(new StringReader(log), skipFromEnd: int.MaxValue / 2, count: 10);
+    Equal("line 1", top[0], "Scrolling past the top clamps to the first line");
+    Equal(10, top.Length, "Clamped window is still full");
+
+    // A window larger than the file shows the whole file, not a padded one.
+    var (all, allTotal) = DashboardApp.ReadWindow(new StringReader("only\nthree\nlines"), 0, 50);
+    Equal(3, allTotal, "Short file line count");
+    Equal(3, all.Length, "Short file window");
+
+    // Degenerate inputs return nothing rather than throwing.
+    Equal(0, DashboardApp.ReadWindow(new StringReader(log), 0, 0).Lines.Length, "Zero-height window");
+    Equal(0, DashboardApp.ReadWindow(new StringReader(string.Empty), 0, 10).Lines.Length, "Empty file");
     return Task.CompletedTask;
 }
