@@ -630,12 +630,32 @@ internal static class CommandDispatcher
         CliArguments arguments,
         CancellationToken cancellationToken)
     {
-        var tasks = (await runtime.Store.LoadTasksAsync(cancellationToken).ConfigureAwait(false))
-            .OrderByDescending(task => task.UpdatedAt)
-            .ToArray();
+        var (loaded, unreadable) = await runtime.Store.LoadTasksAndProblemsAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var tasks = loaded.OrderByDescending(task => task.UpdatedAt).ToArray();
         if (arguments.Has("json"))
         {
             PrintJson(tasks);
+            return 0;
+        }
+
+        if (unreadable.Count > 0)
+        {
+            WriteParagraph(
+                $"{unreadable.Count} task file{(unreadable.Count == 1 ? "" : "s")} could not be read " +
+                "and " + (unreadable.Count == 1 ? "is" : "are") + " not listed below. A half-written " +
+                "file from an interrupted write is the usual cause; the history in 'fknrtd events' " +
+                "records every task that was created.", string.Empty);
+            foreach (var path in unreadable)
+            {
+                Console.WriteLine("  " + path);
+            }
+
+            Console.WriteLine();
+        }
+
+        if (tasks.Length == 0 && unreadable.Count > 0)
+        {
             return 0;
         }
 

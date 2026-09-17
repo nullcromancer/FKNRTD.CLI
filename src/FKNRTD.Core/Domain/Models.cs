@@ -210,6 +210,14 @@ public sealed record DashboardSnapshot
     public FknrtdConfig Config { get; init; } = new();
     public GitSnapshot Git { get; init; } = new();
     public IReadOnlyList<WorkflowTask> Tasks { get; init; } = [];
+
+    /// <summary>
+    /// Task files that are on disk and could not be read. A task is the operator's work rather than
+    /// a runtime snapshot that will be rebuilt in a second, so one that will not parse has to be
+    /// reported rather than skipped: a pipeline that quietly shows four of five tasks is worse than
+    /// one that shows four and says so.
+    /// </summary>
+    public IReadOnlyList<string> UnreadableTasks { get; init; } = [];
     public IReadOnlyList<AgentRuntimeState> Agents { get; init; } = [];
     public IReadOnlyList<UsageSnapshot> Usage { get; init; } = [];
     public IReadOnlyList<FileClaim> Claims { get; init; } = [];

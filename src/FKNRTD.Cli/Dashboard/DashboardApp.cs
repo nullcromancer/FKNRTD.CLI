@@ -413,16 +413,30 @@ internal sealed class DashboardApp
         // The panel shows as many rows as it has room for, with a small arrow in the margin when
         // there are more. Naming the total is what tells a reader the arrow means three tasks
         // rather than one.
+        var broken = snapshot.UnreadableTasks.Count;
         canvas.DrawBox(
             rect,
-            snapshot.Tasks.Count > 1 ? $"PIPELINE · {snapshot.Tasks.Count} tasks · F to find" : "PIPELINE",
-            Theme.Blue);
+            broken > 0
+                ? $"PIPELINE · {snapshot.Tasks.Count} task{(snapshot.Tasks.Count == 1 ? "" : "s")} · " +
+                  $"{broken} unreadable"
+                : snapshot.Tasks.Count > 1
+                    ? $"PIPELINE · {snapshot.Tasks.Count} tasks · F to find"
+                    : "PIPELINE",
+            broken > 0 ? Theme.Amber : Theme.Blue);
         var inner = rect.Inset();
         if (snapshot.Tasks.Count == 0)
         {
             canvas.DrawWrapped(inner.X, inner.Y, inner.Width, Math.Max(1, inner.Height),
-                "Nothing to do yet. Press N to describe a piece of work; every field explains itself.",
-                Theme.Muted);
+                broken > 0
+                    // Saying "nothing to do yet" for a workspace whose task files will not parse
+                    // would be a wrong answer rather than an unhelpful one, and would send somebody
+                    // off to write the task again.
+                    ? $"{broken} task file{(broken == 1 ? "" : "s")} on disk could not be read, and " +
+                      "nothing else is here. They are still in .fknrtd/tasks; a half-written file " +
+                      "from an interrupted write is the usual cause. Press E for the history, which " +
+                      "records every task that was created."
+                    : "Nothing to do yet. Press N to describe a piece of work; every field explains itself.",
+                broken > 0 ? Theme.Amber : Theme.Muted);
             return;
         }
 

@@ -13,7 +13,8 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "land-landed", "remove", "remove-landed",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "welcome-standalone", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "welcome-standalone", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running",
+        "tasks-unreadable", "tasks-all-unreadable"
     ];
 
     /// <summary>
@@ -91,6 +92,19 @@ internal static class Scenes
                     landed, CancellationToken.None)
                 .GetAwaiter().GetResult();
             return app.RenderLive(landed, width, height, colour);
+        }
+
+        if (name is "tasks-unreadable" or "tasks-all-unreadable")
+        {
+            // A task file that will not parse. The task used to disappear, and the empty state
+            // then reported that the workspace had nothing in it - a wrong answer rather than an
+            // unhelpful one.
+            var broken = snapshot with
+            {
+                Tasks = name == "tasks-all-unreadable" ? [] : [snapshot.Tasks[0]],
+                UnreadableTasks = ["/src/aurora-api/.fknrtd/tasks/FKN-20260916-221030-e5f6.json"]
+            };
+            return renderer.Render(broken, width, height, colour);
         }
 
         if (name == "quit-while-running")

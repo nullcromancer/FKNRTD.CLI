@@ -154,7 +154,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every command the product names exists", TestNamedCommandsExistAsync),
     ("Every key a screen names can be pressed there", TestNamedKeysArePressableAsync),
     ("Every question can explain itself", TestEveryQuestionCanExplainItselfAsync),
-    ("No retired claim survives anywhere in the source", TestNoRetiredClaimInAnySourceFileAsync)
+    ("No retired claim survives anywhere in the source", TestNoRetiredClaimInAnySourceFileAsync),
+    ("An unreadable task file is reported, not hidden", TestUnreadableTasksAreReportedAsync)
 };
 
 var failures = new List<string>();
@@ -4282,4 +4283,71 @@ static Task TestNoRetiredClaimInAnySourceFileAsync()
     }
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// A task file that will not parse. The reader has to keep going - one bad file must not take the
+/// command center down - but a task is the operator's work rather than a runtime snapshot that is
+/// rebuilt in a second, and swallowing it meant `task list` printed "No tasks exist in this
+/// workspace yet" for a workspace that had one. That is a wrong answer, not an unhelpful one, and
+/// it would send somebody off to write the task again.
+/// </summary>
+static async Task TestUnreadableTasksAreReportedAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "corrupt-test",
+            // Standalone, so creating a task needs no repository: this test is about a file that
+            // will not parse, and a base branch has nothing to do with it.
+            Mode = WorkspaceMode.Standalone,
+            Agents = [CreateFakeAgent()]
+        }).ConfigureAwait(false);
+
+        var tasks = new TaskService(store, new GitService(new ProcessRunner()));
+        var good = await tasks.CreateAsync("A real task",
+            "A brief long enough to be accepted by the validator.",
+            "fake", "fake", "fake", []).ConfigureAwait(false);
+        var doomed = await tasks.CreateAsync("The one that breaks",
+            "Another brief long enough to be accepted by the validator.",
+            "fake", "fake", "fake", []).ConfigureAwait(false);
+
+        // Exactly what an interrupted write leaves behind.
+        var path = Directory.EnumerateFiles(store.Paths.Tasks, "*.json")
+            .First(file => Path.GetFileNameWithoutExtension(file) == doomed.Id);
+        await File.WriteAllTextAsync(path, "{ \"id\": \"FKN-", new UTF8Encoding(false)).ConfigureAwait(false);
+
+        // The reader keeps going and says what it could not read.
+        var (loaded, unreadable) = await store.LoadTasksAndProblemsAsync().ConfigureAwait(false);
+        Equal(1, loaded.Count, "The readable task still loads");
+        Equal(good.Id, loaded[0].Id, "and it is the right one");
+        Equal(1, unreadable.Count, "The unreadable one is reported");
+        True(unreadable[0].Contains(doomed.Id, StringComparison.Ordinal), "by its path");
+
+        // The shell says so, and does not list the broken one as if it were fine.
+        var writer = new StringWriter();
+        Equal(0, await QuietlyAsync(["task", "list", "-root", root], writer).ConfigureAwait(false),
+            "task list still exits 0");
+        var text = writer.ToString();
+        True(text.Contains("could not be read", StringComparison.Ordinal),
+            "task list reports the unreadable file");
+        True(text.Contains(good.Id, StringComparison.Ordinal), "and still lists the good task");
+        True(!text.Contains("No tasks exist", StringComparison.Ordinal),
+            "and never claims the workspace is empty when it is not");
+    }).ConfigureAwait(false);
+
+    // On the dashboard, the panel title counts them and the empty state does not claim the
+    // workspace has nothing in it.
+    var some = Prose(Scenes.Render("tasks-unreadable", 100, 30, colour: false));
+    True(some.Contains("1 unreadable", StringComparison.Ordinal),
+        "The pipeline title counts what it could not read");
+
+    var none = Prose(Scenes.Render("tasks-all-unreadable", 100, 30, colour: false));
+    True(!none.Contains("Nothing to do yet", StringComparison.Ordinal),
+        "A workspace whose only task file is broken is not described as empty");
+    True(none.Contains("could not be read", StringComparison.Ordinal), "It says what happened");
+    True(none.Contains("Press E for the history", StringComparison.Ordinal),
+        "and where the record of the task still is");
 }

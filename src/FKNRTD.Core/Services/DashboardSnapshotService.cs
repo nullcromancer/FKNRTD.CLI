@@ -28,7 +28,7 @@ public sealed class DashboardSnapshotService
     {
         var configTask = _store.LoadConfigAsync(cancellationToken);
         var gitTask = _git.GetSnapshotAsync(_store.Paths.Root, cancellationToken);
-        var tasksTask = _store.LoadTasksAsync(cancellationToken);
+        var tasksTask = _store.LoadTasksAndProblemsAsync(cancellationToken);
         var agentsTask = _store.LoadAgentRuntimesAsync(cancellationToken);
         var usageTask = _store.LoadUsageAsync(cancellationToken);
         var claimsTask = _store.LoadClaimsAsync(cancellationToken);
@@ -54,9 +54,10 @@ public sealed class DashboardSnapshotService
         {
             Config = await configTask.ConfigureAwait(false),
             Git = await gitTask.ConfigureAwait(false),
-            Tasks = (await tasksTask.ConfigureAwait(false))
+            Tasks = (await tasksTask.ConfigureAwait(false)).Tasks
                 .OrderByDescending(task => task.UpdatedAt)
                 .ToArray(),
+            UnreadableTasks = (await tasksTask.ConfigureAwait(false)).Unreadable,
             Agents = agentStates,
             Usage = await usageTask.ConfigureAwait(false),
             Claims = fileClaims,

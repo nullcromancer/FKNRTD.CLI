@@ -79,8 +79,27 @@ public sealed class StateStore
         return ReadJsonRequiredAsync<WorkflowTask>(path, cancellationToken);
     }
 
-    public Task<IReadOnlyList<WorkflowTask>> LoadTasksAsync(CancellationToken cancellationToken = default) =>
-        ReadDirectoryAsync<WorkflowTask>(Paths.Tasks, "*.json", cancellationToken);
+    public async Task<IReadOnlyList<WorkflowTask>> LoadTasksAsync(CancellationToken cancellationToken = default) =>
+        (await LoadTasksAndProblemsAsync(cancellationToken).ConfigureAwait(false)).Tasks;
+
+    /// <summary>
+    /// Every task that could be read, and the path of every file that could not.
+    /// </summary>
+    /// <remarks>
+    /// The reader has to keep going when one file will not parse, or a half-written record would
+    /// take the whole command center down. But a task is the operator's work rather than a runtime
+    /// snapshot that will be rebuilt in a second, so the ones that failed have to come back with
+    /// the ones that did — reporting "no tasks" for a workspace that has one is worse than an
+    /// error, because it reads as an answer.
+    /// </remarks>
+    public async Task<(IReadOnlyList<WorkflowTask> Tasks, IReadOnlyList<string> Unreadable)>
+        LoadTasksAndProblemsAsync(CancellationToken cancellationToken = default)
+    {
+        var unreadable = new List<string>();
+        var tasks = await ReadDirectoryAsync<WorkflowTask>(Paths.Tasks, "*.json", cancellationToken,
+            unreadable).ConfigureAwait(false);
+        return (tasks, unreadable);
+    }
 
     public Task SaveAgentRuntimeAsync(AgentRuntimeState state, CancellationToken cancellationToken = default) =>
         WriteJsonAtomicAsync(Path.Combine(Paths.Agents, SafeName(state.AgentId) + ".json"), state, cancellationToken);
@@ -245,10 +264,15 @@ public sealed class StateStore
                    "previous configuration may be in .fknrtd/runtime/backups.");
     }
 
+    /// <param name="unreadable">
+    /// Collects the paths that could not be read, when the caller cares. Most callers do not: a
+    /// runtime snapshot is rebuilt within the second. A task record is not.
+    /// </param>
     private static async Task<IReadOnlyList<T>> ReadDirectoryAsync<T>(
         string directory,
         string searchPattern,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICollection<string>? unreadable = null)
     {
         if (!Directory.Exists(directory))
         {
@@ -264,11 +288,15 @@ public sealed class StateStore
             }
             catch (IOException)
             {
-                // A writer may be replacing this snapshot. The next refresh will pick it up.
+                // A writer may be replacing this snapshot. The next refresh will pick it up, so
+                // this one is not reported: it is almost always a race and never a fault.
+                unreadable?.Add(path);
             }
             catch (JsonException)
             {
-                // A corrupt optional runtime snapshot must not take down the command center.
+                // Reading continues, because one bad file must not take down the command center.
+                // Whether anybody is told depends on what kind of file it was.
+                unreadable?.Add(path);
             }
         }
 
