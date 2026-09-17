@@ -77,7 +77,7 @@ Git is driven by invoking the `git` executable, never a library. The dashboard r
 in-memory character grid and emits ANSI at three responsive breakpoints
 (`src/FKNRTD.Cli/Dashboard/Canvas.cs`). FKNRTD.CLI holds no credentials of its own; each assistant
 authenticates itself. Testing is a hand-rolled, dependency-free harness, not a framework
-(`tests/FKNRTD.SelfTest/Program.cs`), currently 22 checks, all passing on this checkout.
+(`tests/FKNRTD.SelfTest/Program.cs`), currently 34 checks, all passing on this checkout.
 
 There is no HTTP surface, no hosted service, and no CI/CD pipeline in this repository; it runs on
 a developer machine against a local checkout and exposes no network endpoint. It is aimed at a
@@ -329,7 +329,7 @@ dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --n
 ```
 
 The harness prints one line per check and a final `N/N self-tests passed` count, exiting 0 only
-when every check passes. Verified on this checkout: `22/22 self-tests passed`.
+when every check passes. Verified on this checkout: `34/34 self-tests passed`.
 
 Install as a global tool. One management script per platform covers the whole lifecycle:
 
@@ -468,18 +468,28 @@ only, to find executables and pick a shell. It stores no credentials.
 | `fknrtd status` | One frame; exit code **3** signals a live collision |
 | `fknrtd status -json` | Complete normalised snapshot for scripts |
 | `fknrtd config show \| path \| validate` | Inspect and validate configuration |
-| `fknrtd task create "Title" -brief ... -verify ...` | Commission a task |
+| `fknrtd task new` | **Commission a task through a guided, explained form** |
+| `fknrtd task create "Title" -brief ... -verify ...` | Commission a task from a script |
 | `fknrtd task list \| show \| run \| retry \| cancel` | Task lifecycle |
 | `fknrtd task land <id> -confirm LAND` | Merge verified, audited work |
 | `fknrtd task cleanup <id> -confirm REMOVE` | Remove the worktree and branch |
+| `fknrtd agent new` | **Register a coding CLI through a guided form** |
 | `fknrtd agent list \| add \| enable \| disable` | Manage registered agents |
 | `fknrtd message send \| list` | Agent-to-agent message bus |
 | `fknrtd claim add \| list \| renew \| release` | Reserve paths for read or write |
 | `fknrtd usage refresh \| list \| set` | Capacity telemetry |
 | `fknrtd integration install-claude-statusline` | Install the statusline into Claude Code |
+| `fknrtd explain [term]` | **Define any word this product uses, including config keys** |
+| `fknrtd help [command]` | **What a command changes on disk, and what to do next** |
+| `fknrtd portal [-out <file>]` | **Write the offline operator guide** |
 
-**Dashboard keys.** Up/Down select, Enter run, `N` new, `C` cancel, `G` land, `M` message,
-`L` logs, `U` usage, Tab view, `Q` quit.
+**Dashboard keys.** Up/Down select, Enter run, `N` new task, `I` inspect, `L` logs, `R` retry,
+`C` cancel, `G` land, `X` clean up, `M` message, `U` budget, `D` doctor, `A` agents, `E` events,
+`K` coordination, `S` settings, `/` command palette, `?` help, Tab view, `Q` quit.
+
+Press `?` in the dashboard for the authoritative list with an explanation of each, or `/` to run
+any of them by name. This table is a copy; `fknrtd help` and
+[`fknrtd-portal.html`](fknrtd-portal.html) are generated from the program itself.
 
 Breakpoints: narrow below 84 columns, medium to 119, wide at 120 and above. Redirect the output and
 it renders a single frame instead of taking the terminal.

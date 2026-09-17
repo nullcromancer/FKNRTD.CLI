@@ -4,6 +4,63 @@
 
 ### Added
 
+- **The product explains itself.** Every concept it exposes — each task field, each role, each of
+  the eight stages, each status and state marker — is a row in one table carrying a summary, a full
+  explanation and a worked example. The dashboard's inline hints, the in-app reference, `fknrtd
+  explain` and the generated portal all read from it, so an explanation cannot drift from the code
+  that uses it. Self-tests fail if any marker the dashboard can draw is unexplained, if any field a
+  guided form asks for has no definition, or if any field on the configuration record is
+  undocumented.
+- **Guided, explained forms in place of blind prompts.** Pressing `N` used to leave the alternate
+  screen and ask six bare questions — "Task brief:", "Lead agent [claude]:" — with nothing on
+  screen to say what those words meant. Questions are now modal panels drawn over the still-visible
+  dashboard: each step carries its own definition and example, each field has a working default so
+  Enter produces a valid task, a refused answer says what was wrong, and stepping back keeps what
+  was typed. The same forms back `fknrtd task new`, `fknrtd agent new` and an interactive
+  `fknrtd init`.
+- **Consequences before confirmations.** Landing and worktree removal state what they are about to
+  do, and where to read the diff first, above the typed confirmation they still require.
+- **Reference surfaces.** `?` for the key reference and searchable glossary, `I` for a task's full
+  record with every stage explained, `D` for pre-flight checks, `A` for the agent roster, `E` for
+  the searchable workspace history, `K` for claims, conflicts and messages, `S` for every
+  configuration setting with its live value and what changing it costs, `U` for rate-limit budget
+  with each window defined. A workspace with no tasks opens on an introduction instead of an empty
+  grid.
+- **A command palette on `/`.** Every action, filtered by typing part of its name. Actions that
+  cannot be taken right now are listed with the reason — "it is Running. Only a verified, audited
+  task can be landed" — rather than hidden or silently inert.
+- **`fknrtd explain`**, which defines any word the product uses, including configuration keys, and
+  treats an unknown word as a search rather than a refusal.
+- **`fknrtd portal`**, which writes a single self-contained HTML operator guide with no external
+  references, generated from the same tables the running program reads, and including a build log
+  of what each part of this work was for. Committed as `fknrtd-portal.html`.
+
+### Changed
+
+- `fknrtd help` is generated from a command catalog rather than a hand-maintained block of text.
+  `fknrtd help <command>` gives what a command changes on disk, its options, examples, what happens
+  next, and the words it uses. Asking about a concept redirects to `explain`.
+- A mistyped command is recognised before a workspace is located, so `fknrtd taks` outside a project
+  reports the typo rather than a missing workspace. Suggestions count a transposition as one edit.
+- The log view leads with the task, the stage and what that stage is for. An absent log states which
+  of several situations applies and names the key that follows from it.
+- The overview panel titled "CI + USAGE" is now "CHECKS + BUDGET": there is no CI involved, and the
+  label invited a search for a pipeline that does not exist. Empty panels say what they are for
+  rather than what is absent.
+- The header says the rate-limit budget is unknown and names the key that fetches it, instead of
+  showing a row of `N/A` on every fresh workspace.
+- `fknrtd init` asks about the workspace mode and the verification commands, then runs the
+  pre-flight checks and says whether the workspace is ready. `-yes` keeps the previous
+  detection-only behaviour for scripts.
+
+### Fixed
+
+- The command palette acted on the snapshot captured when it opened, so an action chosen after a
+  refresh could act on a task whose status had since changed.
+- Stepping back from a choice in a guided form discarded the highlighted option.
+- Three rendering defects visible only at 60 columns, including a hint that drew on top of the text
+  it described.
+
 - **Standalone workspaces.** `fknrtd init` no longer requires a Git repository. A folder that is
   not a repository — or a machine with no Git at all — is provisioned in standalone mode, where
   agents work directly in the project folder instead of an isolated worktree, nothing is committed
