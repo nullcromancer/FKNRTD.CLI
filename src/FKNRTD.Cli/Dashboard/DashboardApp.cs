@@ -848,7 +848,8 @@ internal sealed class DashboardApp
             WorkflowStatus.Queued => "This task has never run — press Enter to start it",
             WorkflowStatus.Running => "Press L to watch the live log for this task",
             WorkflowStatus.Failed => "Press L to read why it failed, then R to retry from the failed stage",
-            WorkflowStatus.ReadyToLand => "Verified and audited — press G to merge it into " +
+            WorkflowStatus.ReadyToLand => "Verified and audited — press V to read the change, then G to " +
+                                          "merge it into " +
                                           (string.IsNullOrWhiteSpace(task.BaseRef) ? "the workspace" : task.BaseRef),
             WorkflowStatus.Cancelled => "Cancelled — press R to retry it",
             WorkflowStatus.Landed => "Landed — press X to remove its worktree and reclaim the disk space",
@@ -1210,7 +1211,8 @@ internal sealed class DashboardApp
             "LAND",
             "land",
             git
-                ? $"The finished diff is in {task.WorktreePath} if you want to read it before you decide."
+                ? "Press Esc and then V to read the finished change before you decide; it is also in " +
+                  $"{task.WorktreePath} if you would rather use your own tools."
                 : null);
         _overlayCompleted = async (_, _, token) =>
         {

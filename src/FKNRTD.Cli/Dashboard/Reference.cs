@@ -772,8 +772,8 @@ internal static class Reference
             "ambiguous or a verification command is wrong — then press R to reset the failed stages " +
             "and Enter to run again.",
         WorkflowStatus.ReadyToLand => config.Mode == WorkspaceMode.Git
-            ? $"Read the diff in {Blank(task.WorktreePath)}, then press G and type LAND to merge it " +
-              $"into {Blank(task.BaseRef)}."
+            ? $"Press V to read the finished change, then G and type LAND to merge it into " +
+              $"{Blank(task.BaseRef)}. Nothing moves until you do."
             : "The verified work is already in this folder. Press G and type LAND to record it as final.",
         WorkflowStatus.Landed =>
             "This is done and merged. Press X to remove its worktree when you no longer need to read it.",
