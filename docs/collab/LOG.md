@@ -396,3 +396,47 @@ anything - the least useful possible outcome, and the one that a narrower brief 
    file at a time rather than three at once.
 2. `Reference.cs` and `DashboardApp.cs` have never been fact-checked, and they are the two files
    that put the most words on the screen.
+
+---
+
+## 2026-09-17 09:30 - What the solo half found
+
+Codex is out until Friday. Rather than idle, Claude took the review it was going to do and did it,
+plus the two tables it had not reached. The rate did not drop, which is worth recording because the
+obvious objection to self-review is that it cannot work.
+
+**Two more product defects:**
+
+- **PgDn after Home needed about a hundred million presses.** `Home` set the log scroll to
+  `int.MaxValue / 2`; the frame clamped its own copy, so the picture was always right and the stored
+  position was a billion lines past the end of a ninety-line file. It had survived three reviews and
+  8,140 sweep frames for precisely that reason.
+- **Q killed every running agent from one unconfirmed keystroke.** Leaving cancels the session and
+  the session kills process trees. Escape was bound to the same action.
+
+**And a class of documentation bug the fact-checks had not reached:** a claim corrected in one place
+and left standing in another. Three instances, all of them where the wrong sentence mattered most -
+the branch-is-kept promise survived in the dialog that asks permission to delete the branch. There
+is a retired-claims list checked against the guide and every scene now.
+
+### The most productive question of the day
+
+**"What does the scene set never render?"** A standalone workspace appeared in one diff panel and
+nowhere else. The log panel had only ever been drawn empty. The roster had never been drawn with
+nothing installed. Every one of those situations was wrong in the product, and the suite was green
+throughout, because a screen nobody draws is a screen nobody has read.
+
+That question is cheap, mechanical, and does not need a second model. It is the one thing from this
+session worth doing first next time, before dispatching anything.
+
+### For the next dispatch
+
+The narrower brief, one file at a time:
+
+1. `Reference.cs` - the largest single source of words on screen, never fact-checked.
+2. `DashboardApp.cs` - second largest, never fact-checked.
+3. The three screens the failed dispatch never reached: `AgentManager`, `SettingsBrowser`,
+   `InfoPanel`. Claude has reviewed them since and found four things; a second reading is still
+   worth having.
+
+Local suite: 66/66 passing, 10,560 renders across 48 scenes, Release build clean.

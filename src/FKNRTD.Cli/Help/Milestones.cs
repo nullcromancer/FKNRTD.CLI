@@ -363,6 +363,50 @@ public static class Milestones
             "whole frame with every row the same width and no escape sequences in it, which is the " +
             "same check the renderer's own suite makes - if a picture here ever stops matching, it " +
             "is because the screen changed and the page was not regenerated."),
+
+        new("2026-09-17",
+            "Asking before killing the work",
+            "Q set a flag, the loop exited, and the shutdown path cancelled the session - which " +
+            "kills every running agent's process tree. That is a great deal to do for one " +
+            "unconfirmed keystroke from somebody who may only have meant to put this away for a " +
+            "minute, and Escape was bound to the same action.",
+            "With nothing running it still leaves at once. With work in flight it asks, staying is " +
+            "the recommended answer, and the panel says what leaving would do: each agent killed " +
+            "where it stands, whatever it wrote left on disk, the task recorded as cancelled and " +
+            "resettable with R.",
+            "The guard is only worth having where there is something to lose. A confirmation on an " +
+            "idle dashboard would be the kind of prompt people learn to dismiss without reading, " +
+            "which is how a confirmation stops protecting anything."),
+
+        new("2026-09-17",
+            "The situations nobody had drawn",
+            "Asking what the scene set never renders turned out to be the most productive question " +
+            "of the day. A standalone workspace appeared in one diff panel and nowhere else. The " +
+            "log panel had only ever been rendered empty. The roster had never been drawn with " +
+            "nothing installed, because what is on the machine running the tests is not something " +
+            "a test can arrange.",
+            "All three are rendered now, along with a task naming an agent that was removed, a " +
+            "confirmation for a task that has already landed, and a workspace with no Git at all. " +
+            "The sweep grew from thirty-seven scenes to forty-eight.",
+            "Every one of them was wrong. Three pieces of advice told standalone operators to clean " +
+            "up a worktree they do not have; the log panel was showing raw JSON; the roster could " +
+            "report a missing executable and not fix it. A screen that is never drawn is a screen " +
+            "nobody has read, and the tests passing said nothing about it either way."),
+
+        new("2026-09-17",
+            "The same wrong sentence in three places",
+            "A claim found false and corrected in one place kept turning up standing in another. " +
+            "The promise that cleanup keeps a task's branch survived in the dialog that asks " +
+            "permission to delete that branch, and again in the shell command's refusal message. " +
+            "The promise that every field of the task builder has a default survived in the README " +
+            "and again in the changelog.",
+            "All of them are corrected, and a list of retired claims is checked against the " +
+            "generated guide and against every rendered scene, so a sentence that has been " +
+            "retired cannot quietly come back somewhere else.",
+            "Each copy read perfectly well on its own, which is exactly why reading them did not " +
+            "help. It is the same argument as the tables that drive every explanation in this " +
+            "product: a fact stated in one place can be corrected, and a fact stated in four " +
+            "places will be corrected in one of them."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;
