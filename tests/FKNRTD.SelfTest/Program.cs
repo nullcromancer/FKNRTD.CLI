@@ -75,12 +75,12 @@ foreach (var test in tests)
     try
     {
         await test.Run().ConfigureAwait(false);
-        Console.WriteLine($"✓ {test.Name}");
+        Console.WriteLine($"√ {test.Name}");
     }
     catch (Exception exception)
     {
         failures.Add(test.Name + ": " + exception.Message);
-        Console.WriteLine($"✖ {test.Name}: {exception.Message}");
+        Console.WriteLine($"× {test.Name}: {exception.Message}");
     }
 }
 

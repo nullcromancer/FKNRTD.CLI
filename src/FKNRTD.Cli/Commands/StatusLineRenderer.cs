@@ -106,10 +106,10 @@ internal static class StatusLineRenderer
         var riskAgents = risk is null ? string.Empty : string.Join("+", risk.AgentIds);
         var riskPaths = risk is null ? string.Empty : string.Join(",", risk.Paths.Take(2));
         var riskText = risk is null
-            ? "✓ SAFE"
+            ? "√ SAFE"
             : risk.Kind == ConflictKind.Collision
-                ? $"✖ COLLISION {riskAgents}: {riskPaths}"
-                : $"△ {risk.Kind.ToString().ToUpperInvariant()}: {riskPaths}";
+                ? $"× COLLISION {riskAgents}: {riskPaths}"
+                : $"∆ {risk.Kind.ToString().ToUpperInvariant()}: {riskPaths}";
 
         if (width < 80)
         {
@@ -123,7 +123,7 @@ internal static class StatusLineRenderer
             };
             if (risk is not null)
             {
-                fields.Add(Paint(risk.Kind == ConflictKind.Collision ? "✖COLLISION" : "△RISK",
+                fields.Add(Paint(risk.Kind == ConflictKind.Collision ? "×COLLISION" : "∆RISK",
                     255, 123, 114, useColor, bold: true));
             }
 
@@ -161,7 +161,7 @@ internal static class StatusLineRenderer
         {
             var medium = string.Join(" | ",
                 Paint("FKN", 86, 212, 221, useColor, bold: true),
-                Paint($"{repository} ⎇ {branch}", 88, 166, 255, useColor),
+                Paint($"{repository} on {branch}", 88, 166, 255, useColor),
                 $"ctx {Percent(claude.ContextRemainingPercent)}",
                 Paint($"Cl {Percent(claude.FiveHourRemainingPercent)}/{Percent(claude.WeeklyRemainingPercent)}",
                     255, 166, 87, useColor),
@@ -171,8 +171,8 @@ internal static class StatusLineRenderer
         }
 
         var first = string.Join(" | ",
-            Paint("◉ FKNRTD", 86, 212, 221, useColor, bold: true),
-            Paint($"▣ {repository}  ⎇ {branch}", 88, 166, 255, useColor),
+            Paint("FKN", 86, 212, 221, useColor, bold: true),
+            Paint($"{repository}  on {branch}", 88, 166, 255, useColor),
             $"CTX {Percent(claude.ContextRemainingPercent)} left",
             Paint($"Claude 5h {Percent(claude.FiveHourRemainingPercent)} 7d {Percent(claude.WeeklyRemainingPercent)}",
                 255, 166, 87, useColor),
@@ -276,13 +276,13 @@ internal static class StatusLineRenderer
 
     private static string StateIcon(AgentActivityState? state) => state switch
     {
-        AgentActivityState.Planning => "◇",
-        AgentActivityState.Running => "▶",
-        AgentActivityState.Reviewing => "◆",
-        AgentActivityState.Waiting => "⏸",
+        AgentActivityState.Planning => "◊",
+        AgentActivityState.Running => "►",
+        AgentActivityState.Reviewing => "♦",
+        AgentActivityState.Waiting => "▌",
         AgentActivityState.Blocked => "■",
-        AgentActivityState.Failed => "✖",
-        AgentActivityState.Completed => "✓",
+        AgentActivityState.Failed => "×",
+        AgentActivityState.Completed => "√",
         AgentActivityState.Idle => "○",
         AgentActivityState.Offline => "○",
         _ => "?"

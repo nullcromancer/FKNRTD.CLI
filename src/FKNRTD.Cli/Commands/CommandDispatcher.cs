@@ -146,7 +146,7 @@ internal static class CommandDispatcher
             var config = await ProvisionAsync(paths, RequestedMode(arguments), cancellationToken)
                 .ConfigureAwait(false);
             Console.WriteLine(
-                $"✓ Prepared a {DescribeMode(config.Mode)} FKNRTD.CLI workspace at {paths.Root}");
+                $"√ Prepared a {DescribeMode(config.Mode)} FKNRTD.CLI workspace at {paths.Root}");
         }
 
         return await RunDashboardAsync(new FknrtdRuntime(paths), arguments, cancellationToken)
@@ -209,7 +209,7 @@ internal static class CommandDispatcher
             : RequestedMode(arguments);
         var config = await ProvisionAsync(paths, requested, cancellationToken, answers).ConfigureAwait(false);
 
-        Console.WriteLine($"✓ FKNRTD.CLI is set up for {config.ProjectName} ({DescribeMode(config.Mode)})");
+        Console.WriteLine($"√ FKNRTD.CLI is set up for {config.ProjectName} ({DescribeMode(config.Mode)})");
         Console.WriteLine($"  Configuration: {paths.Config}");
         if (backup is not null)
         {
@@ -440,7 +440,7 @@ internal static class CommandDispatcher
             Console.WriteLine($"FKNRTD.CLI {Version} diagnostics");
             foreach (var check in checks)
             {
-                Console.WriteLine($"{(check.Passed ? "✓" : check.Required ? "✖" : "△")} {check.Name,-26} {check.Detail}");
+                Console.WriteLine($"{(check.Passed ? "√" : check.Required ? "×" : "∆")} {check.Name,-26} {check.Detail}");
             }
         }
 
@@ -504,7 +504,7 @@ internal static class CommandDispatcher
                 arguments.GetInt("repairs"),
                 cancellationToken)
             .ConfigureAwait(false);
-        Console.WriteLine($"✓ Created {task.Id}: {task.Title}");
+        Console.WriteLine($"√ Created {task.Id}: {task.Title}");
         Console.WriteLine($"  {task.LeadAgentId} plans, {task.ImplementerAgentId} implements, {task.AuditorAgentId} audits");
         Console.WriteLine($"  Verification commands: {task.VerificationCommands.Count}");
         if (arguments.Has("run"))
@@ -557,7 +557,7 @@ internal static class CommandDispatcher
                 cancellationToken)
             .ConfigureAwait(false);
 
-        Console.WriteLine($"✓ Created {task.Id}: {task.Title}");
+        Console.WriteLine($"√ Created {task.Id}: {task.Title}");
         Console.WriteLine($"  {task.LeadAgentId} plans · {task.ImplementerAgentId} implements · {task.AuditorAgentId} audits");
         Console.WriteLine(task.VerificationCommands.Count == 0
             ? "  Nothing verifies this work, so the audit is the only gate."
@@ -635,9 +635,9 @@ internal static class CommandDispatcher
         string id,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine($"▶ Running {id}");
+        Console.WriteLine($"► Running {id}");
         var task = await runtime.Orchestrator.RunAsync(id, cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"{(task.Status == WorkflowStatus.ReadyToLand ? "✓" : "✖")} {task.Id}: {task.Status}");
+        Console.WriteLine($"{(task.Status == WorkflowStatus.ReadyToLand ? "√" : "×")} {task.Id}: {task.Status}");
         if (task.Status == WorkflowStatus.ReadyToLand)
         {
             Console.WriteLine($"  Verified and audited. Land with: fknrtd task land {task.Id} -confirm LAND");
@@ -669,7 +669,7 @@ internal static class CommandDispatcher
     {
         var id = Required(arguments.Get("id") ?? arguments.Positional(2), "task ID");
         await runtime.Tasks.RequestCancellationAsync(id, cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"⏸ Cancellation requested for {id}");
+        Console.WriteLine($"▌ Cancellation requested for {id}");
         return 0;
     }
 
@@ -686,7 +686,7 @@ internal static class CommandDispatcher
         }
 
         var task = await runtime.Orchestrator.LandAsync(id, cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"✓ Landed {task.Id} on {task.BaseRef}");
+        Console.WriteLine($"√ Landed {task.Id} on {task.BaseRef}");
         return 0;
     }
 
@@ -710,7 +710,7 @@ internal static class CommandDispatcher
         var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
         if (config.Mode == WorkspaceMode.Standalone)
         {
-            Console.WriteLine($"✓ Nothing to remove for {id}. A standalone workspace has no worktree or branch.");
+            Console.WriteLine($"√ Nothing to remove for {id}. A standalone workspace has no worktree or branch.");
             return 0;
         }
 
@@ -718,8 +718,8 @@ internal static class CommandDispatcher
             .RemoveAsync(task, arguments.Has("force"), config.Mode, cancellationToken)
             .ConfigureAwait(false);
         Console.WriteLine(task.Status == WorkflowStatus.Landed
-            ? $"✓ Removed the worktree and landed task branch for {id}. The task record was retained."
-            : $"✓ Removed the worktree for {id}. The task record and Git branch were retained.");
+            ? $"√ Removed the worktree and landed task branch for {id}. The task record was retained."
+            : $"√ Removed the worktree for {id}. The task record and Git branch were retained.");
         return 0;
     }
 
@@ -789,7 +789,7 @@ internal static class CommandDispatcher
             .SaveConfigAsync(config with { Agents = config.Agents.Append(agent).ToList() }, cancellationToken)
             .ConfigureAwait(false);
 
-        Console.WriteLine($"✓ Registered {agent.DisplayName}");
+        Console.WriteLine($"√ Registered {agent.DisplayName}");
         foreach (var line in AgentWizard.Report(agent, wizard.Value("audit") == "yes"))
         {
             Console.WriteLine(line);
@@ -861,7 +861,7 @@ internal static class CommandDispatcher
 
         var updated = config with { Agents = config.Agents.Append(agent).ToList() };
         await runtime.Store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"✓ Added {agent.DisplayName} using {agent.Executable}");
+        Console.WriteLine($"√ Added {agent.DisplayName} using {agent.Executable}");
         return 0;
     }
 
@@ -885,7 +885,7 @@ internal static class CommandDispatcher
                 .ToList()
         };
         await runtime.Store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"✓ Agent {id} {(enabled ? "enabled" : "disabled")}");
+        Console.WriteLine($"√ Agent {id} {(enabled ? "enabled" : "disabled")}");
         return 0;
     }
 
@@ -908,7 +908,7 @@ internal static class CommandDispatcher
         }
 
         await runtime.Store.SaveConfigAsync(config with { Agents = agents }, cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"✓ Removed agent {id} from the configuration");
+        Console.WriteLine($"√ Removed agent {id} from the configuration");
         return 0;
     }
 
@@ -928,7 +928,7 @@ internal static class CommandDispatcher
                         arguments.Get("task"),
                         cancellationToken)
                     .ConfigureAwait(false);
-                Console.WriteLine($"✓ Message {message.Id} delivered");
+                Console.WriteLine($"√ Message {message.Id} delivered");
                 return 0;
             }
             case "ack":
@@ -936,7 +936,7 @@ internal static class CommandDispatcher
                 await runtime.Messages.AcknowledgeAsync(
                         Required(arguments.Get("id") ?? arguments.Positional(2), "message ID"), cancellationToken)
                     .ConfigureAwait(false);
-                Console.WriteLine("✓ Message acknowledged");
+                Console.WriteLine("√ Message acknowledged");
                 return 0;
             case "list":
             case "":
@@ -987,7 +987,7 @@ internal static class CommandDispatcher
                         TimeSpan.FromSeconds(ttl),
                         cancellationToken)
                     .ConfigureAwait(false);
-                Console.WriteLine($"✓ Claim {claim.Id} registered until {claim.ExpiresAt:O}");
+                Console.WriteLine($"√ Claim {claim.Id} registered until {claim.ExpiresAt:O}");
                 return 0;
             }
             case "renew":
@@ -1003,12 +1003,12 @@ internal static class CommandDispatcher
                         TimeSpan.FromSeconds(ttl),
                         cancellationToken)
                     .ConfigureAwait(false);
-                Console.WriteLine($"✓ Claim renewed until {claim.ExpiresAt:O}");
+                Console.WriteLine($"√ Claim renewed until {claim.ExpiresAt:O}");
                 return 0;
             }
             case "release":
                 runtime.Claims.Release(Required(arguments.Get("id") ?? arguments.Positional(2), "claim ID"));
-                Console.WriteLine("✓ Claim released");
+                Console.WriteLine("√ Claim released");
                 return 0;
             case "list":
             case "":
@@ -1029,7 +1029,7 @@ internal static class CommandDispatcher
 
                     foreach (var conflict in conflicts)
                     {
-                        Console.WriteLine($"{(conflict.Kind == ConflictKind.Collision ? "✖" : "△")} {conflict.Kind} {conflict.Summary}: {string.Join(", ", conflict.Paths)}");
+                        Console.WriteLine($"{(conflict.Kind == ConflictKind.Collision ? "×" : "∆")} {conflict.Kind} {conflict.Summary}: {string.Join(", ", conflict.Paths)}");
                     }
                 }
 
@@ -1156,7 +1156,7 @@ internal static class CommandDispatcher
                     ValidateAgentDefinition(agent);
                 }
 
-                Console.WriteLine($"✓ Configuration is valid with {config.Agents.Count} agent(s)");
+                Console.WriteLine($"√ Configuration is valid with {config.Agents.Count} agent(s)");
                 return 0;
             }
             default:
@@ -1176,7 +1176,7 @@ internal static class CommandDispatcher
         var path = await new ClaudeIntegrationService().InstallStatusLineAsync(
                 arguments.Has("project"), arguments.Has("force"), cancellationToken)
             .ConfigureAwait(false);
-        Console.WriteLine($"✓ Installed the FKNRTD.CLI statusline in {path}");
+        Console.WriteLine($"√ Installed the FKNRTD.CLI statusline in {path}");
         Console.WriteLine("  Restart Claude Code to load it.");
         return 0;
     }
@@ -1229,7 +1229,7 @@ internal static class CommandDispatcher
         await runtime.Store.SaveAgentRuntimeAsync(snapshot, cancellationToken).ConfigureAwait(false);
         if (!arguments.Has("quiet"))
         {
-            Console.WriteLine($"✓ {agentId} reported {state}: {snapshot.Intent}");
+            Console.WriteLine($"√ {agentId} reported {state}: {snapshot.Intent}");
         }
 
         return 0;
@@ -1294,10 +1294,10 @@ internal static class CommandDispatcher
 
     private static string StageIcon(StageState state) => state switch
     {
-        StageState.Running => "▶",
-        StageState.Passed => "✓",
-        StageState.Failed => "✖",
-        StageState.Skipped => "◇",
+        StageState.Running => "►",
+        StageState.Passed => "√",
+        StageState.Failed => "×",
+        StageState.Skipped => "◊",
         _ => "○"
     };
 

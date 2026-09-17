@@ -2,9 +2,9 @@ namespace FKNRTD.Dashboard;
 
 internal readonly record struct Rgb(byte Red, byte Green, byte Blue)
 {
-    public string ForegroundCode => $"[38;2;{Red};{Green};{Blue}m";
+    public string ForegroundCode => $"\u001b[38;2;{Red};{Green};{Blue}m";
 
-    public string BackgroundCode => $"[48;2;{Red};{Green};{Blue}m";
+    public string BackgroundCode => $"\u001b[48;2;{Red};{Green};{Blue}m";
 
     /// <summary>
     /// Mixes towards <paramref name="other"/>. Used to derive a panel's chrome from its accent so a

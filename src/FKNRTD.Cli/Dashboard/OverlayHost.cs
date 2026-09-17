@@ -35,8 +35,8 @@ internal static class OverlayHost
                 var width = Screen.Width(100);
                 var height = Screen.Height(32);
                 Console.Write(width == previousWidth && height == previousHeight
-                    ? "[H"
-                    : "[2J[H");
+                    ? "\u001b[H"
+                    : "\u001b[2J\u001b[H");
                 Console.Write(Frame(overlay, caption, width, height, useColor));
                 previousWidth = width;
                 previousHeight = height;
@@ -81,7 +81,7 @@ internal static class OverlayHost
         width = Math.Max(60, width);
         height = Math.Max(20, height);
         var canvas = new Canvas(width, height);
-        canvas.DrawBox(new Rect(0, 0, width, 3), "◉ FKNRTD COMMAND CENTER", Theme.Cyan);
+        canvas.DrawBox(new Rect(0, 0, width, 3), "FKNRTD COMMAND CENTER", Theme.Cyan);
         canvas.DrawText(2, 1, Text.Truncate(caption, width - 4), Theme.Muted, maxWidth: width - 4);
         overlay.Draw(canvas, new Rect(0, 0, width, height));
         return canvas.Render(useColor);
@@ -97,10 +97,10 @@ internal static class Screen
     public static void Enter()
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
-        Console.Write("[?1049h[?25l[2J[H");
+        Console.Write("\u001b[?1049h\u001b[?25l\u001b[2J\u001b[H");
     }
 
-    public static void Exit() => Console.Write("[0m[?25h[?1049l");
+    public static void Exit() => Console.Write("\u001b[0m\u001b[?25h\u001b[?1049l");
 
     public static int Width(int fallback) => Measure(() => Console.WindowWidth, 60, fallback);
 

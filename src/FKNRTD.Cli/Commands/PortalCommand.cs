@@ -26,7 +26,7 @@ internal static class PortalCommand
         }
 
         File.WriteAllText(destination, html, new System.Text.UTF8Encoding(false));
-        Console.WriteLine($"✓ Wrote the FKNRTD.CLI portal to {destination}");
+        Console.WriteLine($"√ Wrote the FKNRTD.CLI portal to {destination}");
         Console.WriteLine($"  {Glossary.All.Count} explained terms, {CommandCatalog.All.Count} commands, " +
                           $"{Keymap.All.Count} keys, " +
                           $"{SettingsCatalog.All.Count} settings, {Milestones.All.Count} build-log entries.");

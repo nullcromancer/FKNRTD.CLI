@@ -313,7 +313,7 @@ internal sealed class Wizard : IOverlay
         row++;
         if (_error is not null)
         {
-            row = canvas.DrawWrapped(x, row, width, 2, "✖ " + _error, Theme.Red, bold: true,
+            row = canvas.DrawWrapped(x, row, width, 2, "× " + _error, Theme.Red, bold: true,
                 background: Theme.Surface);
             row++;
         }

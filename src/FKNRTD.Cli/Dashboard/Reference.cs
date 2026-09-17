@@ -491,7 +491,7 @@ internal static class Reference
         var blocks = new List<InfoBlock> { new InfoHeading("Pre-flight checks") };
         foreach (var check in checks)
         {
-            var icon = check.Passed ? "✓" : check.Required ? "✖" : "△";
+            var icon = check.Passed ? "√" : check.Required ? "×" : "∆";
             var colour = check.Passed ? Theme.Green : check.Required ? Theme.Red : Theme.Amber;
             blocks.Add(new InfoLine($"{icon} {check.Name}", check.Detail, colour,
                 Bold: !check.Passed && check.Required));
@@ -500,7 +500,7 @@ internal static class Reference
         var blocking = checks.Count(check => check.Required && !check.Passed);
         blocks.Add(new InfoHeading("What this means"));
         blocks.Add(new InfoParagraph(blocking == 0
-            ? "Everything a task run depends on is in place. A △ is an optional capability that is " +
+            ? "Everything a task run depends on is in place. A ∆ is an optional capability that is " +
               "not available; it removes a feature rather than stopping work."
             : $"{blocking} required check{(blocking == 1 ? "" : "s")} failed. A task will not get " +
               "through the pipeline until that is fixed — most often an agent whose executable is " +
@@ -645,10 +645,10 @@ internal static class Reference
 
     private static string Icon(StageState state) => state switch
     {
-        StageState.Running => "▶",
-        StageState.Passed => "✓",
-        StageState.Failed => "✖",
-        StageState.Skipped => "◇",
+        StageState.Running => "►",
+        StageState.Passed => "√",
+        StageState.Failed => "×",
+        StageState.Skipped => "◊",
         _ => "○"
     };
 

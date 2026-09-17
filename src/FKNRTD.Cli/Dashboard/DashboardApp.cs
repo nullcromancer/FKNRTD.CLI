@@ -260,24 +260,24 @@ internal sealed class DashboardApp
 
     private static void RenderHeader(Canvas canvas, DashboardSnapshot snapshot, Rect rect)
     {
-        canvas.DrawBox(rect, "◉ FKNRTD COMMAND CENTER", Theme.Cyan);
+        canvas.DrawBox(rect, "FKNRTD COMMAND CENTER", Theme.Cyan);
         var inner = rect.Inset();
         var risk = snapshot.Conflicts.FirstOrDefault();
         var riskText = risk is null
-            ? "✓ SAFE"
+            ? "√ SAFE"
             : risk.Kind == ConflictKind.Collision
-                ? "✖ COLLISION"
-                : "△ " + risk.Kind.ToString().ToUpperInvariant();
+                ? "× COLLISION"
+                : "∆ " + risk.Kind.ToString().ToUpperInvariant();
         var riskColor = risk is null ? Theme.Green : risk.Kind == ConflictKind.Collision ? Theme.Red : Theme.Amber;
 
         // A standalone workspace has no branch, cleanliness or divergence to report.
         var located = snapshot.Git.IsRepository
-            ? $"⎇ {snapshot.Git.Branch}"
+            ? $"on {snapshot.Git.Branch}"
             : "○ standalone";
         canvas.DrawText(inner.X, inner.Y,
-            $"▣ {snapshot.Git.RepositoryName}  {located}", Theme.Blue, bold: true,
+            $"{snapshot.Git.RepositoryName}  {located}", Theme.Blue, bold: true,
             maxWidth: Math.Max(10, inner.Width - 32));
-        var gitText = snapshot.Git.IsClean ? "✓ clean" : $"△ {snapshot.Git.ChangedFiles} changed";
+        var gitText = snapshot.Git.IsClean ? "√ clean" : $"∆ {snapshot.Git.ChangedFiles} changed";
         var right = snapshot.Git.IsRepository
             ? $"{gitText}  ↑{snapshot.Git.Ahead}↓{snapshot.Git.Behind}  {riskText}"
             : riskText;
@@ -486,7 +486,7 @@ internal sealed class DashboardApp
         var row = inner.Y;
         foreach (var message in snapshot.Messages.Take(inner.Height))
         {
-            var delivery = message.Delivery == MessageDelivery.Acknowledged ? "✓" : "↪";
+            var delivery = message.Delivery == MessageDelivery.Acknowledged ? "√" : "→";
             var line = $"{delivery} {message.FromAgentId}>{message.ToAgentId} {Text.Truncate(message.Text, Math.Max(1, inner.Width - 20))} {Text.Age(message.CreatedAt, snapshot.CapturedAt)}";
             canvas.DrawText(inner.X, row++, Text.Truncate(line, inner.Width), Theme.Foreground, maxWidth: inner.Width);
         }
@@ -500,7 +500,7 @@ internal sealed class DashboardApp
         var inner = rect.Inset();
         if (worst is null)
         {
-            canvas.DrawText(inner.X, inner.Y, "✓ SAFE  No path overlap detected", Theme.Green, bold: true,
+            canvas.DrawText(inner.X, inner.Y, "√ SAFE  No path overlap detected", Theme.Green, bold: true,
                 maxWidth: inner.Width);
             var worktrees = snapshot.Agents
                 .Where(agent => !string.IsNullOrWhiteSpace(agent.Worktree))
@@ -521,7 +521,7 @@ internal sealed class DashboardApp
         foreach (var conflict in snapshot.Conflicts.Take(inner.Height / 2 + 1))
         {
             canvas.DrawText(inner.X, y++,
-                Text.Truncate($"{(conflict.Kind == ConflictKind.Collision ? "✖" : "△")} {conflict.RiskScore} {conflict.Summary}", inner.Width),
+                Text.Truncate($"{(conflict.Kind == ConflictKind.Collision ? "×" : "∆")} {conflict.RiskScore} {conflict.Summary}", inner.Width),
                 conflict.Kind == ConflictKind.Collision ? Theme.Red : Theme.Amber,
                 bold: true,
                 maxWidth: inner.Width);
@@ -1383,13 +1383,13 @@ internal sealed class DashboardApp
 
     private static string StateIcon(AgentActivityState state) => state switch
     {
-        AgentActivityState.Planning => "◇",
-        AgentActivityState.Running => "▶",
-        AgentActivityState.Reviewing => "◆",
-        AgentActivityState.Waiting => "⏸",
+        AgentActivityState.Planning => "◊",
+        AgentActivityState.Running => "►",
+        AgentActivityState.Reviewing => "♦",
+        AgentActivityState.Waiting => "▌",
         AgentActivityState.Blocked => "■",
-        AgentActivityState.Failed => "✖",
-        AgentActivityState.Completed => "✓",
+        AgentActivityState.Failed => "×",
+        AgentActivityState.Completed => "√",
         AgentActivityState.Idle => "○",
         AgentActivityState.Offline => "○",
         _ => "?"
@@ -1397,21 +1397,21 @@ internal sealed class DashboardApp
 
     private static string StatusIcon(WorkflowStatus status) => status switch
     {
-        WorkflowStatus.Running => "▶",
-        WorkflowStatus.ReadyToLand => "◆",
-        WorkflowStatus.Landed => "✓",
-        WorkflowStatus.Failed => "✖",
-        WorkflowStatus.Cancelled => "⏸",
-        WorkflowStatus.Waiting => "⏸",
+        WorkflowStatus.Running => "►",
+        WorkflowStatus.ReadyToLand => "♦",
+        WorkflowStatus.Landed => "√",
+        WorkflowStatus.Failed => "×",
+        WorkflowStatus.Cancelled => "▌",
+        WorkflowStatus.Waiting => "▌",
         _ => "○"
     };
 
     private static string StageIcon(StageState state) => state switch
     {
-        StageState.Running => "▶",
-        StageState.Passed => "✓",
-        StageState.Failed => "✖",
-        StageState.Skipped => "◇",
+        StageState.Running => "►",
+        StageState.Passed => "√",
+        StageState.Failed => "×",
+        StageState.Skipped => "◊",
         _ => "○"
     };
 
@@ -1430,10 +1430,10 @@ internal sealed class DashboardApp
 
     private static string EventIcon(EventSeverity severity) => severity switch
     {
-        EventSeverity.Success => "✓",
-        EventSeverity.Warning => "△",
-        EventSeverity.Error => "✖",
-        EventSeverity.Critical => "✖",
+        EventSeverity.Success => "√",
+        EventSeverity.Warning => "∆",
+        EventSeverity.Error => "×",
+        EventSeverity.Critical => "×",
         _ => "·"
     };
 

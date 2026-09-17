@@ -137,5 +137,5 @@ internal sealed class Confirmation : IOverlay
     }
 
     private string MistypedMessage =>
-        $"✖ That is not the word. Type {_word} exactly, or press Esc to back out.";
+        $"× That is not the word. Type {_word} exactly, or press Esc to back out.";
 }

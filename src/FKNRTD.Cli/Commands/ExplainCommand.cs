@@ -196,10 +196,10 @@ internal static class ExplainCommand
         Console.Write(colour.ForegroundCode);
         if (bold)
         {
-            Console.Write("[1m");
+            Console.Write("\u001b[1m");
         }
 
         Console.Write(text);
-        Console.Write("[0m");
+        Console.Write("\u001b[0m");
     }
 }
