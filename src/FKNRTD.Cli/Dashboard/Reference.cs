@@ -1,0 +1,332 @@
+using FKNRTD.Domain;
+using FKNRTD.Help;
+using FKNRTD.Services;
+
+namespace FKNRTD.Dashboard;
+
+/// <summary>
+/// The dashboard's read-only reference surfaces. Each is an <see cref="InfoPanel"/> assembled from
+/// the same tables the rest of the product reads, so nothing here can describe a key that does not
+/// exist or a stage the pipeline no longer runs.
+/// </summary>
+internal static class Reference
+{
+    /// <summary>
+    /// The key reference and searchable glossary behind <c>?</c>. Filtering spans both, because an
+    /// operator who does not know what a word means also does not know which list it is in.
+    /// </summary>
+    public static InfoPanel Help() => new(
+        "HELP",
+        Theme.Cyan,
+        filter =>
+        {
+            var blocks = new List<InfoBlock>();
+            var matchingKeys = Keymap.All
+                .Where(binding => filter.Length == 0 ||
+                                  binding.Key.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                  binding.Action.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                                  binding.Detail.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (matchingKeys.Length > 0)
+            {
+                blocks.Add(new InfoHeading("Keys"));
+                foreach (var binding in matchingKeys)
+                {
+                    blocks.Add(new InfoLine(binding.Key, binding.Action, Theme.Foreground, Bold: true));
+                    blocks.Add(new InfoParagraph(binding.Detail, Theme.Muted, Indent: 2));
+                }
+            }
+
+            var terms = Glossary.Search(filter);
+            foreach (var category in Glossary.Categories)
+            {
+                var entries = terms.Where(entry => entry.Category == category).ToArray();
+                if (entries.Length == 0)
+                {
+                    continue;
+                }
+
+                blocks.Add(new InfoHeading(category));
+                foreach (var entry in entries)
+                {
+                    blocks.Add(new InfoLine(entry.Title, entry.Summary, Theme.Foreground, Bold: true));
+                    blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted, Indent: 2));
+                    if (entry.Example.Length > 0)
+                    {
+                        blocks.Add(new InfoParagraph("e.g.  " + entry.Example, Theme.Cyan, Indent: 2));
+                    }
+                }
+            }
+
+            return blocks;
+        },
+        filterHint: "a key, a word, or anything you do not recognise");
+
+    /// <summary>
+    /// The full record of one task behind <c>I</c>. Each stage is shown with what that stage is for,
+    /// so a pipeline position means something without the operator having to look it up elsewhere.
+    /// </summary>
+    public static InfoPanel Task(WorkflowTask task, FknrtdConfig config)
+    {
+        var blocks = new List<InfoBlock>
+        {
+            new InfoHeading(task.Title),
+            new InfoLine("Id", task.Id, Theme.Muted),
+            new InfoLine("Status", Describe(task.Status), StatusColour(task.Status), Bold: true)
+        };
+
+        var status = Glossary.Find("status." + task.Status.ToString().ToLowerInvariant());
+        if (status is not null)
+        {
+            blocks.Add(new InfoParagraph(status.Detail, Theme.Muted, Indent: 2));
+        }
+
+        blocks.Add(new InfoHeading("What was asked for"));
+        blocks.Add(new InfoParagraph(task.Brief));
+
+        blocks.Add(new InfoHeading("Who is on it"));
+        blocks.Add(new InfoLine("Lead", task.LeadAgentId + "  —  reads the code and writes the plan, read-only"));
+        blocks.Add(new InfoLine("Implementer",
+            task.ImplementerAgentId + "  —  the only agent that may change files"));
+        blocks.Add(new InfoLine("Auditor",
+            task.AuditorAgentId + "  —  judges the finished work read-only and must return PASS"));
+
+        blocks.Add(new InfoHeading("Where the work happens"));
+        if (config.Mode == WorkspaceMode.Git)
+        {
+            blocks.Add(new InfoLine("Base branch", Blank(task.BaseRef)));
+            blocks.Add(new InfoLine("Task branch", Blank(task.BranchName)));
+            blocks.Add(new InfoLine("Worktree", Blank(task.WorktreePath)));
+        }
+        else
+        {
+            blocks.Add(new InfoParagraph(
+                "This is a standalone workspace, so there is no branch and no worktree. Agents edit " +
+                "this folder directly and landing records that the verified work is already in place.",
+                Theme.Amber));
+        }
+
+        blocks.Add(new InfoHeading("How correctness is decided"));
+        if (task.VerificationCommands.Count == 0)
+        {
+            blocks.Add(new InfoParagraph(
+                "No verification commands are set, so nothing independent checks this work. The audit " +
+                "is the only gate, and an audit is a judgement rather than a measurement.",
+                Theme.Amber));
+        }
+        else
+        {
+            foreach (var command in task.VerificationCommands)
+            {
+                blocks.Add(new InfoLine("must exit 0", command, Theme.Foreground));
+            }
+        }
+
+        blocks.Add(new InfoLine("Repair rounds", $"{task.RepairRound} used of {task.MaxRepairRounds} allowed",
+            Theme.Muted));
+
+        blocks.Add(new InfoHeading("Pipeline"));
+        foreach (var stage in task.Stages)
+        {
+            var entry = Glossary.Find("stage." + stage.Stage.ToString().ToLowerInvariant());
+            var summary = string.IsNullOrWhiteSpace(stage.Summary) ? entry?.Summary ?? string.Empty : stage.Summary;
+            blocks.Add(new InfoLine(
+                $"{Icon(stage.State)} {stage.Stage}",
+                summary,
+                StageColour(stage.State),
+                Bold: stage.State == StageState.Running));
+        }
+
+        if (!string.IsNullOrWhiteSpace(task.LastError))
+        {
+            blocks.Add(new InfoHeading("What went wrong"));
+            blocks.Add(new InfoParagraph(task.LastError, Theme.Red));
+        }
+
+        blocks.Add(new InfoHeading("What to do next"));
+        blocks.Add(new InfoParagraph(NextStep(task, config)));
+        return new InfoPanel("TASK", Theme.Blue, blocks);
+    }
+
+    /// <summary>The pre-flight checks behind <c>D</c>, with what a failure would actually cost.</summary>
+    public static InfoPanel Doctor(IReadOnlyList<DoctorCheck> checks)
+    {
+        var blocks = new List<InfoBlock> { new InfoHeading("Pre-flight checks") };
+        foreach (var check in checks)
+        {
+            var icon = check.Passed ? "✓" : check.Required ? "✖" : "△";
+            var colour = check.Passed ? Theme.Green : check.Required ? Theme.Red : Theme.Amber;
+            blocks.Add(new InfoLine($"{icon} {check.Name}", check.Detail, colour,
+                Bold: !check.Passed && check.Required));
+        }
+
+        var blocking = checks.Count(check => check.Required && !check.Passed);
+        blocks.Add(new InfoHeading("What this means"));
+        blocks.Add(new InfoParagraph(blocking == 0
+            ? "Everything a task run depends on is in place. A △ is an optional capability that is " +
+              "not available; it removes a feature rather than stopping work."
+            : $"{blocking} required check{(blocking == 1 ? "" : "s")} failed. A task will not get " +
+              "through the pipeline until that is fixed — most often an agent whose executable is " +
+              "not on PATH, or Git missing from a Git-mode workspace."));
+        var entry = Glossary.Find("doctor");
+        if (entry is not null)
+        {
+            blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted));
+        }
+
+        return new InfoPanel("DOCTOR", blocking == 0 ? Theme.Green : Theme.Red, blocks);
+    }
+
+    /// <summary>The agent roster behind <c>A</c>: who is configured, and what each one can actually do.</summary>
+    public static InfoPanel Agents(FknrtdConfig config)
+    {
+        var blocks = new List<InfoBlock>();
+        if (config.Agents.Count == 0)
+        {
+            blocks.Add(new InfoParagraph(
+                "No agents are configured. Quit the dashboard and run 'fknrtd agent add -id <name> " +
+                "-exe <executable>' to register a coding CLI, or 'fknrtd init -force' to restore the " +
+                "built-in Claude and Codex definitions."));
+            return new InfoPanel("AGENTS", Theme.Amber, blocks);
+        }
+
+        foreach (var agent in config.Agents)
+        {
+            var found = ExecutableLocator.Find(agent.Executable);
+            var audits = TaskWizard.CanAudit(config.Agents, agent.Id);
+            blocks.Add(new InfoHeading(agent.DisplayName));
+            blocks.Add(new InfoLine("Id", agent.Id, Theme.Muted));
+            blocks.Add(new InfoLine("Runs", agent.Executable));
+            blocks.Add(new InfoLine("On PATH",
+                found is not null ? "yes — " + found : "no. This agent cannot be launched from here.",
+                found is not null ? Theme.Green : Theme.Red,
+                Bold: found is null));
+            blocks.Add(new InfoLine("Enabled",
+                agent.Enabled ? "yes" : "no. It will not be offered for any role.",
+                agent.Enabled ? Theme.Green : Theme.Muted));
+            blocks.Add(new InfoLine("Can audit",
+                audits
+                    ? "yes — its audit profile returns a PASS or FAIL verdict"
+                    : "no. Without successMarker and failureMarker it could never approve work.",
+                audits ? Theme.Green : Theme.Amber));
+            blocks.Add(new InfoLine("Profiles", string.Join(", ", agent.Profiles.Keys.Order(StringComparer.Ordinal)),
+                Theme.Muted));
+        }
+
+        var entry = Glossary.Find("agent");
+        if (entry is not null)
+        {
+            blocks.Add(new InfoHeading("What an agent is"));
+            blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted));
+        }
+
+        return new InfoPanel("AGENTS", Theme.Violet, blocks);
+    }
+
+    /// <summary>
+    /// The first thing an operator meets in a workspace with no tasks in it. A command center that
+    /// opens on an empty grid teaches nothing about what it is for.
+    /// </summary>
+    public static InfoPanel Welcome(FknrtdConfig config)
+    {
+        var product = Glossary.Find("fknrtd");
+        var blocks = new List<InfoBlock>
+        {
+            new InfoHeading($"{config.ProjectName} is ready"),
+            new InfoParagraph(product?.Detail ?? string.Empty),
+            new InfoHeading("How a piece of work moves through it"),
+            new InfoParagraph("1. You write a brief saying what done looks like."),
+            new InfoParagraph("2. The lead agent reads your code and writes a plan. It cannot change anything."),
+            new InfoParagraph("3. The implementer makes the change" +
+                              (config.Mode == WorkspaceMode.Git
+                                  ? " in its own worktree, so your checkout never moves."
+                                  : " directly in this folder.")),
+            new InfoParagraph("4. Your own commands run. Every one must exit 0 or the work goes back."),
+            new InfoParagraph("5. A third agent audits the result read-only and returns PASS or FAIL."),
+            new InfoParagraph("6. You read the diff and type LAND. Nothing merges without that."),
+            new InfoHeading("Start here"),
+            new InfoLine("N", "Describe the first piece of work. Every field explains itself as you reach it."),
+            new InfoLine("D", "Check that everything a run depends on is actually installed."),
+            new InfoLine("?", "The key reference and a glossary of every word this product uses."),
+            new InfoGap()
+        };
+
+        if (config.Mode == WorkspaceMode.Standalone)
+        {
+            blocks.Add(new InfoParagraph(
+                "This workspace is standalone: it is not a Git repository, so agents edit this folder " +
+                "in place and there is nothing to roll back to. Making it a repository first is " +
+                "strictly safer.",
+                Theme.Amber));
+        }
+
+        if (config.DefaultVerificationCommands.Count == 0)
+        {
+            blocks.Add(new InfoParagraph(
+                "No default verification commands were detected for this project, so new tasks start " +
+                "with nothing checking them. Add your build and test commands when the task builder " +
+                "asks — that is the one gate an agent cannot talk its way past.",
+                Theme.Amber));
+        }
+
+        return new InfoPanel("WELCOME TO FKNRTD.CLI", Theme.Cyan, blocks);
+    }
+
+    private static string NextStep(WorkflowTask task, FknrtdConfig config) => task.Status switch
+    {
+        WorkflowStatus.Queued =>
+            "Press Enter to run it. The lead agent starts first and nothing is written until the " +
+            "implement stage.",
+        WorkflowStatus.Running =>
+            "Press L to watch the live output of the current stage. Press C if you want it to stop; " +
+            "the stage finishes its current external process first.",
+        WorkflowStatus.Failed =>
+            "Press L to read the failing output. Fix whatever caused it — often the brief was " +
+            "ambiguous or a verification command is wrong — then press R to reset the failed stages " +
+            "and Enter to run again.",
+        WorkflowStatus.ReadyToLand => config.Mode == WorkspaceMode.Git
+            ? $"Read the diff in {Blank(task.WorktreePath)}, then press G and type LAND to merge it " +
+              $"into {Blank(task.BaseRef)}."
+            : "The verified work is already in this folder. Press G and type LAND to record it as final.",
+        WorkflowStatus.Landed =>
+            "This is done and merged. Press X to remove its worktree when you no longer need to read it.",
+        WorkflowStatus.Cancelled =>
+            "Press R to reset it, then Enter to run again. Anything the implementer had already " +
+            "written is still in the worktree.",
+        _ => "Press L to read the log for whatever this is waiting on."
+    };
+
+    private static string Describe(WorkflowStatus status) =>
+        Glossary.Find("status." + status.ToString().ToLowerInvariant())?.Title ?? status.ToString();
+
+    private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? "none" : value;
+
+    private static string Icon(StageState state) => state switch
+    {
+        StageState.Running => "▶",
+        StageState.Passed => "✓",
+        StageState.Failed => "✖",
+        StageState.Skipped => "◇",
+        _ => "○"
+    };
+
+    private static Rgb StageColour(StageState state) => state switch
+    {
+        StageState.Running => Theme.Blue,
+        StageState.Passed => Theme.Green,
+        StageState.Failed => Theme.Red,
+        StageState.Skipped => Theme.Muted,
+        _ => Theme.Muted
+    };
+
+    private static Rgb StatusColour(WorkflowStatus status) => status switch
+    {
+        WorkflowStatus.Running => Theme.Blue,
+        WorkflowStatus.ReadyToLand => Theme.Green,
+        WorkflowStatus.Landed => Theme.Green,
+        WorkflowStatus.Failed => Theme.Red,
+        WorkflowStatus.Cancelled => Theme.Amber,
+        _ => Theme.Foreground
+    };
+}

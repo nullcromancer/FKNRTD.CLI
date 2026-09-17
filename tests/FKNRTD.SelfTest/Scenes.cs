@@ -10,7 +10,10 @@ using FKNRTD.Domain;
 internal static class Scenes
 {
     public static readonly string[] Names =
-        ["overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove"];
+    [
+        "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
+        "help", "help-search", "inspect", "agents", "doctor", "welcome"
+    ];
 
     public static string Render(string name, int width, int height, bool colour)
     {
@@ -50,6 +53,37 @@ internal static class Scenes
             }
             case "message":
                 return TaskWizard.Message(config);
+            case "help":
+                return Reference.Help();
+            case "help-search":
+            {
+                var help = Reference.Help();
+                Type(help, "audit");
+                return help;
+            }
+            case "inspect":
+                return Reference.Task(FailedTask(), config);
+            case "agents":
+                return Reference.Agents(config);
+            case "doctor":
+                return Reference.Doctor(
+                [
+                    new DoctorCheck { Name = "Workspace", Passed = true, Detail = "/src/aurora-api/.fknrtd" },
+                    new DoctorCheck { Name = "Git", Passed = true, Detail = "git version 2.46.0" },
+                    new DoctorCheck { Name = "Agent claude", Passed = true, Detail = "found on PATH" },
+                    new DoctorCheck
+                    {
+                        Name = "Agent codex", Passed = false,
+                        Detail = "'codex' is not on PATH. Install it, or disable the agent."
+                    },
+                    new DoctorCheck
+                    {
+                        Name = "Claude statusline", Passed = false, Required = false,
+                        Detail = "not installed. Usage figures for Claude will stay blank."
+                    }
+                ]);
+            case "welcome":
+                return Reference.Welcome(config);
             case "land":
                 return new Confirmation(
                     "LAND THIS TASK",
@@ -211,12 +245,31 @@ internal static class Scenes
         };
     }
 
-    private static WorkflowTask Task(string id, string title, WorkflowStatus status, WorkflowStage stage)
+    /// <summary>A task mid-pipeline with a real failure on it, for the inspection scene.</summary>
+    private static WorkflowTask FailedTask()
+    {
+        var task = Task("FKN-20260916-221030-e5f6", "Fix the timezone drift in scheduled reports",
+            WorkflowStatus.Failed, WorkflowStage.Verify,
+            "Scheduled reports render timestamps in the server's local zone instead of the workspace's " +
+            "configured zone, so an overnight run is dated a day early for anyone west of UTC. Reports " +
+            "should use the workspace zone everywhere, including the filename stamp. Existing stored " +
+            "reports must not be rewritten.");
+        task.RepairRound = 1;
+        return task;
+    }
+
+    private static WorkflowTask Task(
+        string id,
+        string title,
+        WorkflowStatus status,
+        WorkflowStage stage,
+        string brief = "Describe the finished state here.")
     {
         var task = new WorkflowTask
         {
             Id = id,
             Title = title,
+            Brief = brief,
             LeadAgentId = "claude",
             ImplementerAgentId = "codex",
             AuditorAgentId = "claude",

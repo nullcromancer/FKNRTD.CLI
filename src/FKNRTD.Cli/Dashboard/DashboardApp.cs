@@ -22,6 +22,7 @@ internal sealed class DashboardApp
     private string _toast = "Ready";
     private DashboardView _view = DashboardView.Overview;
     private CancellationTokenSource? _sessionCancellation;
+    private bool _welcomed;
 
     /// <summary>
     /// The modal layer. Every question the dashboard asks is an overlay drawn over the frame, so the
@@ -78,6 +79,19 @@ internal sealed class DashboardApp
                 RemoveCompletedRuns();
                 var snapshot = await _snapshots.CaptureAsync(cancellationToken).ConfigureAwait(false);
                 ClampSelection(snapshot);
+
+                // A workspace with nothing in it opens on the introduction rather than on an empty
+                // grid, because a command center that shows no state teaches nothing about itself.
+                if (!_welcomed)
+                {
+                    _welcomed = true;
+                    if (snapshot.Tasks.Count == 0)
+                    {
+                        _overlay = Reference.Welcome(snapshot.Config);
+                        _toast = "Press Esc to close this. ? reopens it any time.";
+                    }
+                }
+
                 var width = widthOverride ?? GetWidth(120);
                 var height = heightOverride ?? GetHeight(32);
                 Console.Write(width == previousWidth && height == previousHeight ? "\u001b[H" : "\u001b[2J\u001b[H");
@@ -731,6 +745,34 @@ internal sealed class DashboardApp
                     DashboardView.Overview => DashboardView.Logs,
                     _ => DashboardView.Overview
                 };
+                break;
+            case ConsoleKey.I:
+                if (SelectedTask(snapshot) is { } inspected)
+                {
+                    _overlay = Reference.Task(inspected, snapshot.Config);
+                }
+                else
+                {
+                    _overlay = Reference.Welcome(snapshot.Config);
+                }
+
+                break;
+            case ConsoleKey.A:
+                _overlay = Reference.Agents(snapshot.Config);
+                break;
+            case ConsoleKey.D:
+                _toast = "Running the pre-flight checks…";
+                _overlay = Reference.Doctor(await _doctor.RunAsync(cancellationToken).ConfigureAwait(false));
+                _toast = "Ready";
+                break;
+            default:
+                // '?' has no ConsoleKey of its own and arrives differently on different keyboards,
+                // so it is matched on the character rather than on the key.
+                if (key.KeyChar is '?' or 'h' or 'H')
+                {
+                    _overlay = Reference.Help();
+                }
+
                 break;
         }
     }
