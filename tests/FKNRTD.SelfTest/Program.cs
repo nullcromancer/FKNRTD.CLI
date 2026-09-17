@@ -71,7 +71,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Advice is phrased for the surface asking", TestNextStepIsSurfaceAwareAsync),
     ("Doctor reports rather than throws on a broken workspace", TestDoctorSurvivesABrokenWorkspaceAsync),
     ("The prompt preview shows what is actually sent", TestPromptPreviewAsync),
-    ("A failing key becomes a message, not an exit", TestAFailingActionDoesNotCrashAsync)
+    ("A failing key becomes a message, not an exit", TestAFailingActionDoesNotCrashAsync),
+    ("The task-reading commands work end to end", TestTaskReadingCommandsAsync)
 };
 
 var failures = new List<string>();
@@ -2157,4 +2158,128 @@ static async Task TestAFailingActionDoesNotCrashAsync()
     // And the frame still renders afterwards rather than being left in a half-drawn state.
     var frame = app.Render(snapshot, 110, 34, useColor: false);
     Equal(34, FrameLines(frame).Length, "The dashboard still renders after a failed action");
+}
+
+/// <summary>
+/// The task-reading commands, exercised end to end against a real workspace. They were verified by
+/// hand while they were written; this is what keeps them working.
+/// </summary>
+static async Task TestTaskReadingCommandsAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "Setting up the workspace");
+
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var config = await store.LoadConfigAsync().ConfigureAwait(false);
+        var task = await new TaskService(store, new GitService(new ProcessRunner()))
+            .CreateAsync(
+                "Read-back test",
+                "A brief long enough to be accepted, describing a finished state to aim at.",
+                config.Agents[0].Id,
+                config.Agents[^1].Id,
+                config.Agents[0].Id,
+                ["dotnet build"])
+            .ConfigureAwait(false);
+
+        // show explains rather than dumps, and phrases its advice for a shell.
+        var shown = new StringWriter();
+        Equal(0, await QuietlyAsync(["task", "show", task.Id, "-root", root], shown).ConfigureAwait(false),
+            "task show exits 0");
+        var text = shown.ToString();
+        foreach (var expected in new[]
+                 {
+                     "WHAT WAS ASKED FOR", "WHO IS ON IT", "WHERE THE WORK HAPPENS",
+                     "HOW CORRECTNESS IS DECIDED", "PIPELINE", "WHAT TO DO NEXT"
+                 })
+        {
+            True(text.Contains(expected, StringComparison.Ordinal), $"task show includes '{expected}'");
+        }
+
+        True(text.Contains(task.Brief, StringComparison.Ordinal), "task show prints the brief");
+        True(text.Contains("dotnet build", StringComparison.Ordinal), "task show prints the verification");
+        True(text.Contains("fknrtd task run", StringComparison.Ordinal),
+            "task show gives shell advice, not a keystroke");
+
+        // prompts prints the real text, not a description of it.
+        var prompts = new StringWriter();
+        Equal(0, await QuietlyAsync(["task", "prompts", task.Id, "-root", root], prompts).ConfigureAwait(false),
+            "task prompts exits 0");
+        var sent = prompts.ToString();
+        True(sent.Contains(AgentPrompts.Plan(task), StringComparison.Ordinal),
+            "task prompts prints the lead's instruction verbatim");
+        True(sent.Contains("FKNRTD_VERDICT: PASS", StringComparison.Ordinal),
+            "task prompts shows the auditor its verdict markers");
+        True(sent.Contains("Nothing else is sent", StringComparison.Ordinal),
+            "task prompts says that is all that is sent");
+
+        // This workspace is not a repository, so it was set up standalone — and diff has to say that
+        // rather than print nothing or complain about a missing worktree it was never going to have.
+        Equal(WorkspaceMode.Standalone, config.Mode, "A folder with no repository is standalone");
+        var diff = new StringWriter();
+        Equal(0, await QuietlyAsync(["task", "diff", task.Id, "-root", root], diff).ConfigureAwait(false),
+            "task diff exits 0 in a standalone workspace");
+        True(diff.ToString().Contains("standalone", StringComparison.OrdinalIgnoreCase),
+            "task diff explains that a standalone workspace has nothing to compare against");
+
+        // A task id that does not exist is reported as that, rather than as a damaged workspace.
+        // The dispatcher lets the exception out; Program.cs is what turns it into an exit code, so
+        // the message is what this asserts on.
+        try
+        {
+            await QuietlyAsync(["task", "show", "FKN-nope", "-root", root]).ConfigureAwait(false);
+            True(false, "An unknown task id is refused");
+        }
+        catch (FileNotFoundException exception)
+        {
+            True(exception.Message.Contains("no task 'FKN-nope'", StringComparison.Ordinal),
+                "An unknown task id names the task rather than the file");
+            True(exception.Message.Contains("fknrtd task list", StringComparison.Ordinal),
+                "An unknown task id says how to find the real one");
+        }
+    }).ConfigureAwait(false);
+
+    if (!GitService.IsInstalled())
+    {
+        return;
+    }
+
+    // And in a Git workspace, a task that has not reached its worktree stage says so instead.
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var git = new GitService(new ProcessRunner());
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]).ConfigureAwait(false), "git init");
+        await File.WriteAllTextAsync(Path.Combine(root, "a.txt"), "one").ConfigureAwait(false);
+        MustSucceed(await git.GitAsync(root, ["add", "-A"]).ConfigureAwait(false), "git add");
+        MustSucceed(
+            await git.GitAsync(root,
+                    ["-c", "user.email=a@b", "-c", "user.name=n", "commit", "-m", "init"])
+                .ConfigureAwait(false),
+            "git commit");
+
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "Setting up a Git workspace");
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var config = await store.LoadConfigAsync().ConfigureAwait(false);
+        Equal(WorkspaceMode.Git, config.Mode, "A repository is set up Git-backed");
+
+        var task = await new TaskService(store, git)
+            .CreateAsync("Git read-back", "A brief long enough to be accepted by the form.",
+                config.Agents[0].Id, config.Agents[^1].Id, config.Agents[0].Id, [])
+            .ConfigureAwait(false);
+
+        var diff = new StringWriter();
+        Equal(0, await QuietlyAsync(["task", "diff", task.Id, "-root", root], diff).ConfigureAwait(false),
+            "task diff exits 0 before the worktree stage");
+        True(diff.ToString().Contains("worktree", StringComparison.OrdinalIgnoreCase),
+            "task diff says the task has no worktree yet");
+
+        // The prompt preview must not leave an empty branch name in the implementer's instruction.
+        var prompts = new StringWriter();
+        Equal(0, await QuietlyAsync(["task", "prompts", task.Id, "-root", root], prompts).ConfigureAwait(false),
+            "task prompts exits 0 before the worktree stage");
+        True(!prompts.ToString().Contains("branch .", StringComparison.Ordinal),
+            "The prompt preview never shows an empty branch name");
+    }).ConfigureAwait(false);
 }

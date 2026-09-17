@@ -7,7 +7,7 @@ report to: it isolates their work, runs the checks itself, makes a second machin
 first, keeps the paperwork, and refuses to merge anything until you personally say the word.
 
 `net10.0` &middot; **zero dependencies** &middot; command `fknrtd` &middot; 8 stages &middot;
-41/41 self-tests &middot; MIT
+42/42 self-tests &middot; MIT
 
 > **The operator guide is [`fknrtd-portal.html`](fknrtd-portal.html)** — one self-contained page
 > covering the pipeline, every command, every dashboard key and the full glossary. It opens from
@@ -77,7 +77,7 @@ Git is driven by invoking the `git` executable, never a library. The dashboard r
 in-memory character grid and emits ANSI at three responsive breakpoints
 (`src/FKNRTD.Cli/Dashboard/Canvas.cs`). FKNRTD.CLI holds no credentials of its own; each assistant
 authenticates itself. Testing is a hand-rolled, dependency-free harness, not a framework
-(`tests/FKNRTD.SelfTest/Program.cs`), currently 41 checks, all passing on this checkout.
+(`tests/FKNRTD.SelfTest/Program.cs`), currently 42 checks, all passing on this checkout.
 
 There is no HTTP surface, no hosted service, and no CI/CD pipeline in this repository; it runs on
 a developer machine against a local checkout and exposes no network endpoint. It is aimed at a
@@ -401,7 +401,7 @@ dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --n
 ```
 
 The harness prints one line per check and a final `N/N self-tests passed` count, exiting 0 only
-when every check passes. Verified on this checkout: `41/41 self-tests passed`.
+when every check passes. Verified on this checkout: `42/42 self-tests passed`.
 
 Install as a global tool. One management script per platform covers the whole lifecycle:
 

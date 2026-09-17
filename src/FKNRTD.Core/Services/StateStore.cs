@@ -60,8 +60,24 @@ public sealed class StateStore
     public Task SaveTaskAsync(WorkflowTask task, CancellationToken cancellationToken = default) =>
         WriteJsonAtomicAsync(TaskPath(task.Id), task, cancellationToken);
 
-    public Task<WorkflowTask> LoadTaskAsync(string taskId, CancellationToken cancellationToken = default) =>
-        ReadJsonRequiredAsync<WorkflowTask>(TaskPath(taskId), cancellationToken);
+    /// <summary>
+    /// Loads one task. A missing file here almost always means a mistyped or stale identifier rather
+    /// than a damaged workspace, so it is reported as that — the generic missing-state message sends
+    /// the operator off to repair something that is not broken.
+    /// </summary>
+    public Task<WorkflowTask> LoadTaskAsync(string taskId, CancellationToken cancellationToken = default)
+    {
+        var path = TaskPath(taskId);
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException(
+                $"There is no task '{taskId}' in this workspace. Check the identifier — they are long " +
+                "and easy to truncate — with 'fknrtd task list'.",
+                path);
+        }
+
+        return ReadJsonRequiredAsync<WorkflowTask>(path, cancellationToken);
+    }
 
     public Task<IReadOnlyList<WorkflowTask>> LoadTasksAsync(CancellationToken cancellationToken = default) =>
         ReadDirectoryAsync<WorkflowTask>(Paths.Tasks, "*.json", cancellationToken);
