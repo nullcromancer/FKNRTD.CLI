@@ -143,7 +143,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A stage log reads as sentences, not JSON", TestLogIsReadableAsync),
     ("A panel never names a key that does nothing there", TestPanelsDoNotNameDeadKeysAsync),
     ("Every state the dashboard draws is explained", TestEveryDrawnStateIsExplainedAsync),
-    ("The offline guide shows real screens", TestPortalShowsRealScreensAsync)
+    ("The offline guide shows real screens", TestPortalShowsRealScreensAsync),
+    ("The agent builder can describe a piped agent", TestAgentBuilderAsync)
 };
 
 var failures = new List<string>();
@@ -3515,6 +3516,90 @@ static Task TestPortalShowsRealScreensAsync()
     {
         True(page.Contains(caption, StringComparison.Ordinal), $"The guide shows '{caption}'");
     }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// The agent builder. Registering a coding CLI is the most cryptic thing this product asks for, and
+/// the form had a hole in the middle of it: choosing to send the prompt on standard input skipped
+/// the arguments question entirely, so a program that reads its prompt from a pipe could only ever
+/// be launched with no flags at all.
+/// </summary>
+static Task TestAgentBuilderAsync()
+{
+    var config = Scenes.SampleConfig();
+
+    static Wizard Answer(FknrtdConfig config, string id, string exe, string delivery, string args, string audit)
+    {
+        var wizard = AgentWizard.Create(config);
+        foreach (var value in new[] { id, exe })
+        {
+            foreach (var character in value)
+            {
+                wizard.HandleKey(new ConsoleKeyInfo(character, ConsoleKey.NoName, false, false, false));
+            }
+
+            wizard.HandleKey(Key(ConsoleKey.Enter));
+        }
+
+        // Delivery is a choice: the second option needs one press of Down.
+        if (delivery == "stdin")
+        {
+            wizard.HandleKey(Key(ConsoleKey.DownArrow));
+        }
+
+        wizard.HandleKey(Key(ConsoleKey.Enter));
+
+        foreach (var character in args)
+        {
+            wizard.HandleKey(character == (char)10
+                ? new ConsoleKeyInfo((char)13, ConsoleKey.Enter, false, true, false)
+                : new ConsoleKeyInfo(character, ConsoleKey.NoName, false, false, false));
+        }
+
+        wizard.HandleKey(Key(ConsoleKey.Enter));
+
+        if (audit == "no")
+        {
+            wizard.HandleKey(Key(ConsoleKey.DownArrow));
+        }
+
+        wizard.HandleKey(Key(ConsoleKey.Enter));
+        return wizard;
+    }
+
+    // A program that takes its prompt on standard input can still be given flags. It could not
+    // before: the step was skipped and Build wrote an empty argument list.
+    var piped = AgentWizard.Build(Answer(config, "piped", "mytool", "stdin", "--json", "yes"));
+    Equal("piped", piped.Id, "The id is what was typed");
+    Equal(PromptDelivery.StandardInput, piped.Profiles["default"].PromptDelivery, "Delivery is stdin");
+    Equal(1, piped.Profiles["default"].Arguments.Count, "A stdin agent keeps the flags it was given");
+    Equal("--json", piped.Profiles["default"].Arguments[0], "And they are the ones typed");
+
+    // An agent that audits gets both verdict markers, and only on its audit profile.
+    True(piped.Profiles["audit"].SuccessMarker is not null, "An auditing agent has a pass marker");
+    True(piped.Profiles["audit"].FailureMarker is not null, "And a fail marker");
+    True(piped.Profiles["implement"].SuccessMarker is null,
+        "Its other profiles expect no verdict, because only the audit stage reads one");
+
+    // An agent that will not audit gets neither, which is what CanAudit reads to keep it out of the
+    // auditor list rather than letting it be chosen and never approve anything.
+    // Nothing typed at the arguments step, so it keeps the default the form offers - which is the
+    // path almost everybody takes and therefore the one worth checking.
+    var quiet = AgentWizard.Build(Answer(config, "quiet", "mytool", "argument", string.Empty, "no"));
+    True(quiet.Profiles["audit"].SuccessMarker is null, "A non-auditing agent has no pass marker");
+    True(!TaskWizard.CanAudit([quiet], "quiet"), "So the task builder will not offer it as an auditor");
+    Equal(2, quiet.Profiles["default"].Arguments.Count, "Its arguments are a list, not a line of text");
+    Equal("-p", quiet.Profiles["default"].Arguments[0], "The offered default is -p");
+    Equal("{prompt}", quiet.Profiles["default"].Arguments[1], "followed by the prompt placeholder");
+
+    // Build is reachable from anywhere, and an empty name used to be discovered by indexing into it.
+    var bare = AgentWizard.Build(new Wizard("T", Theme.Violet, [new WizardStep
+    {
+        Key = "id", Question = "?", GlossaryTerm = "agent"
+    }]));
+    Equal(string.Empty, bare.Id, "An unanswered form builds an empty id rather than throwing");
 
     return Task.CompletedTask;
 }

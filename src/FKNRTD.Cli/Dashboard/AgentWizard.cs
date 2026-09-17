@@ -46,7 +46,7 @@ internal static class AgentWizard
                 GlossaryTerm = "agent",
                 Placeholder = "gemini",
                 Default = values => values.GetValueOrDefault("id", string.Empty),
-                Validate = (value, _) => value.Length == 0
+                Validate = (value, _) => value.Trim().Length == 0
                     ? "An executable is required. Give the command you would type in a shell."
                     : null
             },
@@ -68,16 +68,38 @@ internal static class AgentWizard
             new()
             {
                 Key = "args",
-                Question = "What arguments launch it? One per line, with {prompt} where the prompt goes.",
+                Question = "What arguments launch it? One per line.",
                 GlossaryTerm = "profile",
                 Input = WizardInput.Commands,
-                Applies = values => values.GetValueOrDefault("delivery", "argument") == "argument",
-                Default = _ => "-p\n{prompt}",
-                Placeholder = "-p        then on the next line:  {prompt}",
-                Validate = (value, _) => value.Contains("{prompt}", StringComparison.Ordinal)
-                    ? null
-                    : "One of these lines has to be exactly {prompt}, or the agent is launched with " +
-                      "no instruction at all."
+                Default = values => values.GetValueOrDefault("delivery", "argument") == "stdin"
+                    ? string.Empty
+                    : "-p\n{prompt}",
+                Placeholder = "one argument per line, exactly as a shell would receive them",
+                Explanation =
+                    "Arguments are a list rather than a line of text, so there are no quoting rules " +
+                    "to get wrong: a path with a space in it is one item and needs no escaping. " +
+                    "They are the same for every stage; what differs between stages is only whether " +
+                    "an audit verdict is expected.",
+                Validate = (value, values) =>
+                {
+                    var stdin = values.GetValueOrDefault("delivery", "argument") == "stdin";
+                    var mentionsPrompt = value.Contains("{prompt}", StringComparison.Ordinal);
+                    if (stdin)
+                    {
+                        // The prompt arrives on standard input, so a {prompt} argument would send it
+                        // twice - once written into the command line and once down the pipe.
+                        return mentionsPrompt
+                            ? "Leave {prompt} out: you chose to send the prompt on standard input, " +
+                              "so putting it in the arguments as well would send it twice. Leave " +
+                              "this empty if the program needs no flags."
+                            : null;
+                    }
+
+                    return mentionsPrompt
+                        ? null
+                        : "One of these lines has to be exactly {prompt}, or the agent is launched " +
+                          "with no instruction at all.";
+                }
             },
             new()
             {
@@ -103,9 +125,9 @@ internal static class AgentWizard
     /// <summary>Turns the answers into the definition that gets written to the configuration.</summary>
     public static AgentDefinition Build(Wizard wizard)
     {
-        var id = wizard.Value("id");
+        var id = wizard.Value("id").Trim();
         var stdin = wizard.Value("delivery") == "stdin";
-        var arguments = stdin ? [] : wizard.Lines("args").ToList();
+        var arguments = wizard.Lines("args").ToList();
         var delivery = stdin ? PromptDelivery.StandardInput : PromptDelivery.Argument;
 
         AgentCommandProfile Profile(bool audit) => new()
@@ -120,9 +142,11 @@ internal static class AgentWizard
         return new AgentDefinition
         {
             Id = id,
-            DisplayName = char.ToUpperInvariant(id[0]) + id[1..],
+            // The form will not accept an empty name, but Build is reachable from anywhere and an
+            // index into an empty string is a poor way to find that out.
+            DisplayName = id.Length == 0 ? id : char.ToUpperInvariant(id[0]) + id[1..],
             Kind = "generic",
-            Executable = wizard.Value("exe"),
+            Executable = wizard.Value("exe").Trim(),
             Color = "cyan",
             Profiles = new Dictionary<string, AgentCommandProfile>(StringComparer.OrdinalIgnoreCase)
             {
@@ -144,7 +168,8 @@ internal static class AgentWizard
         yield return found is not null
             ? $"  Found {agent.Executable} at {found}"
             : $"  Warning: {agent.Executable} is not on PATH. A task assigned to {agent.Id} would fail " +
-              "to launch it. Install it, or press A and give the agent a different executable.";
+              $"to launch it. Install it, or run 'fknrtd agent add -id {agent.Id} -exe <command>' to " +
+              "point it somewhere else. In the dashboard, A then E does the same thing.";
         yield return audits
             ? $"  {agent.Id} may plan, implement, or audit."
             : $"  {agent.Id} may plan or implement, but cannot audit — it returns no verdict.";
