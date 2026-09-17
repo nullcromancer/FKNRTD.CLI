@@ -147,7 +147,9 @@ internal static class StatusLineRenderer
             {
                 var state = agents.FirstOrDefault(item =>
                     item.AgentId.Equals(definition.Id, StringComparison.OrdinalIgnoreCase));
-                return $"{definition.DisplayName} {StateIcon(state?.State)} {SingleLine(state?.Intent ?? "idle", 32)}";
+                var activity = state?.State ?? AgentActivityState.Offline;
+                return $"{definition.DisplayName} {StateIcon(activity)} " +
+                       SingleLine(state?.Intent ?? "offline", 32);
             })
             .Take(width >= 140 ? 4 : 2);
         var second = string.Join(" | ", activity.Append(Paint(
@@ -172,7 +174,7 @@ internal static class StatusLineRenderer
 
         var first = string.Join(" | ",
             Paint("FKN", 86, 212, 221, useColor, bold: true),
-            Paint($"{repository}  on {branch}", 88, 166, 255, useColor),
+            Paint($"{repository} on {branch}", 88, 166, 255, useColor),
             $"CTX {Percent(claude.ContextRemainingPercent)} left",
             Paint($"Claude 5h {Percent(claude.FiveHourRemainingPercent)} 7d {Percent(claude.WeeklyRemainingPercent)}",
                 255, 166, 87, useColor),
@@ -285,7 +287,9 @@ internal static class StatusLineRenderer
         AgentActivityState.Completed => "√",
         AgentActivityState.Idle => "○",
         AgentActivityState.Offline => "○",
-        _ => "?"
+        // Unknown is what a stale report decays to, so it reads as offline rather than as a glyph
+        // nothing in the reference explains.
+        _ => "○"
     };
 
     private static string SingleLine(string value, int maximum)

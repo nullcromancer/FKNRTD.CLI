@@ -72,7 +72,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Doctor reports rather than throws on a broken workspace", TestDoctorSurvivesABrokenWorkspaceAsync),
     ("The prompt preview shows what is actually sent", TestPromptPreviewAsync),
     ("A failing key becomes a message, not an exit", TestAFailingActionDoesNotCrashAsync),
-    ("The task-reading commands work end to end", TestTaskReadingCommandsAsync)
+    ("The task-reading commands work end to end", TestTaskReadingCommandsAsync),
+    ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync)
 };
 
 var failures = new List<string>();
@@ -2130,6 +2131,52 @@ static Task TestPromptPreviewAsync()
     True(frame.Contains("Nothing else is sent", StringComparison.Ordinal),
         "The preview says this is all that is sent");
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// The statusline is the surface a Claude Code user looks at constantly, and it renders the same
+/// state the dashboard does. The two must not describe the same agent differently.
+/// </summary>
+static async Task TestStatusLineAgreesWithTheDashboardAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        var store = new StateStore(paths);
+        await store.InitializeAsync(new FknrtdConfig
+        {
+            ProjectName = "statusline-test",
+            Mode = WorkspaceMode.Standalone,
+            Agents = BuiltInAgents.CreateDefaults().ToList()
+        }).ConfigureAwait(false);
+
+        var payload = new StringWriter();
+        var original = Console.In;
+        try
+        {
+            Console.SetIn(new StringReader(
+                "{\"workspace\":{\"current_dir\":" +
+                System.Text.Json.JsonSerializer.Serialize(root) +
+                "},\"context_window\":{\"used_percentage\":38}}"));
+            Equal(0, await QuietlyAsync(["telemetry", "claude-statusline", "-no-color"], payload)
+                    .ConfigureAwait(false),
+                "The statusline renders");
+        }
+        finally
+        {
+            Console.SetIn(original);
+        }
+
+        var line = payload.ToString();
+        True(line.Contains("FKN", StringComparison.Ordinal), "The statusline carries its badge");
+
+        // An agent that has never reported is offline. "? idle" said unknown and idle at once, and
+        // disagreed with the dashboard, which draws the same agent as a plain circle.
+        True(!line.Contains("?", StringComparison.Ordinal),
+            "The statusline never shows an unexplained state glyph");
+        True(!line.Contains("  ", StringComparison.Ordinal), "The statusline has no doubled spaces");
+        True(!line.Contains(''), "The statusline honours -no-color");
+    }).ConfigureAwait(false);
 }
 
 /// <summary>
