@@ -153,7 +153,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The welcome panel tells the truth", TestWelcomeIsTrueAsync),
     ("Every command the product names exists", TestNamedCommandsExistAsync),
     ("Every key a screen names can be pressed there", TestNamedKeysArePressableAsync),
-    ("Every question can explain itself", TestEveryQuestionCanExplainItselfAsync)
+    ("Every question can explain itself", TestEveryQuestionCanExplainItselfAsync),
+    ("No retired claim survives anywhere in the source", TestNoRetiredClaimInAnySourceFileAsync)
 };
 
 var failures = new List<string>();
@@ -4198,5 +4199,87 @@ static Task TestEveryQuestionCanExplainItselfAsync()
     }
 
     True(seen > 20, $"There are forms to check, and {seen} steps were checked");
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// The retired claims, checked against every line of source rather than only against what the
+/// tables say.
+/// </summary>
+/// <remarks>
+/// Two of the stale claims this session hid in the dispatcher's runtime messages, which no rendered
+/// scene and no generated document covers: the shell's refusal message for `task cleanup` promised
+/// a landed task's branch is kept, and the overview's events panel described events the product
+/// never records. A guard that only reads the tables cannot see either.
+///
+/// This walks the source instead. When it cannot find the source - a packaged binary, a different
+/// layout - it says so and passes, because a lint that fails on somebody else's machine for reasons
+/// unrelated to their change teaches them to ignore it.
+/// </remarks>
+static Task TestNoRetiredClaimInAnySourceFileAsync()
+{
+    var root = AppContext.BaseDirectory;
+    while (root is not null && !File.Exists(Path.Combine(root, "FKNRTD.CLI.sln")))
+    {
+        root = Path.GetDirectoryName(root.TrimEnd(Path.DirectorySeparatorChar));
+    }
+
+    if (root is null)
+    {
+        Console.WriteLine("  (source tree not found; the retired-claim sweep is skipped)");
+        return Task.CompletedTask;
+    }
+
+    // Phrases that are false wherever they appear. Claims that are true in one case and false in
+    // another are checked by the test for that case, not here.
+    var retired = new[]
+    {
+        "Claims expire on their own",
+        "cannot write to the worktree",
+        "the only agent allowed to write",
+        "The only agent that may write files",
+        "It proposes; it changes nothing",
+        "no single agent both writes",
+        "Safe means no overlap at all",
+        "only after verification passed",
+        "Stale runtime state",
+        "will not get through the pipeline until",
+        "logs may already have been cleaned up",
+        "Every stage, conflict and agent check-in is recorded",
+        "stage.passed",
+        "stage.failed"
+    };
+
+    var files = Directory
+        .EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
+        .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") &&
+                       !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+        .ToArray();
+
+    True(files.Length > 20, $"The sweep found the source ({files.Length} files)");
+
+    foreach (var file in files)
+    {
+        var lines = File.ReadAllLines(file);
+        for (var number = 0; number < lines.Length; number++)
+        {
+            var line = lines[number];
+
+            // A comment may quote a retired claim to explain why it was retired, which is exactly
+            // the kind of note worth keeping.
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("//", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (var claim in retired)
+            {
+                True(!line.Contains(claim, StringComparison.OrdinalIgnoreCase),
+                    $"{Path.GetFileName(file)}:{number + 1} carries the retired claim '{claim}'");
+            }
+        }
+    }
+
     return Task.CompletedTask;
 }
