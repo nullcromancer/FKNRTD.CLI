@@ -30,6 +30,10 @@ public static class Keymap
             "Switches between the overview and the live output of the highlighted task's current " +
             "stage. This is where you look when something is taking a long time or has failed.",
             InFooter: true),
+        new("F", "find a task",
+            "Searches every task in the workspace by title, status or id and selects the one you " +
+            "pick. The overview shows a handful of rows at a time, which stops being a way to find " +
+            "anything once a workspace has a history."),
         new("I", "inspect",
             "Opens the full record of the highlighted task: every stage and its outcome, the agents " +
             "assigned to it, where its worktree is on disk, and what to do next."),

@@ -862,6 +862,7 @@ internal sealed class DashboardApp
             ConsoleKey.E => "E",
             ConsoleKey.K => "K",
             ConsoleKey.S => "S",
+            ConsoleKey.F => "F",
             ConsoleKey.Tab => "Tab",
             // '?' and '/' have no ConsoleKey of their own and arrive differently on different
             // keyboard layouts, so they are matched on the character instead.
@@ -960,6 +961,9 @@ internal sealed class DashboardApp
             case "S":
                 _overlay = Reference.Settings(snapshot.Config, _store.Paths.Config);
                 break;
+            case "F":
+                OpenTaskPicker(snapshot);
+                break;
             case "?":
                 _overlay = Reference.Help();
                 break;
@@ -967,6 +971,32 @@ internal sealed class DashboardApp
                 OpenPalette(snapshot);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Opens the searchable task list. Selecting one moves the highlight to it, so every other key
+    /// then acts on the task that was found rather than on whatever happened to be selected.
+    /// </summary>
+    private void OpenTaskPicker(DashboardSnapshot snapshot)
+    {
+        _overlay = Picker.Tasks(snapshot);
+        _overlayCompleted = (completed, current, _) =>
+        {
+            if (((Picker)completed).Chosen is { } id)
+            {
+                _selectedTaskId = id;
+                var index = current.Tasks
+                    .Select((task, position) => (task, position))
+                    .FirstOrDefault(item => item.task.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+                if (index.task is not null)
+                {
+                    _selectedTask = index.position;
+                    _toast = $"Selected {index.task.Title}";
+                }
+            }
+
+            return Task.CompletedTask;
+        };
     }
 
     /// <summary>

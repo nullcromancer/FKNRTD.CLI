@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing"
+        "help", "help-search", "inspect", "agents", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -104,6 +104,14 @@ internal static class Scenes
                 return Reference.Coordination(Populated());
             case "settings":
                 return Reference.Settings(SampleConfig(), "/src/aurora-api/.fknrtd/config.json");
+            case "find":
+                return Picker.Tasks(Populated());
+            case "find-search":
+            {
+                var picker = Picker.Tasks(Populated());
+                Type(picker, "failed");
+                return picker;
+            }
             case "usage":
                 return Reference.Usage(Populated(), refreshError: null);
             case "usage-missing":
