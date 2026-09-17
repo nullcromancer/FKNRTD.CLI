@@ -1243,6 +1243,19 @@ static Task TestWizardValidationExplainsItselfAsync()
     Scenes.Press(wizard, ConsoleKey.Tab, shift: true);
     frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, wizard);
     True(frame.Contains("Add rate limiting", StringComparison.Ordinal), "Stepping back keeps the earlier answer");
+
+    // A highlighted choice survives navigating away and back too. Reaching the lead step, moving the
+    // highlight off the default, stepping back and returning must show the moved highlight.
+    var choices = TaskWizard.Create(Scenes.SampleConfig());
+    Scenes.Type(choices, "Title");
+    Scenes.Press(choices, ConsoleKey.Enter);
+    Scenes.Type(choices, "A brief long enough to be accepted by the form.");
+    Scenes.Press(choices, ConsoleKey.Enter);
+    Scenes.Press(choices, ConsoleKey.DownArrow);
+    Scenes.Press(choices, ConsoleKey.Tab, shift: true);
+    Scenes.Press(choices, ConsoleKey.Enter);
+    Scenes.Press(choices, ConsoleKey.Enter);
+    Equal("codex", choices.Value("lead"), "A moved choice survives stepping back and returning");
     return Task.CompletedTask;
 }
 

@@ -31,7 +31,12 @@ internal sealed class DashboardApp
     /// </summary>
     private IOverlay? _overlay;
 
-    private Func<IOverlay, CancellationToken, Task>? _overlayCompleted;
+    /// <summary>
+    /// What to do with a completed overlay. It is handed the snapshot current at the moment of
+    /// completion rather than the one captured when the overlay opened, because a modal can be left
+    /// open across several refreshes and the task it acts on may have moved on meanwhile.
+    /// </summary>
+    private Func<IOverlay, DashboardSnapshot, CancellationToken, Task>? _overlayCompleted;
 
     public DashboardApp(
         DashboardSnapshotService snapshots,
@@ -820,7 +825,7 @@ internal sealed class DashboardApp
                     _overlayCompleted = null;
                     if (completed is not null)
                     {
-                        await completed(overlay, cancellationToken).ConfigureAwait(false);
+                        await completed(overlay, snapshot, cancellationToken).ConfigureAwait(false);
                     }
 
                     break;
@@ -962,11 +967,11 @@ internal sealed class DashboardApp
     private void OpenPalette(DashboardSnapshot snapshot)
     {
         _overlay = Palette.For(snapshot, SelectedTask(snapshot), _running.Count);
-        _overlayCompleted = async (completed, token) =>
+        _overlayCompleted = async (completed, current, token) =>
         {
             if (((Palette)completed).Chosen is { } chosen)
             {
-                await RunActionAsync(chosen.Id, snapshot, token).ConfigureAwait(false);
+                await RunActionAsync(chosen.Id, current, token).ConfigureAwait(false);
             }
         };
     }
@@ -1050,7 +1055,7 @@ internal sealed class DashboardApp
             git
                 ? $"The finished diff is in {task.WorktreePath} if you want to read it before you decide."
                 : null);
-        _overlayCompleted = async (_, token) =>
+        _overlayCompleted = async (_, _, token) =>
         {
             try
             {
@@ -1093,7 +1098,7 @@ internal sealed class DashboardApp
             "stage logs and its Git branch are all kept, so you can still read what happened.",
             "REMOVE",
             "cleanup");
-        _overlayCompleted = async (_, token) =>
+        _overlayCompleted = async (_, _, token) =>
         {
             try
             {
@@ -1142,7 +1147,7 @@ internal sealed class DashboardApp
 
         var git = config.Mode == WorkspaceMode.Git;
         _overlay = TaskWizard.Create(config);
-        _overlayCompleted = async (completed, token) =>
+        _overlayCompleted = async (completed, _, token) =>
         {
             var wizard = (Wizard)completed;
             try
@@ -1184,7 +1189,7 @@ internal sealed class DashboardApp
         }
 
         _overlay = TaskWizard.Message(snapshot.Config);
-        _overlayCompleted = async (completed, token) =>
+        _overlayCompleted = async (completed, _, token) =>
         {
             var wizard = (Wizard)completed;
             try

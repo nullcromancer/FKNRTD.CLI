@@ -231,11 +231,22 @@ internal sealed class Wizard : IOverlay
         return -1;
     }
 
+    /// <summary>
+    /// Keeps the current answer before navigating away from a step, so going back and forward again
+    /// returns what was there rather than resetting to the default.
+    /// </summary>
     private void Store(WizardStep step)
     {
         if (step.Input != WizardInput.Choice)
         {
             _values[step.Key] = _field.Value.Trim();
+            return;
+        }
+
+        var highlighted = step.Options(_values).ElementAtOrDefault(_choice);
+        if (highlighted is not null)
+        {
+            _values[step.Key] = highlighted.Value;
         }
     }
 
