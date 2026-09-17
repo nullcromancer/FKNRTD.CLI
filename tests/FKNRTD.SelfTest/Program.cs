@@ -247,7 +247,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A supplied name cannot reach outside the workspace", TestSuppliedNamesStayInsideTheWorkspaceAsync),
     ("Installing the statusline keeps existing settings", TestStatusLineInstallKeepsExistingSettingsAsync),
     ("The output observer survives anything an agent prints", TestAgentOutputObserverSurvivesAnythingAsync),
-    ("An age reads like a time", TestAgeReadsLikeATimeAsync)
+    ("An age reads like a time", TestAgeReadsLikeATimeAsync),
+    ("Every label on the main screen leads somewhere", TestEveryLabelOnTheMainScreenLeadsSomewhereAsync)
 };
 
 var failures = new List<string>();
@@ -4998,6 +4999,52 @@ static Task TestAgeReadsLikeATimeAsync()
              !text.StartsWith("60s", StringComparison.Ordinal) &&
              !text.StartsWith("24h", StringComparison.Ordinal),
             $"{seconds} seconds ago reads as a time, not as a boundary: {text}");
+    }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Every label the main screen draws leads somewhere in the glossary.
+/// </summary>
+/// <remarks>
+/// A reader looks up what is in front of them, and on the overview that is a row of panel titles
+/// and a handful of compact indicators. Taking each of those words and asking `fknrtd explain` what
+/// it gets back found seven with no answer at all - the progress bar, the resource line, the
+/// ahead/behind arrows, the changed count, and three panel names, two of which resolved to
+/// `telemetry`. This is that question, asked on every run.
+///
+/// Only the overview is swept. The explanatory panels are prose, and sweeping sentences produces a
+/// list of ordinary English words with nothing useful to say about any of them - which is a real
+/// result about where this check works rather than a reason to widen it.
+/// </remarks>
+static Task TestEveryLabelOnTheMainScreenLeadsSomewhereAsync()
+{
+    var frame = Scenes.Render("overview", 150, 46, colour: false);
+
+    // Runs of capitals: panel titles and column headings, which is what a label looks like here.
+    var labels = System.Text.RegularExpressions.Regex.Matches(frame, "[A-Z][A-Z][A-Z]+")
+        .Select(match => match.Value.ToLowerInvariant())
+        .Distinct(StringComparer.Ordinal)
+        .Where(word => word is not ("fkn" or "fknrtd" or "cli" or "ctx" or "ram"))
+        .ToArray();
+
+    True(labels.Length > 5, $"The overview draws labels to check ({labels.Length})");
+
+    foreach (var label in labels)
+    {
+        // Either the word is a term, or searching for it finds one that talks about it. Both are
+        // answers; only silence is a failure.
+        var found = Glossary.Find(label) is not null || Glossary.Search(label).Count > 0;
+        True(found, $"'{label}' is drawn on the overview and leads somewhere in the glossary");
+    }
+
+    // The compact indicators are not labels and cannot be found by sweeping capitals, so they are
+    // named. Each one was unexplainable until somebody looked, and each is on the first screen a
+    // newcomer sees before they have done anything at all.
+    foreach (var term in new[] { "progress-bar", "resources", "ahead-behind", "changed", "stage-strip" })
+    {
+        True(Glossary.Find(term) is not null, $"'{term}' explains a mark the overview draws");
     }
 
     return Task.CompletedTask;
