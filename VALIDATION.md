@@ -3,7 +3,7 @@
 ## 2026-09-17 — the usability programme
 
 Revision: 1.0.0
-Commit verified: `31801047b976da3b050457b42e3247a03aa0cc96`
+Commit verified: `d5e2d78e4b794a2e32c3eadfee0ed594a5678f55`
 (branch `feature/standalone-workspaces-and-tool-management`)
 
 Environment: .NET SDK 10.0.401, Git 2.55.0.windows.4, Windows 11 (10.0.26200).
@@ -15,7 +15,7 @@ nothing is reported that was not run.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 80/80 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 82/82 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -35,7 +35,7 @@ nothing is reported that was not run.
 | `fknrtd status -json` | Exit 0; complete normalised snapshot. |
 | `fknrtd dashboard -once -no-color -width 100 -height 30` | Exit 0; one frame, no ANSI. |
 | `fknrtd explain brief`, `fknrtd help task diff`, `fknrtd version` | Exit 0. |
-| `fknrtd portal -out <file>` | Exit 0; 73 terms, 44 commands, 26 keys, 25 settings, 28 log entries, 4 embedded screens; 201 KB. |
+| `fknrtd portal -out <file>` | Exit 0; 80 terms, 44 commands, 26 keys, 25 settings, 31 log entries, 4 embedded screens. |
 | `fknrtd taks` | Exit 2; reported the typo and named the commands meant. |
 
 The exit codes documented but never observed were checked directly, because writing one down
@@ -97,6 +97,12 @@ gone unnoticed for the same reason — the situation was rendered nowhere:
   up first, a settings file that is not an object is left exactly as it was; and nothing an agent
   can print makes the observer throw, including a hundred-kilobyte line and two hundred levels of
   nesting.
+- **Whether the words on screen can be looked up.** Every word the main screen draws was taken and
+  passed to `fknrtd explain`. Seven had no answer — the progress bar, the resource line, the
+  ahead-and-behind arrows, the changed count and three panel names, two of which resolved to an
+  unrelated entry. All seven have entries now and the question is asked on every build. Five more
+  that looked like gaps — bus, cpu, history, severity, error — fall through to the right entry
+  and were deliberately left alone.
 - **What a refresh costs.** The dashboard takes a snapshot and draws a frame once a second, and
   neither had ever been timed — so "once a second" was a number chosen rather than a number
   justified. Measured with a new `-- bench` dev command against a workspace holding twenty-five

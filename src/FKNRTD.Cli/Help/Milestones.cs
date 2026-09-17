@@ -422,6 +422,35 @@ public static class Milestones
             "same one this whole programme is about: the product knew something and said nothing, " +
             "or said something that was true of a different situation. Breaking things on purpose " +
             "found in an hour what reading the code had not found all day."),
+
+        new("2026-09-17",
+            "Asking the newcomer's question mechanically",
+            "Every explanation in this product is reachable, and nobody had checked whether the " +
+            "words on the screen are the words somebody would look up. Those are different " +
+            "questions, and only the second one is the reader's.",
+            "Every word the main screen draws was taken and looked up. Seven had no answer at all: " +
+            "the progress bar, the resource line, the ahead-and-behind arrows, the changed count, " +
+            "and three panel names, two of which resolved to an unrelated entry about telemetry.",
+            "Four of those seven are in the header, which is the first thing anybody sees and the " +
+            "part they see before they have done anything. The check runs on every build now. It " +
+            "covers the main screen only, which is a finding rather than a shortcut: run across " +
+            "every screen it returns ordinary English words, because the explanatory panels are " +
+            "prose and prose is not a vocabulary."),
+
+        new("2026-09-17",
+            "Measuring what had only ever been assumed",
+            "The dashboard takes a snapshot and draws a frame once a second, and neither had been " +
+            "timed. 'Once a second' was a number chosen rather than a number justified, and the " +
+            "advice written on the setting that controls it was written without knowing what it " +
+            "was advising about.",
+            "A snapshot of a standalone workspace takes 38 milliseconds and a frame takes two. A " +
+            "Git-backed snapshot took 307, almost all of it starting Git processes - so the four " +
+            "unrelated questions it asks Git are now asked at once rather than one after another, " +
+            "which brought it to 236.",
+            "The setting carries those numbers and what they imply, because that is what somebody " +
+            "lowering it wants to know beforehand. The remaining sequential call was left alone " +
+            "deliberately: removing it would change what 'git status' reports for a workspace whose " +
+            "root is not the repository root, in exchange for eighty milliseconds of a thousand."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;
