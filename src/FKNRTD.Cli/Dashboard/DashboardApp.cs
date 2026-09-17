@@ -1760,11 +1760,16 @@ internal sealed class DashboardApp
     private void OpenCoordination(DashboardSnapshot snapshot)
     {
         _overlay = Reference.Coordination(snapshot);
-        _overlayCompleted = (completed, current, _) =>
+        _overlayCompleted = (completed, current, token) =>
         {
-            if (completed is not InfoPanel { ActionRequested: true })
+            if (completed is not InfoPanel { RequestedAction: { } action })
             {
                 return Task.CompletedTask;
+            }
+
+            if (action == "acknowledge")
+            {
+                return AcknowledgeMessagesAsync(current, token);
             }
 
             var expired = current.Claims
@@ -1779,6 +1784,39 @@ internal sealed class DashboardApp
                 : $"Released {released} expired reservation{(released == 1 ? "" : "s")}.";
             return Task.CompletedTask;
         };
+    }
+
+    /// <summary>
+    /// Marks every message on the bus as handled. Acknowledging was the last thing this product
+    /// could do from a shell and not from the dashboard, which is an odd place for the gap to be:
+    /// the bus is listed on the coordination screen, and reading it is exactly when somebody knows
+    /// which notes they have dealt with.
+    /// </summary>
+    private async Task AcknowledgeMessagesAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        var pending = snapshot.Messages
+            .Where(message => message.Delivery != MessageDelivery.Acknowledged)
+            .ToArray();
+
+        var acknowledged = 0;
+        foreach (var message in pending)
+        {
+            try
+            {
+                await _messages.AcknowledgeAsync(message.Id, cancellationToken).ConfigureAwait(false);
+                acknowledged++;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // One that has gone, or that another seat acknowledged between the frame and the
+                // keystroke. Neither is a reason to stop part-way through the rest.
+            }
+        }
+
+        _toast = acknowledged == 0
+            ? "Nothing left to acknowledge."
+            : $"Marked {acknowledged} message{(acknowledged == 1 ? "" : "s")} as handled. " +
+              "Nothing was deleted; the bus keeps its history.";
     }
 
     /// <summary>

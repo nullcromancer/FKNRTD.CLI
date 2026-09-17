@@ -21,6 +21,13 @@ internal sealed record InfoGap : InfoBlock;
 /// </summary>
 internal sealed record InfoRaw(string Text, Rgb? Colour = null) : InfoBlock;
 
+/// <summary>Something a reference panel can do, besides being read.</summary>
+/// <param name="Id">What the dashboard matches on afterwards.</param>
+/// <param name="Key">The key that asks for it.</param>
+/// <param name="Label">How that key is printed in the footer.</param>
+/// <param name="Meaning">What the footer says it does.</param>
+internal readonly record struct PanelAction(string Id, ConsoleKey Key, string Label, string Meaning);
+
 /// <summary>
 /// A scrollable — and optionally filterable — read-only panel. The dashboard's reference surfaces
 /// are all one of these: the key and glossary reference behind <c>?</c>, the task record behind
@@ -33,7 +40,7 @@ internal sealed class InfoPanel : IOverlay
     private readonly Rgb _accent;
     private readonly Func<string, IReadOnlyList<InfoBlock>> _build;
     private readonly TextField? _filter;
-    private readonly (ConsoleKey Key, string Label, string Meaning)? _action;
+    private readonly IReadOnlyList<PanelAction> _actions;
     private readonly string _filterHint;
     private int _scroll;
 
@@ -42,21 +49,20 @@ internal sealed class InfoPanel : IOverlay
         Rgb accent,
         Func<string, IReadOnlyList<InfoBlock>> build,
         string? filterHint = null,
-        (ConsoleKey Key, string Label, string Meaning)? action = null)
+        params PanelAction[] actions)
     {
         _title = title;
         _accent = accent;
         _build = build;
         _filterHint = filterHint ?? string.Empty;
         _filter = filterHint is null ? null : new TextField();
-        // A panel that filters has already spent every letter key on the filter, so an action bound
-        // to one would eat a character the operator meant to type. A function key cannot be typed
-        // into a filter, so it is the one kind that is safe on a panel that has one.
-        _action = action is null || action.Value.Key == ConsoleKey.Escape
-            ? null
-            : _filter is null || IsFunctionKey(action.Value.Key)
-                ? action
-                : null;
+        // Two rules, both about not stealing a key that means something else. A panel that filters
+        // has already spent every letter on the filter, so only a function key is safe there. And
+        // nothing may bind Escape, which is the only way out of a modal.
+        _actions = actions
+            .Where(action => action.Key != ConsoleKey.Escape)
+            .Where(action => _filter is null || IsFunctionKey(action.Key))
+            .ToArray();
     }
 
     public InfoPanel(string title, Rgb accent, IReadOnlyList<InfoBlock> blocks)
@@ -69,16 +75,23 @@ internal sealed class InfoPanel : IOverlay
     private static bool IsFunctionKey(ConsoleKey key) => key is >= ConsoleKey.F1 and <= ConsoleKey.F12;
 
     /// <summary>
-    /// True when the operator pressed this panel's action key. A reference panel is normally a
-    /// dead end, which is right for a glossary and wrong for a panel listing something you can fix.
+    /// Which action the operator asked for, or null. A reference panel is normally a dead end,
+    /// which is right for a glossary and wrong for a panel listing something you can fix.
     /// </summary>
-    public bool ActionRequested { get; private set; }
+    public string? RequestedAction { get; private set; }
+
+    /// <summary>True when any action was asked for.</summary>
+    public bool ActionRequested => RequestedAction is not null;
 
     public OverlayResult HandleKey(ConsoleKeyInfo key)
     {
-        if (_action is { } available && key.Key == available.Key)
+        // Cast to a nullable first. FirstOrDefault over a struct hands back a default instance
+        // rather than null, and `is { }` matches any struct - so written the obvious way this fired
+        // an action on every keystroke, with a null id. Three tests caught it at once.
+        if (_actions.Cast<PanelAction?>().FirstOrDefault(action => action!.Value.Key == key.Key)
+            is { } chosen)
         {
-            ActionRequested = true;
+            RequestedAction = chosen.Id;
             return OverlayResult.Submit;
         }
 
@@ -178,9 +191,9 @@ internal sealed class InfoPanel : IOverlay
             keys.Add(("type", "to search"));
         }
 
-        if (_action is { } available)
+        foreach (var action in _actions)
         {
-            keys.Add((available.Label, available.Meaning));
+            keys.Add((action.Label, action.Meaning));
         }
 
         keys.Add(("Esc", "close"));

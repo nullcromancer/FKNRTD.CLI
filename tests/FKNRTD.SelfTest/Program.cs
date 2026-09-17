@@ -2886,7 +2886,32 @@ static Task TestCoordinationReleaseAsync()
 
     var panel = Reference.Coordination(snapshot);
     Equal(OverlayResult.Submit, panel.HandleKey(Key(ConsoleKey.R)), "R asks for the release");
-    True(panel.ActionRequested, "The panel records that it was asked");
+    Equal("release", panel.RequestedAction, "and says which action it was");
+
+    // A is the other thing this screen can do. `message ack` was the last command in the product
+    // with no key anywhere, which is an odd gap: the bus is listed right here, and reading it is
+    // exactly when somebody knows which notes they have dealt with.
+    var acking = Reference.Coordination(snapshot);
+    Equal(OverlayResult.Submit, acking.HandleKey(Key(ConsoleKey.A)), "A asks for the acknowledgement");
+    Equal("acknowledge", acking.RequestedAction, "and says which action it was");
+    True(Prose(Scenes.Render("coordination", 110, 44, colour: false))
+            .Contains("A mark the message handled", StringComparison.Ordinal),
+        "and the footer offers it");
+
+    // Neither key is offered when there is nothing for it to do: a key in a footer that does
+    // nothing is a promise the panel cannot keep.
+    var settled = snapshot with
+    {
+        Claims = snapshot.Claims.Where(claim => claim.ExpiresAt > snapshot.CapturedAt).ToArray(),
+        Messages = snapshot.Messages
+            .Select(message => message with { Delivery = MessageDelivery.Acknowledged })
+            .ToArray()
+    };
+    var nothing = Reference.Coordination(settled);
+    Equal(OverlayResult.Continue, nothing.HandleKey(Key(ConsoleKey.A)),
+        "A does nothing when every message is handled");
+    Equal(OverlayResult.Continue, nothing.HandleKey(Key(ConsoleKey.R)),
+        "R does nothing when nothing has expired");
 
     // With nothing expired there is no key, because a key that does nothing is worse than no key.
     var clean = snapshot with
@@ -3143,8 +3168,8 @@ static Task TestHelpWritesThePageAsync()
 
     // A panel that filters refuses a letter action outright, which is the rule that makes the
     // function key the only safe kind there.
-    var refused = new InfoPanel("T", Theme.Cyan, _ => [new InfoLine("a", "b")], filterHint: "x",
-        action: (ConsoleKey.R, "R", "do a thing"));
+    var refused = new InfoPanel("T", Theme.Cyan, _ => [new InfoLine("a", "b")], "x",
+        new PanelAction("thing", ConsoleKey.R, "R", "do a thing"));
     Equal(OverlayResult.Continue, refused.HandleKey(Key(ConsoleKey.R)),
         "A letter action is not bound on a panel that filters");
     True(!refused.ActionRequested, "And it does not fire");
@@ -3154,7 +3179,7 @@ static Task TestHelpWritesThePageAsync()
     foreach (var filterHint in new string?[] { null, "search me" })
     {
         var trapped = new InfoPanel("T", Theme.Cyan, _ => [new InfoLine("a", "b")], filterHint,
-            action: (ConsoleKey.Escape, "Esc", "do a thing"));
+            new PanelAction("thing", ConsoleKey.Escape, "Esc", "do a thing"));
         Equal(OverlayResult.Cancel, trapped.HandleKey(Key(ConsoleKey.Escape)),
             "Escape still closes the panel");
         True(!trapped.ActionRequested, "And never fires an action bound to it");

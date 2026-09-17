@@ -64,7 +64,7 @@ internal static class Reference
         filterHint: "a key, a word, or anything you do not recognise",
         // The one thing this panel could not do was let you keep it. F2 writes the whole reference
         // out as a page you can open away from the terminal, or send to whoever asks you next.
-        action: (ConsoleKey.F2, "F2", "save all of this as a web page"));
+        new PanelAction("write-page", ConsoleKey.F2, "F2", "save all of this as a web page"));
 
     /// <summary>
     /// The full record of one task behind <c>I</c>. Each stage is shown with what that stage is for,
@@ -258,6 +258,8 @@ internal static class Reference
     public static InfoPanel Coordination(DashboardSnapshot snapshot)
     {
         var expired = snapshot.Claims.Count(claim => claim.ExpiresAt <= snapshot.CapturedAt);
+        var unacknowledged = snapshot.Messages
+            .Count(message => message.Delivery != MessageDelivery.Acknowledged);
         var blocks = new List<InfoBlock>();
 
         blocks.Add(new InfoHeading("Overlaps"));
@@ -364,9 +366,8 @@ internal static class Reference
         return new InfoPanel("COORDINATION",
             worst is null ? Theme.Green : worst.Kind == ConflictKind.Collision ? Theme.Red : Theme.Amber,
             _ => blocks,
-            action: expired == 0
-                ? null
-                : (ConsoleKey.R, "R", expired == 1 ? "release the expired one" : $"release {expired} expired"));
+            filterHint: null,
+            Actions(expired, unacknowledged));
     }
 
     /// <summary>
@@ -429,6 +430,29 @@ internal static class Reference
             return blocks;
         },
         filterHint: "a setting name, or what you are trying to change");
+
+    /// <summary>
+    /// The two things the coordination screen can do, offered only when there is something to do.
+    /// A key in a footer that does nothing is worse than an absent one: it is a promise the panel
+    /// cannot keep, and the operator finds that out by pressing it.
+    /// </summary>
+    private static PanelAction[] Actions(int expired, int unacknowledged)
+    {
+        var actions = new List<PanelAction>();
+        if (expired > 0)
+        {
+            actions.Add(new PanelAction("release", ConsoleKey.R, "R",
+                expired == 1 ? "release the expired one" : $"release {expired} expired"));
+        }
+
+        if (unacknowledged > 0)
+        {
+            actions.Add(new PanelAction("acknowledge", ConsoleKey.A, "A",
+                unacknowledged == 1 ? "mark the message handled" : $"mark {unacknowledged} handled"));
+        }
+
+        return actions.ToArray();
+    }
 
     /// <summary>
     /// What this workspace has, for the settings whose value is a single readable scalar. A default
@@ -520,7 +544,7 @@ internal static class Reference
         // nothing here. R asks again from inside, the same key the coordination panel uses for the
         // one thing it can do.
         return new InfoPanel("BUDGET", Theme.Green, _ => blocks, filterHint: null,
-            action: (ConsoleKey.R, "R", "ask Codex again"));
+            new PanelAction("refresh", ConsoleKey.R, "R", "ask Codex again"));
     }
 
     /// <summary>Why an agent has no figures, and what would give it some.</summary>
