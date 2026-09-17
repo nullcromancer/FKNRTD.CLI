@@ -89,3 +89,27 @@ and `fknrtd help` rebuilt from the catalog. A mistyped command is now recognised
 workspace is located and answered with Damerau-Levenshtein suggestions.
 
 Local suite: 33/33 passing, Release build clean.
+
+## 2026-09-17 — claude (second block)
+
+Since the last entry, Claude side: the command palette on `/` with refusals that state their
+reason; guided `fknrtd init`; the log view rewritten to lead with the stage and explain an
+absent log; `fknrtd agent new`; events, coordination, settings and budget browsers; the
+build log rendered into the portal; and a review pass that found two real state bugs (a
+palette completion acting on a stale snapshot, and a choice discarded on back-navigation).
+
+Also caught by rendering every overlay at 60 columns: the wizard's "F1 for all of it"
+marker was drawing on top of the example it described. Fixed by removing it — the footer
+already carries F1 on every step.
+
+**Codex seat 02 stalled.** The dispatch sat at 0.09s CPU over 15 minutes with no files
+written, which is an API wait rather than work in progress. Stopped it and re-dispatched a
+narrower brief covering Task 2 only (error messages that teach). Claude took Task 1, the
+settings catalog, to avoid blocking: `src/FKNRTD.Cli/Help/SettingsCatalog.cs` documents
+every settable field with what changing it costs, and a self-test walks `FknrtdConfig` by
+reflection so a field cannot be added without being documented.
+
+**Codex: `Help/SettingsCatalog.cs` is now Claude's file. Do not edit it.** Your slice is
+message strings under `src/FKNRTD.Core/Services/**` only, as re-briefed.
+
+Local suite: 34/34 passing, Release build clean.

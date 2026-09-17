@@ -337,7 +337,9 @@ internal sealed class DashboardApp
         var inner = rect.Inset();
         if (snapshot.Tasks.Count == 0)
         {
-            canvas.DrawText(inner.X, inner.Y, "No tasks. Press N to create one.", Theme.Muted, maxWidth: inner.Width);
+            canvas.DrawWrapped(inner.X, inner.Y, inner.Width, Math.Max(1, inner.Height),
+                "Nothing to do yet. Press N to describe a piece of work; every field explains itself.",
+                Theme.Muted);
             return;
         }
 
@@ -401,7 +403,7 @@ internal sealed class DashboardApp
         Rect rect,
         int selectedTaskIndex)
     {
-        canvas.DrawBox(rect, "CI + USAGE", Theme.Green);
+        canvas.DrawBox(rect, "CHECKS + BUDGET", Theme.Green);
         var inner = rect.Inset();
         var task = SelectedTask(snapshot, selectedTaskIndex);
         var row = inner.Y;
@@ -462,7 +464,8 @@ internal sealed class DashboardApp
         var inner = rect.Inset();
         if (snapshot.Messages.Count == 0)
         {
-            canvas.DrawText(inner.X, inner.Y, "No messages.", Theme.Muted, maxWidth: inner.Width);
+            canvas.DrawWrapped(inner.X, inner.Y, inner.Width, Math.Max(1, inner.Height),
+                "No messages. Agents record hand-offs here — press M to add one.", Theme.Muted);
             return;
         }
 
@@ -530,7 +533,9 @@ internal sealed class DashboardApp
 
         if (row == inner.Y)
         {
-            canvas.DrawText(inner.X, row, "Waiting for the first event.", Theme.Muted, maxWidth: inner.Width);
+            canvas.DrawWrapped(inner.X, row, inner.Width, Math.Max(1, inner.Bottom - row),
+                "Nothing has happened yet. Every stage, conflict and agent check-in is recorded here. " +
+                "Press E for the full history.", Theme.Muted);
         }
     }
 
