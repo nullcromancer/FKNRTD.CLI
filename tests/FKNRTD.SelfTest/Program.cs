@@ -159,7 +159,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("An unreadable configuration explains itself", TestUnreadableConfigExplainsItselfAsync),
     ("A missing worktree is not a missing stage", TestMissingWorktreeIsDistinguishedAsync),
     ("A blank task field says what it is", TestBlankTaskFieldsAreExplainedAsync),
-    ("The statusline survives whatever it is sent", TestStatusLineSurvivesBadInputAsync)
+    ("The statusline survives whatever it is sent", TestStatusLineSurvivesBadInputAsync),
+    ("A supplied name cannot reach outside the workspace", TestSuppliedNamesStayInsideTheWorkspaceAsync)
 };
 
 var failures = new List<string>();
@@ -4579,5 +4580,76 @@ static async Task TestStatusLineSurvivesBadInputAsync()
         var real = await LineAsync("{\"context_window\":{\"used_percentage\":38}}").ConfigureAwait(false);
         True(real.Contains("62%", StringComparison.Ordinal),
             $"A real payload is read: {real}");
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// Identifiers that arrive from outside cannot reach outside the workspace.
+/// </summary>
+/// <remarks>
+/// Agent ids, task ids and claim ids all become file names, and all three can be supplied by
+/// something this product did not write: `fknrtd telemetry report -agent ...` is meant to be called
+/// by an external hook, and a task record is a JSON file anybody can edit. SafeName is what stands
+/// between that and the rest of the disk, and it had no test at all.
+/// </remarks>
+static async Task TestSuppliedNamesStayInsideTheWorkspaceAsync()
+{
+    // Built from a character constant rather than written out: a literal backslash in a test
+    // that is about path separators is exactly the thing most likely to be eaten on the way in.
+    var slash = (char)92;
+    var nasty = new[]
+    {
+        "../../etc/passwd",
+        ".." + slash + ".." + slash + "windows" + slash + "system32",
+        "/etc/shadow",
+        "C:" + slash + "Windows" + slash + "System32" + slash + "hosts",
+        "....//....//escape",
+        "with spaces and | pipes",
+        "con",
+        "a:b",
+        "",
+        "   ",
+        "."
+    };
+
+    foreach (var name in nasty)
+    {
+        var safe = StateStore.SafeName(name);
+        True(safe.Length > 0, $"'{name}' produces a usable file name");
+        True(!safe.Contains('/') && !safe.Contains(slash),
+            $"'{name}' keeps no separator: {safe}");
+        True(!safe.Contains("..", StringComparison.Ordinal), $"'{name}' keeps no traversal: {safe}");
+        True(safe.IndexOfAny(Path.GetInvalidFileNameChars()) < 0,
+            $"'{name}' is a legal file name: {safe}");
+    }
+
+    // And the whole path really does stay inside, which is the property that matters rather than
+    // the string transformation on its own.
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { ProjectName = "containment" }).ConfigureAwait(false);
+
+        foreach (var name in nasty)
+        {
+            await store.SaveAgentRuntimeAsync(new AgentRuntimeState { AgentId = name }).ConfigureAwait(false);
+        }
+
+        var inside = Path.GetFullPath(root);
+        foreach (var written in Directory.EnumerateFiles(inside, "*.json", SearchOption.AllDirectories))
+        {
+            True(Path.GetFullPath(written).StartsWith(inside, StringComparison.OrdinalIgnoreCase),
+                $"Everything written stayed inside the workspace: {written}");
+        }
+
+        // Nothing landed beside the workspace either, which is where a single "../" would put it.
+        var beside = Path.GetDirectoryName(inside);
+        if (beside is not null && Directory.Exists(beside))
+        {
+            foreach (var stray in Directory.EnumerateFiles(beside, "passwd*"))
+            {
+                True(false, $"A supplied name escaped the workspace: {stray}");
+            }
+        }
     }).ConfigureAwait(false);
 }
