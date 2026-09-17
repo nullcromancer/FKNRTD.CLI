@@ -3,7 +3,7 @@
 ## 2026-09-17 — the usability programme
 
 Revision: 1.0.0
-Commit verified: `187f1490f2af3abd30e34dbac77db88a2a771b7e`
+Commit verified: `c4f65df09ae0aa437385ec2fcf87d07529b107ba`
 (branch `feature/standalone-workspaces-and-tool-management`)
 
 Environment: .NET SDK 10.0.401, Git 2.55.0.windows.4, Windows 11 (10.0.26200).
@@ -15,7 +15,7 @@ nothing is reported that was not run.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 60/60 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 67/67 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -35,7 +35,7 @@ nothing is reported that was not run.
 | `fknrtd status -json` | Exit 0; complete normalised snapshot. |
 | `fknrtd dashboard -once -no-color -width 100 -height 30` | Exit 0; one frame, no ANSI. |
 | `fknrtd explain brief`, `fknrtd help task diff`, `fknrtd version` | Exit 0. |
-| `fknrtd portal -out <file>` | Exit 0; 73 terms, 44 commands, 26 keys, 25 settings, 24 log entries; 177 KB. |
+| `fknrtd portal -out <file>` | Exit 0; 73 terms, 44 commands, 26 keys, 25 settings, 28 log entries, 4 embedded screens; 201 KB. |
 | `fknrtd taks` | Exit 2; reported the typo and named the commands meant. |
 
 The exit codes documented but never observed were checked directly, because writing one down
@@ -65,7 +65,7 @@ Also verified directly, outside the suite:
 - **A renderer sweep.** `dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz` renders
   every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 9,460 frames
   across 43 scenes — and checks each for the right number of rows, the right display width on
-  every row, and no exception. All 9,460 passed. The suite itself samples five widths and three
+  every row, and no exception. All 10,560 passed. The suite itself samples five widths and three
   heights; this is the wider net.
 - **A landing Git refuses.** A task was run to ready-to-land, a conflicting version of the same
   file was committed to `main`, and the landing was attempted. The task came back Failed with
@@ -73,7 +73,7 @@ Also verified directly, outside the suite:
   were left in the working copy. This is a regression test now; it was written because the
   command used to report that landing as a success and exit 0.
 
-Two more things were checked directly after the scene set grew to cover them, because both had
+Several things were checked directly after the scene set grew to cover them, because they had all
 gone unnoticed for the same reason — the situation was rendered nowhere:
 
 - **A standalone workspace.** It had appeared in one diff panel and nowhere else, so three
@@ -83,6 +83,13 @@ gone unnoticed for the same reason — the situation was rendered nowhere:
   drawing path was exercised nowhere — which is how it went unnoticed that the panel showed the
   agents' raw JSON stream. Three log scenes cover it now: absent, plain shell output, and an
   agent's machine-readable stream.
+- **A roster with nothing installed.** What is on the machine running the suite is not something a
+  test can arrange, so the state a first-time operator meets was unrenderable. The roster takes the
+  resolved answer as an argument now, supplied only by the scene.
+- **The eleven commands nothing had ever run.** The whole agent lifecycle from a shell, claim renew
+  and release, message send and ack, usage set, config show and path. All behave as documented;
+  running them confirmed that `usage set` really does replace an agent's whole snapshot, which it
+  now says out loud.
 
 Independent review: three read-only audits by an OpenAI Codex seat, recorded in
 `docs/collab/LOG.md`. The first found a non-terminating text wrap and eight other real defects
