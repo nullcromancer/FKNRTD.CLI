@@ -131,7 +131,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The agent roster lists and changes the roster", TestAgentManagerAsync),
     ("The settings screen can change what it explains", TestSettingsBrowserAsync),
     ("Coordination can clear the reservations it reports", TestCoordinationReleaseAsync),
-    ("A landing Git refuses is reported as a refusal", TestRefusedLandingAsync)
+    ("A landing Git refuses is reported as a refusal", TestRefusedLandingAsync),
+    ("An empty list explains itself", TestEmptyListsExplainThemselvesAsync)
 };
 
 var failures = new List<string>();
@@ -2815,5 +2816,59 @@ static async Task TestRefusedLandingAsync()
             "The base branch's own file was not overwritten");
         True(!merged.Contains("<<<<<<<", StringComparison.Ordinal),
             "No conflict markers were left in the working copy");
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// What every list command says when there is nothing to list. Three of them used to print
+/// literally nothing, which is the one answer an operator cannot act on: it is indistinguishable
+/// from a command that failed quietly, from one that is still running, and from a workspace that
+/// did not load. An empty list is a fact, and it has a next step.
+/// </summary>
+static async Task TestEmptyListsExplainThemselvesAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "Setting up an empty workspace");
+
+        // Each command, and a word that must appear in what it says about being empty.
+        var commands = new (string[] Arguments, string Subject)[]
+        {
+            (["task", "list"], "task"),
+            (["claim", "list"], "reserv"),
+            (["message", "list"], "message bus"),
+            (["usage", "list"], "reported")
+        };
+
+        foreach (var (arguments, subject) in commands)
+        {
+            var writer = new StringWriter();
+            var name = string.Join(' ', arguments);
+            Equal(0, await QuietlyAsync([.. arguments, "-root", root], writer).ConfigureAwait(false),
+                $"{name} exits 0 on an empty workspace");
+
+            var text = writer.ToString();
+            True(text.Trim().Length > 0, $"{name} says something rather than nothing");
+            True(text.Contains(subject, StringComparison.OrdinalIgnoreCase),
+                $"{name} names what is missing");
+
+            // And it names a command that would produce one, so the answer is actionable.
+            True(text.Contains("fknrtd ", StringComparison.Ordinal),
+                $"{name} names a command that would create one");
+        }
+
+        // The same commands with -json stay machine-readable: an explanation printed into a JSON
+        // stream would break every script reading it.
+        foreach (var (arguments, _) in commands)
+        {
+            var writer = new StringWriter();
+            var name = string.Join(' ', arguments);
+            Equal(0, await QuietlyAsync([.. arguments, "-json", "-root", root], writer).ConfigureAwait(false),
+                $"{name} -json exits 0");
+            var text = writer.ToString().Trim();
+            True(text.StartsWith('[') || text.StartsWith('{'),
+                $"{name} -json emits JSON and not prose");
+        }
     }).ConfigureAwait(false);
 }

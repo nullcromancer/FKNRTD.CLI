@@ -600,7 +600,13 @@ internal static class CommandDispatcher
 
         if (tasks.Length == 0)
         {
-            Console.WriteLine("No FKNRTD.CLI tasks exist.");
+            Console.WriteLine("No tasks exist in this workspace yet.");
+            Console.WriteLine();
+            Console.WriteLine("  A task is one piece of work: a brief you write, three agents, and the");
+            Console.WriteLine("  commands that decide whether the result is correct.");
+            Console.WriteLine();
+            Console.WriteLine("  Describe one:  fknrtd task new        (a guided form that explains each field)");
+            Console.WriteLine("  Or from a script:  fknrtd task create \"Title\" -brief \"What to build\"");
             return 0;
         }
 
@@ -1167,6 +1173,16 @@ internal static class CommandDispatcher
                 {
                     PrintJson(messages);
                 }
+                else if (messages.Count == 0)
+                {
+                    Console.WriteLine("Nothing is on the message bus.");
+                    Console.WriteLine();
+                    Console.WriteLine("  The bus is where one agent leaves a note for another - a hand-off, or a");
+                    Console.WriteLine("  reason something was done the way it was. Nothing writes to it on your");
+                    Console.WriteLine("  behalf, so an empty bus means nobody has recorded anything.");
+                    Console.WriteLine();
+                    Console.WriteLine("  Record one:  fknrtd message send -from <id> -to <id> -text \"...\"");
+                }
                 else
                 {
                     foreach (var message in messages)
@@ -1240,6 +1256,16 @@ internal static class CommandDispatcher
                 {
                     PrintJson(new { claims, conflicts });
                 }
+                else if (claims.Count == 0)
+                {
+                    Console.WriteLine("No paths are reserved in this workspace.");
+                    Console.WriteLine();
+                    Console.WriteLine("  A reservation declares which files an agent is about to touch, so an");
+                    Console.WriteLine("  overlap with another agent can be reported before either one writes.");
+                    Console.WriteLine("  They are advisory: nothing is locked, and nothing waits for one.");
+                    Console.WriteLine();
+                    Console.WriteLine("  Declare one:  fknrtd claim add -agent <id> -path <pattern> -mode write");
+                }
                 else
                 {
                     foreach (var claim in claims)
@@ -1300,6 +1326,17 @@ internal static class CommandDispatcher
                 if (arguments.Has("json"))
                 {
                     PrintJson(snapshots);
+                }
+                else if (snapshots.Count == 0)
+                {
+                    Console.WriteLine("No capacity measurements have been recorded.");
+                    Console.WriteLine();
+                    Console.WriteLine("  FKNRTD.CLI does not ask a provider how much budget you have left; it");
+                    Console.WriteLine("  shows what has been reported to it. Nothing has been yet.");
+                    Console.WriteLine();
+                    Console.WriteLine("  From Claude Code:  fknrtd integration install-claude-statusline");
+                    Console.WriteLine("  From Codex:        fknrtd usage refresh");
+                    Console.WriteLine("  By hand:           fknrtd usage set <agent> -five-hour 80 -source manual");
                 }
                 else
                 {
