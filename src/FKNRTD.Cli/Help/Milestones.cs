@@ -318,6 +318,21 @@ public static class Milestones
             "display honest and lets the state rot. PgUp had the same defect in milder form: it " +
             "ran past the end of the file at ten lines a press, so scrolling up past the top and " +
             "then back down did nothing for a while."),
+
+        new("2026-09-17",
+            "The messages that never reached the screen",
+            "Pressing D set a message saying the pre-flight checks were running, then launched " +
+            "every configured agent to see whether it answered. Pressing U said it was asking " +
+            "Codex for its rate-limit figures, then shelled out to Codex. Neither message was ever " +
+            "drawn: the key handler ran to completion before the loop repainted, so what an " +
+            "operator saw was a frozen dashboard and then an answer.",
+            "A key that starts slow work repaints before it blocks. The repaint is inert until the " +
+            "loop has painted at least once, which keeps it out of the test suite and out of every " +
+            "scriptable command's piped output.",
+            "A frozen screen and a crashed one look identical, and the product had written the " +
+            "reassurance and then thrown it away. This is the same defect as a panel whose measure " +
+            "disagrees with its draw, one layer up: the state said one thing and the pixels said " +
+            "another, and only the pixels are the product."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

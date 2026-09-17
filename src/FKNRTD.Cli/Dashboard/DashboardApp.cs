@@ -122,6 +122,7 @@ internal sealed class DashboardApp
                 Console.Write(RenderCurrent(snapshot, width, height, useColor));
                 previousWidth = width;
                 previousHeight = height;
+                _frame = (width, height, useColor);
 
                 // Each refresh re-reads the workspace's state files and shells out to Git. With a
                 // modal open the operator is reading rather than watching, and most of the frame is
@@ -184,6 +185,31 @@ internal sealed class DashboardApp
 
     private string RenderCurrent(DashboardSnapshot snapshot, int width, int height, bool useColor) =>
         RenderFrame(snapshot, width, height, useColor, _selectedTask, _view, _toast, _overlay);
+
+    /// <summary>The size and colour the loop last painted at. Unset until it has painted once.</summary>
+    private (int Width, int Height, bool UseColor)? _frame;
+
+    /// <summary>
+    /// Repaints now, without waiting for the next refresh. A key that starts slow work - doctor
+    /// launching every agent, the budget check shelling out to Codex, a diff of a large change -
+    /// used to set a message saying so and then block the loop until the work was done, so the
+    /// message never reached the screen. What the operator saw was a frozen dashboard and then the
+    /// answer, which is indistinguishable from a dashboard that has crashed.
+    /// </summary>
+    /// <remarks>
+    /// Does nothing until the loop has painted at least once, which keeps every non-interactive
+    /// path - the scriptable commands, the renderer's test seam - from writing to the console.
+    /// </remarks>
+    private void Paint(DashboardSnapshot snapshot)
+    {
+        if (_frame is not { } frame)
+        {
+            return;
+        }
+
+        Console.Write("\u001b[H");
+        Console.Write(RenderCurrent(snapshot, frame.Width, frame.Height, frame.UseColor));
+    }
 
     private string RenderFrame(
         DashboardSnapshot snapshot,
@@ -1170,7 +1196,9 @@ internal sealed class DashboardApp
                 OpenAgentManager(snapshot);
                 break;
             case "D":
-                _toast = "Running the pre-flight checks...";
+                _toast = "Running the pre-flight checks. Each configured agent is launched to see " +
+                         "whether it answers...";
+                Paint(snapshot);
                 _overlay = Reference.Doctor(await _doctor.RunAsync(cancellationToken).ConfigureAwait(false));
                 _toast = "Ready";
                 break;
@@ -1232,6 +1260,7 @@ internal sealed class DashboardApp
         }
 
         _overlay = Reference.Prompts(task, snapshot.Config, plan);
+        _toast = "Ready";
     }
 
     /// <summary>
@@ -1265,7 +1294,8 @@ internal sealed class DashboardApp
             return;
         }
 
-        _toast = "Reading the change…";
+        _toast = $"Reading the change {task.Id} made...";
+        Paint(snapshot);
         try
         {
             var (lines, truncated) = await _git
@@ -1828,6 +1858,8 @@ internal sealed class DashboardApp
     private async Task ShowUsageAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
     {
         string? error = null;
+        _toast = "Asking Codex for its current rate-limit figures...";
+        Paint(snapshot);
         try
         {
             await _usage.RefreshCodexAsync(cancellationToken).ConfigureAwait(false);

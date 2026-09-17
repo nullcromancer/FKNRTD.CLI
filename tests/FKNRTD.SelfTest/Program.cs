@@ -136,7 +136,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Scrolling a log stays inside the log", TestLogScrollStaysInTheFileAsync),
     ("The help screen writes itself out as a page", TestHelpWritesThePageAsync),
     ("What to do next fits the workspace it is in", TestNextStepFitsTheWorkspaceAsync),
-    ("A task naming a missing agent says so", TestOrphanedAgentIsFlaggedAsync)
+    ("A task naming a missing agent says so", TestOrphanedAgentIsFlaggedAsync),
+    ("The busy repaint stays inside the dashboard loop", TestBusyRepaintStaysInsideTheLoopAsync)
 };
 
 var failures = new List<string>();
@@ -3166,4 +3167,39 @@ static Task TestOrphanedAgentIsFlaggedAsync()
     }
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// A key that starts slow work now repaints before it blocks, so the message saying what it is
+/// doing actually reaches the screen. That repaint must stay inert everywhere the dashboard loop
+/// is not running - this suite, and every scriptable command - or it would write a whole frame
+/// into somebody's piped output.
+/// </summary>
+static async Task TestBusyRepaintStaysInsideTheLoopAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { ProjectName = "paint-test" }).ConfigureAwait(false);
+        var snapshot = new DashboardSnapshot { Config = await store.LoadConfigAsync().ConfigureAwait(false) };
+
+        var app = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+        var captured = new StringWriter();
+        var original = Console.Out;
+        try
+        {
+            Console.SetOut(captured);
+            foreach (var key in new[] { ConsoleKey.D, ConsoleKey.U, ConsoleKey.V, ConsoleKey.P })
+            {
+                await app.HandleKeyAsync(Key(key), snapshot, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        Equal(string.Empty, captured.ToString(),
+            "No frame is painted when the dashboard loop has never painted one");
+    }).ConfigureAwait(false);
 }
