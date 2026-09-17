@@ -329,6 +329,44 @@ public static class Glossary
             "The final stage merges the task branch back. In standalone mode there is no merge and " +
             "the stage records that the verified work is already in place in the folder."),
 
+        new("progress-bar", "The progress bar", Stages,
+            "How many of a task's eight stages are behind it, and nothing more.",
+            "The bar under the stage strip counts the stages that have passed or been skipped and " +
+            "divides by eight. A skipped stage counts as done, which is why a task with no " +
+            "verification commands moves faster through it than one with them. It measures the " +
+            "pipeline's position and not the work: an implement stage that has been running for " +
+            "twenty minutes and one that started a second ago look identical here. Press L to see " +
+            "what the agent is actually doing.",
+            "\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591 75%   six of the eight stages are done"),
+
+        new("resources", "The resource line", Concepts,
+            "What this dashboard costs the machine. Not what the agents cost.",
+            "CPU and RAM for the FKNRTD.CLI process itself, sampled between refreshes and averaged " +
+            "across every core. It is not the agents: those run as their own processes and their " +
+            "cost does not appear here or anywhere else in this product. A number close to zero is " +
+            "the expected reading, because the dashboard spends almost every refresh waiting.",
+            "FKNRTD.CLI CPU 3%  RAM 48 MB"),
+
+        new("ahead-behind", "Ahead and behind", Concepts,
+            "How far your branch has diverged from the remote it tracks.",
+            "The arrows in the header are commits your checkout has that its upstream does not, and " +
+            "commits the upstream has that you do not. They come from Git and describe your own " +
+            "checkout rather than any task: landing adds to the first number, and nothing in this " +
+            "product ever pushes or pulls, so the second only moves when you fetch. A branch with " +
+            "no upstream shows zero for both — there is nothing to compare against, which is not " +
+            "the same as being up to date.",
+            "\u21911\u21930   one commit to push, nothing to pull"),
+
+        new("changed", "Changed files", Concepts,
+            "Uncommitted changes in your own checkout, not in any task's worktree.",
+            "The count in the header is what 'git status' would list at the workspace root: your " +
+            "own uncommitted work. An agent's edits do not appear here, because in a Git workspace " +
+            "they happen in the task's own worktree. It matters at exactly one moment: landing " +
+            "refuses while this is non-zero, unless requireCleanTreeForLanding is off, because " +
+            "uncommitted work at the root is work no stage ever looked at sitting where the " +
+            "verified change is about to arrive.",
+            "\u2206 2 changed   two files with uncommitted edits"),
+
         new("stage-strip", "The stage strip", Stages,
             "The row of eight initials under a task: its whole pipeline in one line.",
             "b is Brief, w Worktree, p Plan, i Implement, v Verify, a Audit, r Ready to land and l " +
