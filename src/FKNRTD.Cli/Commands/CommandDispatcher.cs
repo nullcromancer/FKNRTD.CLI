@@ -754,9 +754,30 @@ internal static class CommandDispatcher
         }
 
         Console.WriteLine("ID           ENABLED  FOUND  KIND       EXECUTABLE");
+        var missing = new List<AgentDefinition>();
         foreach (var agent in config.Agents)
         {
-            Console.WriteLine($"{agent.Id,-12} {(agent.Enabled ? "yes" : "no"),-8} {(ExecutableLocator.Find(agent.Executable) is not null ? "yes" : "no"),-6} {agent.Kind,-10} {agent.Executable}");
+            var found = ExecutableLocator.Find(agent.Executable) is not null;
+            if (!found && agent.Enabled)
+            {
+                missing.Add(agent);
+            }
+
+            Console.WriteLine($"{agent.Id,-12} {(agent.Enabled ? "yes" : "no"),-8} {(found ? "yes" : "no"),-6} {agent.Kind,-10} {agent.Executable}");
+        }
+
+        // A column of yes and no is a diagnosis without a prescription. An enabled agent whose
+        // executable is not on PATH will fail a task at launch, well after it was assigned.
+        if (missing.Count > 0)
+        {
+            Console.WriteLine();
+            foreach (var agent in missing)
+            {
+                Console.WriteLine(
+                    $"  {agent.Id} is enabled but '{agent.Executable}' is not on PATH. A task assigned " +
+                    $"to it would fail at launch. Install it, correct the executable in " +
+                    $"{runtime.Paths.Config}, or run 'fknrtd agent disable {agent.Id}'.");
+            }
         }
 
         return 0;
