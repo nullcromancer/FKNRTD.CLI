@@ -56,6 +56,16 @@ public static class Glossary
             "configure anything first.",
             "<your project>/.fknrtd/config.json"),
 
+        new("what-to-commit", "What to commit", Concepts,
+            "Commit .fknrtd/config.json and .fknrtd/.gitignore. Everything else is already ignored.",
+            "The configuration is a project decision — which agents this repository uses, what " +
+            "verifies its work, which branch tasks start from — so it belongs in the repository and " +
+            "is worth sharing with whoever else works on it. Everything beside it is this machine's " +
+            "own state: task records, stage logs, worktrees, claims, events. Setting a workspace up " +
+            "writes an ignore file inside .fknrtd that excludes all of that, which is why Git shows " +
+            "the directory as untracked but only offers you the two files worth keeping.",
+            "git add .fknrtd/config.json .fknrtd/.gitignore"),
+
         new("mode", "Workspace mode", Concepts,
             "Git mode isolates work in a worktree; standalone mode edits the folder directly.",
             "A workspace is either Git-backed or standalone. Setting one up interactively asks you " +

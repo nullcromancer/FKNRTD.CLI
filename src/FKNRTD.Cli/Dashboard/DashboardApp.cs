@@ -121,7 +121,12 @@ internal sealed class DashboardApp
                 previousWidth = width;
                 previousHeight = height;
 
-                var refresh = TimeSpan.FromMilliseconds(snapshot.Config.DashboardRefreshMilliseconds);
+                // Each refresh re-reads the workspace's state files and shells out to Git. With a
+                // modal open the operator is reading rather than watching, and most of the frame is
+                // covered anyway, so polling the repository once a second buys nothing. Keystrokes
+                // are still noticed immediately; only the unattended redraw slows down.
+                var refresh = TimeSpan.FromMilliseconds(
+                    snapshot.Config.DashboardRefreshMilliseconds * (_overlay is null ? 1 : 4));
                 var until = DateTimeOffset.UtcNow + refresh;
                 while (!_quit && DateTimeOffset.UtcNow < until && !cancellationToken.IsCancellationRequested)
                 {

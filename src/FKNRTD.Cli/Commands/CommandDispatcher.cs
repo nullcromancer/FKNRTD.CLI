@@ -224,6 +224,15 @@ internal static class CommandDispatcher
             ? "  Nothing verifies agent work yet. Add a build or test command when a task asks."
             : "  New tasks are verified by: " + string.Join("; ", config.DefaultVerificationCommands));
         Console.WriteLine($"  Agents configured: {string.Join(", ", config.Agents.Select(agent => agent.Id))}");
+        if (config.Mode == WorkspaceMode.Git)
+        {
+            // The first thing a Git user sees after this is an untracked .fknrtd in git status, and
+            // nothing anywhere told them which half of it is meant to be committed.
+            Console.WriteLine(
+                "  Git will now show .fknrtd as untracked. Commit .fknrtd/config.json and " +
+                ".fknrtd/.gitignore to share this setup with your team; everything else in there is " +
+                "already ignored, because it is this machine's state rather than the project's.");
+        }
 
         if (answers?.Value("statusline") == "yes")
         {
