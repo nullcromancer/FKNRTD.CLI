@@ -304,6 +304,27 @@ public static class CommandCatalog
             ["fknrtd agent add -file examples/generic-agent.json",
              "fknrtd agent add -id local -exe mytool -stdin"], ["agent", "profile", "prompt-delivery"]),
 
+        Entry("fknrtd agent set <id> -exe <path>", "agent set", Agents,
+            "Change what a configured agent runs, or what it is called.",
+            "Rewrites the executable or the display name of an existing definition in " +
+            ".fknrtd/config.json, leaving its profiles, its identifier and whether it is enabled " +
+            "alone. Use it when the tool moved, when it is installed under a different name, or " +
+            "when it is not on PATH and you want to give the full path to it. It does not install " +
+            "anything, does not change how the agent is invoked — the profile arguments are " +
+            "unchanged, so a program that wants its prompt differently needs 'fknrtd agent add' " +
+            "instead — and does not affect a task that has already run. The new command is used " +
+            "the next time a task runs. The executable is not required to exist yet, so a machine " +
+            "can be configured before the tool is installed on it; an unresolvable value is " +
+            "reported and then accepted.",
+            "Run fknrtd doctor to confirm the new command answers. In the dashboard, A then E does " +
+            "the same thing to the highlighted agent.",
+            [new("id", "<agent-id>", "Identifier of a configured agent.", true),
+             new("-exe", "<path>", "Program the agent should run: a name on PATH, or a full path."),
+             new("-name", "<text>", "Display name shown in the roster and on the agent radar.")],
+            ["fknrtd agent set claude -exe /opt/claude/bin/claude",
+             "fknrtd agent set codex -name \"Codex (work account)\""],
+            ["agent", "config"]),
+
         Entry("fknrtd agent enable <id>", "agent enable", Agents,
             "Make a registered agent available for task assignments.",
             "Enables the named definition in .fknrtd/config.json. It does not install or " +

@@ -23,10 +23,13 @@ with no Git at all, had never once been tested.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 90/90 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 91/91 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
+| `fknrtd agent set <id> -exe` / `-name` | Exit 0 for both; the change is written and nothing else moves. |
+| `fknrtd agent set <id>` with neither | Exit 1; named both options that would have changed something. |
+| `fknrtd agent set <unknown id>` | Exit 1; said it is not configured and named what lists the ones that are. |
 | `fknrtd config validate` | Exit 0. |
 | `fknrtd task create` | Exit 0; task created with an `FKN-` identifier. |
 | `fknrtd task list` / `-json` | Exit 0 for both. |
@@ -43,7 +46,7 @@ with no Git at all, had never once been tested.
 | `fknrtd status -json` | Exit 0; complete normalised snapshot. |
 | `fknrtd dashboard -once -no-color -width 100 -height 30` | Exit 0; one frame, no ANSI. |
 | `fknrtd explain brief`, `fknrtd help task diff`, `fknrtd version` | Exit 0. |
-| `fknrtd portal -out <file>` | Exit 0; 80 terms, 44 commands, 26 keys, 25 settings, 31 log entries, 4 embedded screens. |
+| `fknrtd portal -out <file>` | Exit 0; 80 terms, 45 commands, 26 keys, 25 settings, 40 log entries, 4 embedded screens. |
 | `fknrtd taks` | Exit 2; reported the typo and named the commands meant. |
 | `fknrtd task list -jsno` | Exit 2; named the option, suggested `-json`, and did not print a table. |
 | `fknrtd agent list -verbose` | Exit 2; named the option and listed the two the command accepts. |

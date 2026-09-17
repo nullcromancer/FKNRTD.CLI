@@ -109,9 +109,10 @@ public sealed class DoctorService
             // check that can fail here names what to do next, and this is the one most likely to
             // be a new reader's first failure: the tool installs cleanly and configures two agents
             // whether or not either is present.
-            var detail = executable ?? $"'{agent.Executable}' is not on PATH. Install it, or press " +
-                "A in the dashboard and press E to point this entry at the executable you have. " +
-                $"'fknrtd agent disable {agent.Id}' stops it being offered at all.";
+            var detail = executable ?? $"'{agent.Executable}' is not on PATH. Install it, run " +
+                $"'fknrtd agent set {agent.Id} -exe <path>' to point it at the one you have, or " +
+                $"'fknrtd agent disable {agent.Id}' to stop it being offered. In the dashboard, " +
+                "A then E does the same thing.";
             var launchSucceeded = false;
             if (executable is not null)
             {

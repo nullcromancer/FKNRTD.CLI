@@ -575,6 +575,23 @@ public static class Milestones
             "executable you have, or disable it so it stops being offered. Repointing has no " +
             "command-line equivalent, which is why the dashboard is what gets named - 'agent add' " +
             "refuses an identifier that already exists."),
+
+        new("2026-09-17",
+            "Something the dashboard could do and the command line could not",
+            "The roster could repoint an agent at a different executable from the day it was " +
+            "written. The command line could not: 'agent add' refuses an identifier that already " +
+            "exists, and nothing else touched the executable.",
+            "So the advice for the most likely first failure on a new machine - an agent that is " +
+            "not on PATH - was to press A in the dashboard, which is no use in a script, over SSH, " +
+            "or to anybody setting a machine up automatically. 'agent list' did offer a second " +
+            "option, and it was to go and edit the JSON by hand.",
+            "'fknrtd agent set <id> -exe <path>' closes it, and can rename an agent too. It " +
+            "deliberately does not require the executable to resolve, matching 'agent add' rather " +
+            "than the dashboard's stricter editor, because configuring a machine before the tool " +
+            "is installed on it is a reasonable thing to do from a script - an unresolvable value " +
+            "is reported and then accepted, and doctor keeps saying so. Both places that used to " +
+            "name a keystroke or the configuration file now name the command; advice that outlives " +
+            "the reason for it is how a product ends up recommending the worst of its own options."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

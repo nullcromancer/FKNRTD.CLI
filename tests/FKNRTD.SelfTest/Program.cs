@@ -299,7 +299,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Looking up a word leads with the answer", TestLookingUpAWordLeadsWithTheAnswerAsync),
     ("A wrapped list item stays inside its item", TestAWrappedListItemStaysInsideItsItemAsync),
     ("A too-small window says so", TestATooSmallWindowSaysSoAsync),
-    ("Doctor does not tick what is not there", TestDoctorDoesNotTickWhatIsNotThereAsync)
+    ("Doctor does not tick what is not there", TestDoctorDoesNotTickWhatIsNotThereAsync),
+    ("An agent can be repointed from the command line", TestAnAgentCanBeRepointedFromTheCommandLineAsync)
 };
 
 var failures = new List<string>();
@@ -1748,7 +1749,7 @@ static Task TestCommandCatalogAsync()
     {
         ["task"] = ["create", "new", "list", "show", "diff", "prompts", "run", "retry", "cancel",
                     "land", "cleanup"],
-        ["agent"] = ["list", "new", "add", "enable", "disable", "remove"],
+        ["agent"] = ["list", "new", "add", "set", "enable", "disable", "remove"],
         ["message"] = ["send", "ack", "list"],
         ["claim"] = ["add", "renew", "release", "list"],
         ["usage"] = ["refresh", "set", "list"],
@@ -5727,5 +5728,105 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
         var required = checks.Where(check => check.Required && !check.Passed).ToArray();
         True(required.Length >= 3,
             $"The failures are reported as required, not optional ({required.Length} of them)");
+    }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// An agent can be repointed from the command line, not only from the dashboard.
+/// </summary>
+/// <remarks>
+/// The roster could repoint an agent from the day it was written and the command line could not:
+/// 'agent add' refuses an identifier that already exists, and nothing else touched the executable.
+/// So the advice for an agent that is not on PATH was to press A in the dashboard, which is no use
+/// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
+/// reader to go and edit the JSON by hand, which was true and was the worst of the options.
+/// </remarks>
+static async Task TestAnAgentCanBeRepointedFromTheCommandLineAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(Scenes.SampleConfig() with { Mode = WorkspaceMode.Standalone })
+            .ConfigureAwait(false);
+
+        async Task<(int Exit, string Out)> RunAsync(params string[] line)
+        {
+            var originalOut = Console.Out;
+            using var output = new StringWriter();
+            try
+            {
+                Console.SetOut(output);
+                try
+                {
+                    var exit = await CommandDispatcher.ExecuteAsync(
+                            new CliArguments([.. line, "-root", root]),
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+                    return (exit, output.ToString());
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    // What Program.cs does with it: the message is printed and the process exits 1.
+                    // Letting it escape here would report a refusal the command is supposed to make
+                    // as a failure of the test.
+                    return (1, output + exception.Message);
+                }
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+        }
+
+        // The executable changes and nothing else does.
+        var before = await store.LoadConfigAsync().ConfigureAwait(false);
+        var original = before.Agents.First(agent => agent.Id == "claude");
+
+        var repointed = await RunAsync("agent", "set", "claude", "-exe", "some-other-tool").ConfigureAwait(false);
+        Equal(0, repointed.Exit, "Repointing an agent succeeds");
+
+        var after = await store.LoadConfigAsync().ConfigureAwait(false);
+        var changed = after.Agents.First(agent => agent.Id == "claude");
+        Equal("some-other-tool", changed.Executable, "The executable is what was asked for");
+        Equal(original.DisplayName, changed.DisplayName, "and the display name is untouched");
+        Equal(original.Enabled, changed.Enabled, "and whether it is enabled is untouched");
+        Equal(original.Profiles.Count, changed.Profiles.Count, "and its profiles are untouched");
+        Equal(before.Agents.Count, after.Agents.Count, "and no agent was added or lost");
+
+        // A value that does not resolve is accepted and reported, not refused: a machine can be
+        // configured before the tool is installed on it.
+        True(repointed.Out.Contains("not on PATH", StringComparison.Ordinal),
+            "An executable that does not resolve is reported");
+        True(repointed.Out.Contains("doctor", StringComparison.Ordinal),
+            "and the reader is told which command will keep checking");
+
+        // The name changes on its own, without disturbing the executable just set.
+        var renamed = await RunAsync("agent", "set", "claude", "-name", "Claude (work)").ConfigureAwait(false);
+        Equal(0, renamed.Exit, "Renaming an agent succeeds");
+        var named = (await store.LoadConfigAsync().ConfigureAwait(false))
+            .Agents.First(agent => agent.Id == "claude");
+        Equal("Claude (work)", named.DisplayName, "The display name is what was asked for");
+        Equal("some-other-tool", named.Executable, "and the executable set a moment ago survives it");
+
+        // Asking for nothing is a mistake worth naming rather than a no-op that reports success.
+        var nothing = await RunAsync("agent", "set", "claude").ConfigureAwait(false);
+        Equal(1, nothing.Exit, "Changing nothing is refused");
+        True(nothing.Out.Contains("-exe", StringComparison.Ordinal) &&
+             nothing.Out.Contains("-name", StringComparison.Ordinal),
+            "and the refusal names both of the things that could be changed");
+
+        var missing = await RunAsync("agent", "set", "no-such-agent", "-exe", "x").ConfigureAwait(false);
+        Equal(1, missing.Exit, "An agent that is not configured is refused");
+        True(missing.Out.Contains("agent list", StringComparison.Ordinal),
+            "and the refusal names what would show the ones that are");
+
+        // The advice elsewhere points at this command now. Sending a reader to edit JSON by hand
+        // was the only option until this existed, and advice outliving its reason is how a product
+        // ends up recommending the worst of its own choices.
+        var listed = await RunAsync("agent", "list").ConfigureAwait(false);
+        True(listed.Out.Contains("agent set claude -exe", StringComparison.Ordinal),
+            "'agent list' names the command that fixes a missing executable");
+        True(!listed.Out.Contains("correct the executable in", StringComparison.Ordinal),
+            "and no longer sends the reader to the configuration file");
     }).ConfigureAwait(false);
 }

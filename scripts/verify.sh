@@ -59,6 +59,13 @@ row "fknrtd agent list"       0 "$FKNRTD" agent list
 row "fknrtd agent list -json" 0 "$FKNRTD" agent list -json
 row "fknrtd config validate"  0 "$FKNRTD" config validate
 
+# Repointing an agent from the command line. The dashboard could always do this; until
+# 'agent set' existed the command line could not, and doctor's advice had to name a keystroke.
+row "fknrtd agent set -exe"   0 "$FKNRTD" agent set claude -exe some-other-tool
+row "fknrtd agent set -name"  0 "$FKNRTD" agent set claude -name "Claude (work)"
+row "fknrtd agent set (none)" 1 "$FKNRTD" agent set claude
+row "fknrtd agent set <none>" 1 "$FKNRTD" agent set no-such-agent -exe x
+
 # The title is positional here. `task create` has no -json: it prints the identifier in the
 # text it writes, which is what this reads.
 # Everything below needs a task to point at.

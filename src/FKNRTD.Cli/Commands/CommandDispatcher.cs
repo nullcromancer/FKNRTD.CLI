@@ -1155,6 +1155,7 @@ internal static class CommandDispatcher
             "list" or "ls" or "" => await ListAgentsAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "new" => await NewAgentAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "add" => await AddAgentAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
+            "set" => await SetAgentAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
             "enable" => await SetAgentEnabledAsync(runtime, arguments, true, cancellationToken).ConfigureAwait(false),
             "disable" => await SetAgentEnabledAsync(runtime, arguments, false, cancellationToken).ConfigureAwait(false),
             "remove" => await RemoveAgentAsync(runtime, arguments, cancellationToken).ConfigureAwait(false),
@@ -1194,10 +1195,14 @@ internal static class CommandDispatcher
             Console.WriteLine();
             foreach (var agent in missing)
             {
+                // Sending the reader to edit the JSON was the only advice available until
+                // 'agent set' existed. It is not any more, and advice that outlives the reason
+                // for it is how a product ends up recommending the worst of its own options.
                 Console.WriteLine(
                     $"  {agent.Id} is enabled but '{agent.Executable}' is not on PATH. A task assigned " +
-                    $"to it would fail at launch. Install it, correct the executable in " +
-                    $"{runtime.Paths.Config}, or run 'fknrtd agent disable {agent.Id}'.");
+                    $"to it would fail at launch. Install it, run " +
+                    $"'fknrtd agent set {agent.Id} -exe <path>' to point it somewhere else, or " +
+                    $"'fknrtd agent disable {agent.Id}' to stop it being offered.");
             }
         }
 
@@ -1305,6 +1310,92 @@ internal static class CommandDispatcher
         var updated = config with { Agents = config.Agents.Append(agent).ToList() };
         await runtime.Store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
         Console.WriteLine($"√ Added {agent.DisplayName} using {agent.Executable}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Change what a configured agent runs, or what it is called.
+    /// </summary>
+    /// <remarks>
+    /// This closed a real gap rather than adding a convenience. The dashboard roster could repoint
+    /// an agent from the day it was written; the command line could not, because 'agent add'
+    /// refuses an identifier that already exists and nothing else touched the executable. So
+    /// doctor's advice for an agent that is not on PATH had to say "press A in the dashboard",
+    /// which is no use in a script, over SSH, or to anybody automating a machine's setup.
+    ///
+    /// The executable is not required to resolve, which matches 'agent add' rather than the
+    /// dashboard's editor. Configuring a machine for a tool that is not installed on it yet is a
+    /// reasonable thing to do from a script, and doctor is the command whose job is to say what is
+    /// missing. An unresolvable value is reported as a warning so a typo is not silent.
+    /// </remarks>
+    private static async Task<int> SetAgentAsync(
+        FknrtdRuntime runtime,
+        CliArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var id = Required(arguments.Get("id") ?? arguments.Positional(2), "agent ID");
+        var executable = arguments.Get("exe")?.Trim();
+        var displayName = arguments.Get("name")?.Trim();
+
+        if (executable is null && displayName is null)
+        {
+            throw new ArgumentException(
+                "Nothing to change. Give -exe to change what the agent runs, or -name to change " +
+                "what it is called.");
+        }
+
+        if (executable is { Length: 0 })
+        {
+            throw new ArgumentException("An agent needs a program to run, so -exe cannot be empty.");
+        }
+
+        if (displayName is { Length: 0 })
+        {
+            throw new ArgumentException("-name cannot be empty. Omit it to leave the name alone.");
+        }
+
+        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+        var existing = config.Agents.FirstOrDefault(agent =>
+            agent.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            throw new InvalidOperationException(
+                $"Agent '{id}' is not configured. 'fknrtd agent list' shows what is, and " +
+                "'fknrtd agent add' creates a new one.");
+        }
+
+        var updated = config with
+        {
+            Agents = config.Agents.Select(agent => agent.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+                    ? agent with
+                    {
+                        Executable = executable ?? agent.Executable,
+                        DisplayName = displayName ?? agent.DisplayName
+                    }
+                    : agent)
+                .ToList()
+        };
+
+        await runtime.Store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
+
+        if (executable is not null)
+        {
+            Console.WriteLine($"√ {id} now runs {executable}");
+            if (ExecutableLocator.Find(executable) is null)
+            {
+                Console.WriteLine(
+                    $"  '{executable}' is not on PATH and is not a file that exists. That is " +
+                    "allowed, so a machine can be configured before the tool is installed on it, " +
+                    "but nothing will run until it resolves. 'fknrtd doctor' reports it.");
+            }
+        }
+
+        if (displayName is not null)
+        {
+            Console.WriteLine($"√ {id} is now called {displayName}");
+        }
+
+        Console.WriteLine("  Nothing that has already run changes. Run 'fknrtd doctor' to check it answers.");
         return 0;
     }
 
