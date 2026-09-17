@@ -86,6 +86,11 @@ internal static class Reference
         }
 
         blocks.Add(new InfoHeading("What to do next"));
+        // This panel owns every keystroke while it is up, so the keys named below do nothing until
+        // it is closed. Saying so once is cheaper than qualifying each of the seven branches, and
+        // more honest than letting somebody press L here and watch nothing happen.
+        blocks.Add(new InfoParagraph("These keys work on the dashboard behind this panel — press " +
+                                     "Esc to get there.", Theme.Muted));
         blocks.Add(new InfoParagraph(NextStep(task, config)));
 
         blocks.Add(new InfoHeading("What was asked for"));
@@ -203,7 +208,7 @@ internal static class Reference
                         ? "Nothing has happened in this workspace yet. What gets recorded here is the " +
                           "workspace being set up, tasks created and cancelled, workflows started, " +
                           "repaired, failed, made ready and landed, and messages sent. Stage detail " +
-                          "is not here; press I on a task for that."
+                          "is not here; press Esc and then I on a task for that."
                         : "No event matches that. Try a task id, a severity such as error, or one of " +
                           "the recorded types: " + string.Join(", ", EventTypes.All.Take(4)) + " and " +
                           $"{EventTypes.All.Count - 4} more.", Theme.Muted)

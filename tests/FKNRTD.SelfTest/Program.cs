@@ -151,7 +151,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Corrected claims stay corrected", TestCorrectedClaimsStayCorrectedAsync),
     ("The quieter commands work", TestTheQuieterCommandsWorkAsync),
     ("The welcome panel tells the truth", TestWelcomeIsTrueAsync),
-    ("Every command the product names exists", TestNamedCommandsExistAsync)
+    ("Every command the product names exists", TestNamedCommandsExistAsync),
+    ("Every key a screen names can be pressed there", TestNamedKeysArePressableAsync)
 };
 
 var failures = new List<string>();
@@ -4087,6 +4088,62 @@ static Task TestNamedCommandsExistAsync()
         True(CommandCatalog.Find(entry.Name) is not null,
             $"'{entry.Name}' can be looked up by the name it is referred to by");
     }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Every key a screen tells you to press is one that does something on that screen.
+/// </summary>
+/// <remarks>
+/// An open modal owns every keystroke, so the dashboard's own keys are dead while one is up. A
+/// panel saying "press U" is therefore only honest when the panel itself handles U, or when it says
+/// to leave first. The budget panel said "press U to ask Codex directly" while U was the key that
+/// had opened it, and that came to light because somebody read the screen rather than the code.
+/// </remarks>
+static Task TestNamedKeysArePressableAsync()
+{
+    var pattern = new System.Text.RegularExpressions.Regex("[Pp]ress ([A-Z]) ");
+    var checkedAny = false;
+
+    foreach (var scene in Scenes.Names)
+    {
+        var frame = Scenes.Render(scene, 120, 44, colour: false);
+
+        // Only scenes with a modal up: the heavy border is what draws one. On the bare overview
+        // every dashboard key is live, so naming one is always fair.
+        if (!frame.Contains('\u2503'))
+        {
+            continue;
+        }
+
+        var prose = Prose(frame);
+        foreach (System.Text.RegularExpressions.Match match in pattern.Matches(prose))
+        {
+            var key = match.Groups[1].Value;
+            checkedAny = true;
+
+            // Either the panel says how to leave before it starts naming dashboard keys - one
+            // lead-in covers a whole block of advice, which is how it is actually written - or it
+            // handles the key itself, which it advertises in its own footer.
+            var escapeAt = prose.IndexOf("Esc", StringComparison.Ordinal);
+            var saysLeaveFirst = escapeAt >= 0 && escapeAt < match.Index;
+            var offered = FrameLines(frame).Any(line =>
+                line.Contains("Esc close", StringComparison.Ordinal) &&
+                line.Contains(" " + key + " ", StringComparison.Ordinal));
+
+            True(saysLeaveFirst || offered,
+                $"The {scene} screen says 'press {key}' while a panel is up, and either handles " +
+                $"{key} or says how to leave before naming it");
+        }
+    }
+
+    True(checkedAny, "Some panel does name a key, so this test is looking at something");
+
+    // The one that started it.
+    var budget = Prose(Scenes.Render("usage-missing", 110, 40, colour: false));
+    True(!budget.Contains("Press U", StringComparison.Ordinal),
+        "The budget panel does not tell you to press the key that opened it");
 
     return Task.CompletedTask;
 }
