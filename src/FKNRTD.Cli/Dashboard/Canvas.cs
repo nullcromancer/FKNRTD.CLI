@@ -29,7 +29,8 @@ internal sealed class Canvas
         }
     }
 
-    public void DrawText(int x, int y, string text, Rgb color, bool bold = false, int? maxWidth = null)
+    public void DrawText(int x, int y, string text, Rgb color, bool bold = false, int? maxWidth = null,
+        Rgb? background = null)
     {
         if (y < 0 || y >= Height || x >= Width)
         {
@@ -71,7 +72,7 @@ internal sealed class Canvas
             var printable = element.EnumerateRunes().Any(rune => Rune.GetUnicodeCategory(rune) == UnicodeCategory.Control)
                 ? " "
                 : element;
-            SetGlyph(cursor, y, printable, displayWidth, color, bold);
+            SetGlyph(cursor, y, printable, displayWidth, color, bold, background);
             cursor += displayWidth;
             remaining -= displayWidth;
         }
@@ -133,6 +134,99 @@ internal sealed class Canvas
         }
     }
 
+    /// <summary>Paints a background over a region, clearing the glyphs underneath it.</summary>
+    public void Fill(Rect rect, Rgb background)
+    {
+        for (var y = Math.Max(0, rect.Y); y < Math.Min(Height, rect.Bottom); y++)
+        {
+            for (var x = Math.Max(0, rect.X); x < Math.Min(Width, rect.Right); x++)
+            {
+                SetGlyph(x, y, " ", 1, Theme.Foreground, false, background);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draws a modal panel: a filled region inside a heavy border. The dashboard's own sections use
+    /// light box-drawing, so the heavier weight is what makes a panel read as a layer above them
+    /// rather than as one more section competing for attention.
+    /// </summary>
+    public void DrawPanel(Rect rect, string title, Rgb accent, Rgb background)
+    {
+        if (rect.Width < 4 || rect.Height < 3)
+        {
+            return;
+        }
+
+        Fill(rect, background);
+        var right = rect.Right - 1;
+        var bottom = rect.Bottom - 1;
+        DrawText(rect.X, rect.Y, "┏" + new string('━', rect.Width - 2) + "┓", accent, maxWidth: rect.Width,
+            background: background);
+        DrawText(rect.X, bottom, "┗" + new string('━', rect.Width - 2) + "┛", accent, maxWidth: rect.Width,
+            background: background);
+        for (var y = rect.Y + 1; y < bottom; y++)
+        {
+            DrawText(rect.X, y, "┃", accent, maxWidth: 1, background: background);
+            DrawText(right, y, "┃", accent, maxWidth: 1, background: background);
+        }
+
+        if (!string.IsNullOrWhiteSpace(title) && rect.Width > 8)
+        {
+            DrawText(rect.X + 2, rect.Y, " " + Text.Truncate(title, rect.Width - 8) + " ", accent, bold: true,
+                maxWidth: rect.Width - 4, background: background);
+        }
+    }
+
+    /// <summary>
+    /// Recolours a region without changing its glyphs. A modal draws this over the whole frame
+    /// first, so the dashboard stays legible behind the question instead of being replaced by it —
+    /// the operator can still see the task they are acting on while they answer.
+    /// </summary>
+    public void Dim(Rect rect, Rgb foreground, Rgb background)
+    {
+        for (var y = Math.Max(0, rect.Y); y < Math.Min(Height, rect.Bottom); y++)
+        {
+            for (var x = Math.Max(0, rect.X); x < Math.Min(Width, rect.Right); x++)
+            {
+                var cell = _cells[y, x];
+                _cells[y, x] = cell with { Color = foreground, Bold = false, Background = background };
+            }
+        }
+    }
+
+    /// <summary>A horizontal divider inside a panel.</summary>
+    public void DrawRule(int x, int y, int width, Rgb color, Rgb? background = null) =>
+        DrawText(x, y, new string('─', Math.Max(0, width)), color, maxWidth: width, background: background);
+
+    /// <summary>
+    /// Draws word-wrapped text and returns the row after the last one written, so callers can stack
+    /// paragraphs without tracking heights themselves.
+    /// </summary>
+    public int DrawWrapped(
+        int x,
+        int y,
+        int width,
+        int maxRows,
+        string text,
+        Rgb color,
+        bool bold = false,
+        Rgb? background = null)
+    {
+        var row = y;
+        foreach (var line in Text.Wrap(text, width))
+        {
+            if (row >= y + maxRows)
+            {
+                break;
+            }
+
+            DrawText(x, row++, line, color, bold, width, background);
+        }
+
+        return row;
+    }
+
     public string Render(bool useColor)
     {
         var output = new StringBuilder(Width * Height * 2);
@@ -148,9 +242,15 @@ internal sealed class Canvas
                 }
 
                 if (useColor && (previous is null || previous.Value.Color != cell.Color ||
-                                 previous.Value.Bold != cell.Bold))
+                                 previous.Value.Bold != cell.Bold ||
+                                 previous.Value.Background != cell.Background))
                 {
                     output.Append("\u001b[0m");
+                    if (cell.Background is { } fill)
+                    {
+                        output.Append(fill.BackgroundCode);
+                    }
+
                     output.Append(cell.Color.ForegroundCode);
                     if (cell.Bold)
                     {
@@ -188,17 +288,21 @@ internal sealed class Canvas
         SetGlyph(x, y, BoxCharacter(merged).ToString(), 1, color, false);
     }
 
-    private void SetGlyph(int x, int y, string content, int displayWidth, Rgb color, bool bold)
+    private void SetGlyph(int x, int y, string content, int displayWidth, Rgb color, bool bold,
+        Rgb? background = null)
     {
+        // A glyph drawn without an explicit background keeps whatever fill is already beneath it,
+        // so text drawn over a filled panel does not punch holes in the panel.
+        var fill = background ?? _cells[y, x].Background;
         for (var column = x; column < x + displayWidth; column++)
         {
             ClearGlyphAt(column, y);
         }
 
-        _cells[y, x] = new Cell(content, displayWidth, color, bold);
+        _cells[y, x] = new Cell(content, displayWidth, color, bold, fill);
         for (var column = x + 1; column < x + displayWidth; column++)
         {
-            _cells[y, column] = new Cell(string.Empty, 0, color, bold);
+            _cells[y, column] = new Cell(string.Empty, 0, color, bold, fill);
         }
     }
 
@@ -213,7 +317,7 @@ internal sealed class Canvas
         var width = Math.Max(1, _cells[y, start].DisplayWidth);
         for (var column = start; column < Math.Min(Width, start + width); column++)
         {
-            _cells[y, column] = Cell.Blank;
+            _cells[y, column] = Cell.Blank with { Background = _cells[y, column].Background };
         }
     }
 
@@ -259,9 +363,9 @@ internal sealed class Canvas
         Left = 8
     }
 
-    private readonly record struct Cell(string Content, int DisplayWidth, Rgb Color, bool Bold)
+    private readonly record struct Cell(string Content, int DisplayWidth, Rgb Color, bool Bold, Rgb? Background)
     {
-        public static Cell Blank => new(" ", 1, Theme.Foreground, false);
+        public static Cell Blank => new(" ", 1, Theme.Foreground, false, null);
     }
 }
 
@@ -309,6 +413,101 @@ internal static class Text
         }
 
         return output.Append('…').ToString();
+    }
+
+    /// <summary>
+    /// Breaks text into lines that fit <paramref name="width"/> display columns, splitting on spaces
+    /// and honouring explicit newlines. A single word longer than the width is split rather than
+    /// allowed to overflow the panel it is being drawn into.
+    /// </summary>
+    public static IReadOnlyList<string> Wrap(string? value, int width)
+    {
+        if (string.IsNullOrEmpty(value) || width <= 0)
+        {
+            return [];
+        }
+
+        var lines = new List<string>();
+        foreach (var paragraph in value.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (paragraph.Length == 0)
+            {
+                lines.Add(string.Empty);
+                continue;
+            }
+
+            var line = new StringBuilder();
+            var lineWidth = 0;
+            foreach (var word in paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var wordWidth = DisplayWidth(word);
+                if (wordWidth > width)
+                {
+                    if (lineWidth > 0)
+                    {
+                        lines.Add(line.ToString());
+                        line.Clear();
+                        lineWidth = 0;
+                    }
+
+                    foreach (var piece in Split(word, width))
+                    {
+                        lines.Add(piece);
+                    }
+
+                    continue;
+                }
+
+                var separator = lineWidth == 0 ? 0 : 1;
+                if (lineWidth + separator + wordWidth > width)
+                {
+                    lines.Add(line.ToString());
+                    line.Clear();
+                    lineWidth = 0;
+                    separator = 0;
+                }
+
+                if (separator == 1)
+                {
+                    line.Append(' ');
+                }
+
+                line.Append(word);
+                lineWidth += separator + wordWidth;
+            }
+
+            if (lineWidth > 0)
+            {
+                lines.Add(line.ToString());
+            }
+        }
+
+        return lines;
+    }
+
+    /// <summary>Hard-splits a word too long to wrap, never breaking a grapheme cluster.</summary>
+    private static IEnumerable<string> Split(string word, int width)
+    {
+        var piece = new StringBuilder();
+        var pieceWidth = 0;
+        foreach (var element in Elements(word))
+        {
+            var elementWidth = DisplayWidth(element);
+            if (pieceWidth + elementWidth > width && pieceWidth > 0)
+            {
+                yield return piece.ToString();
+                piece.Clear();
+                pieceWidth = 0;
+            }
+
+            piece.Append(element);
+            pieceWidth += elementWidth;
+        }
+
+        if (pieceWidth > 0)
+        {
+            yield return piece.ToString();
+        }
     }
 
     public static int DisplayWidth(string? value)

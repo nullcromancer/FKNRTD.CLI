@@ -315,20 +315,25 @@ public static class Glossary
         // Stage state markers
         new("stagestate.pending", "Pending  ○", StageStates,
             "Not reached yet.",
-            "The pipeline has not arrived at this stage."),
+            "The pipeline has not reached this stage yet. It carries no outcome, and it may still end up " +
+            "being skipped rather than run."),
         new("stagestate.running", "Running  ▶", StageStates,
             "Executing now.",
-            "This stage is the one currently live."),
+            "This is the stage the task is currently in. Its output is being written to the task log as it " +
+            "arrives, which is what the log view shows."),
         new("stagestate.passed", "Passed  ✓", StageStates,
             "Completed successfully.",
-            "The stage finished and met its condition."),
+            "The stage finished and met its condition: the agent exited cleanly, or every verification " +
+            "command returned zero. The pipeline moved on."),
         new("stagestate.failed", "Failed  ✖", StageStates,
             "Completed unsuccessfully. The task stopped here.",
-            "The stage ran and did not meet its condition. Its log holds the output."),
+            "The stage ran and did not meet its condition, so the task stopped here rather than carrying a " +
+            "known-bad result forward. Its log holds the full output that explains why."),
         new("stagestate.skipped", "Skipped  ◇", StageStates,
             "Deliberately not applicable — not a failure.",
-            "The stage did not apply to this workspace, most often the worktree stage in a " +
-            "standalone workspace where there is nothing to isolate."),
+            "The stage did not apply to this workspace and was passed over deliberately. The usual case is " +
+            "the worktree stage in a standalone workspace, where there is no repository to isolate " +
+            "against. A skip is not a failure and does not block landing."),
 
         // Agent state markers
         new("agentstate.offline", "Offline  ○", AgentStates,
@@ -337,28 +342,34 @@ public static class Glossary
             "whether its executable can be found."),
         new("agentstate.idle", "Idle  ○", AgentStates,
             "Present and reporting, with nothing assigned.",
-            "The agent has checked in recently and is available."),
+            "The agent has reported in recently and has no task assigned. It is available for the next one."),
         new("agentstate.planning", "Planning  ◇", AgentStates,
             "Reading the brief and the code, writing a plan. Read-only.",
-            "The agent is executing a plan stage."),
+            "The agent is executing a plan stage. It has read access to the worktree and cannot change " +
+            "anything in it."),
         new("agentstate.running", "Running  ▶", AgentStates,
             "Working. If it is the implementer, it is writing files.",
-            "The agent is executing an implement stage or another long operation."),
+            "The agent is executing an implement stage or another long operation. If it is the implementer " +
+            "on a task, this is the one point in the pipeline where files are being written."),
         new("agentstate.reviewing", "Reviewing  ◆", AgentStates,
             "Auditing finished work read-only.",
-            "The agent is executing an audit stage and will end with a verdict."),
+            "The agent is executing an audit stage read-only, and will end by printing a PASS or FAIL " +
+            "verdict that decides whether the task can be landed."),
         new("agentstate.waiting", "Waiting  ⏸", AgentStates,
             "Paused for something external.",
-            "Usually a rate-limit window or a resource held elsewhere."),
+            "The agent has paused for something outside itself — most often an exhausted rate-limit window, " +
+            "or a path claimed by another agent."),
         new("agentstate.blocked", "Blocked  ■", AgentStates,
             "Cannot proceed. Needs attention.",
-            "The agent has hit something it cannot resolve. The events panel records what."),
+            "The agent has hit something it cannot resolve on its own and has stopped making progress. The " +
+            "events panel records what it ran into."),
         new("agentstate.failed", "Failed  ✖", AgentStates,
             "The last thing it attempted ended badly.",
-            "Its exit code and output are on the task it was working."),
+            "The last thing the agent attempted ended badly. Its exit code and its full output are recorded " +
+            "against the task it was working on."),
         new("agentstate.completed", "Completed  ✓", AgentStates,
             "Finished its assigned stage successfully.",
-            "The agent's part is done."),
+            "The agent finished its assigned stage successfully and handed the task on to the next stage."),
 
         // Coordination
         new("claim", "Claim", Coordination,

@@ -5,12 +5,27 @@ using System.Text.Json;
 using FKNRTD.Commands;
 using FKNRTD.Dashboard;
 using FKNRTD.Domain;
+using FKNRTD.Help;
 using FKNRTD.Services;
 using FKNRTD.Telemetry;
 
 if (args.FirstOrDefault() == "fake-agent")
 {
     return await RunFakeAgentAsync(args.Skip(1).ToArray()).ConfigureAwait(false);
+}
+
+// A developer affordance: print one named frame so a rendering change can be looked at rather than
+// only asserted about. It is also how the documentation's captured frames are produced.
+//   dotnet run --project tests/FKNRTD.SelfTest -c Release -- render wizard 110 34
+if (args.FirstOrDefault() == "render")
+{
+    Console.OutputEncoding = new UTF8Encoding(false);
+    Console.WriteLine(Scenes.Render(
+        args.ElementAtOrDefault(1) ?? "overview",
+        int.TryParse(args.ElementAtOrDefault(2), out var sceneWidth) ? sceneWidth : 120,
+        int.TryParse(args.ElementAtOrDefault(3), out var sceneHeight) ? sceneHeight : 34,
+        colour: args.Contains("-color")));
+    return 0;
 }
 
 var tests = new (string Name, Func<Task> Run)[]
@@ -36,7 +51,14 @@ var tests = new (string Name, Func<Task> Run)[]
     ("End-to-end isolated workflow", TestWorkflowAsync),
     ("Standalone workflow runs without Git", TestStandaloneWorkflowAsync),
     ("Bare invocation opens the current folder", TestDefaultInvocationAsync),
-    ("Bare invocation in a repository roots at the top level", TestDefaultInvocationInRepositoryAsync)
+    ("Bare invocation in a repository roots at the top level", TestDefaultInvocationInRepositoryAsync),
+    ("Glossary explains every marker the dashboard draws", TestGlossaryIsCompleteAsync),
+    ("Every guided step carries its own explanation", TestWizardStepsAreExplainedAsync),
+    ("Overlay frames preserve display width and topology", TestOverlayFramesAsync),
+    ("A refused answer says what was wrong with it", TestWizardValidationExplainsItselfAsync),
+    ("Destructive actions take the whole word and nothing else", TestConfirmationRequiresTheWordAsync),
+    ("Text field edits and maps the caret through a wrap", TestTextFieldEditingAsync),
+    ("An empty workspace tells you what to do", TestEmptyWorkspaceGuidesAsync)
 };
 
 var failures = new List<string>();
@@ -167,7 +189,7 @@ static Task TestDashboardRendererAsync()
         Tasks = tasks,
         CapturedAt = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)
     };
-    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!);
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
     var widths = new[] { 60, 72, 84, 100, 119, 120, 140, 200 };
     var heights = new[] { 20, 32, 48 };
 
@@ -233,7 +255,7 @@ static Task TestDashboardRendererAsync()
             textWriter.WriteLine("active agent log line");
         }
 
-        var logRenderer = new DashboardApp(null!, null!, null!, null!, null!, store);
+        var logRenderer = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!);
         var logFrame = logRenderer.RenderLog(snapshot, 72, 20, selectedTaskIndex: 10);
         True(logFrame.Contains("active agent log line", StringComparison.Ordinal), "Shared active task log rendering");
     }
@@ -1061,4 +1083,235 @@ static async Task WithTemporaryDirectoryAsync(Func<string, Task> action)
             // Keep failed cleanup recoverable in the operating system's temporary directory.
         }
     }
+}
+
+// ── Usability layer ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// The invariant the whole guided experience rests on: a field the operator is asked to fill in
+/// must have an explanation to show under it. A step naming a term that does not exist would render
+/// a bare question, which is the exact failure this layer was built to remove.
+/// </summary>
+static Task TestWizardStepsAreExplainedAsync()
+{
+    var config = Scenes.SampleConfig();
+    foreach (var wizard in new[] { TaskWizard.Create(config), TaskWizard.Message(config) })
+    {
+        // Walk the whole form by accepting each default, and require an explanation at every step.
+        for (var guard = 0; guard < 20; guard++)
+        {
+            var frame = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!)
+                .Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, wizard);
+            True(frame.Contains("WHAT THIS IS", StringComparison.Ordinal),
+                "Every wizard step shows an explanation");
+            True(frame.Contains("Esc cancel", StringComparison.Ordinal),
+                "Every wizard step says how to leave it");
+            if (Scenes.Press(wizard, ConsoleKey.Enter) == OverlayResult.Submit)
+            {
+                break;
+            }
+        }
+    }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Every glossary term a wizard step names must resolve, and every entry must actually say
+/// something. A summary that does not fit one line breaks the inline hint it is sized for.
+/// </summary>
+static Task TestGlossaryIsCompleteAsync()
+{
+    foreach (var entry in Glossary.All)
+    {
+        // A summary is an inline hint under a form field, so it has to fit one line on an 80-column
+        // terminal. Marker entries — the single glyphs in a legend — are legitimately terser than a
+        // concept the operator has to reason about.
+        var marker = entry.Category is Glossary.StageStates or Glossary.AgentStates;
+        True(entry.Summary.Length > (marker ? 10 : 20), $"Glossary summary is substantive for '{entry.Term}'");
+        True(entry.Summary.Length <= 96, $"Glossary summary fits one line for '{entry.Term}'");
+        True(entry.Detail.Length > 40, $"Glossary detail present for '{entry.Term}'");
+        True(Glossary.Find(entry.Term) is not null, $"Glossary lookup for '{entry.Term}'");
+    }
+
+    Equal(Glossary.All.Count, Glossary.All.Select(entry => entry.Term).Distinct(StringComparer.Ordinal).Count(),
+        "Glossary terms are unique");
+
+    // Every marker the dashboard can draw has to be explainable, or the legend lies by omission.
+    foreach (var status in Enum.GetValues<WorkflowStatus>())
+    {
+        True(Glossary.Find("status." + status.ToString().ToLowerInvariant()) is not null,
+            $"Glossary covers status {status}");
+    }
+
+    foreach (var stage in Enum.GetValues<WorkflowStage>())
+    {
+        True(Glossary.Find("stage." + stage.ToString().ToLowerInvariant()) is not null,
+            $"Glossary covers stage {stage}");
+    }
+
+    foreach (var state in Enum.GetValues<StageState>())
+    {
+        True(Glossary.Find("stagestate." + state.ToString().ToLowerInvariant()) is not null,
+            $"Glossary covers stage state {state}");
+    }
+
+    foreach (var state in Enum.GetValues<AgentActivityState>().Where(value => value != AgentActivityState.Unknown))
+    {
+        True(Glossary.Find("agentstate." + state.ToString().ToLowerInvariant()) is not null,
+            $"Glossary covers agent state {state}");
+    }
+
+    foreach (var binding in Keymap.All)
+    {
+        True(binding.Detail.Length > 40, $"Keymap explains '{binding.Key}'");
+    }
+
+    Equal(Keymap.All.Count, Keymap.All.Select(binding => binding.Key).Distinct(StringComparer.Ordinal).Count(),
+        "Keymap keys are unique");
+    True(Keymap.Footer.Length is > 3 and < 9, "Keymap footer is a usable size");
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Overlays are drawn onto the same canvas as the dashboard, so the alignment guarantee has to hold
+/// with one open. A modal that shifts a box border by a column is the bug this suite exists to catch.
+/// </summary>
+static Task TestOverlayFramesAsync()
+{
+    foreach (var scene in Scenes.Names)
+    {
+        foreach (var width in new[] { 60, 84, 100, 120, 160 })
+        {
+            foreach (var height in new[] { 20, 30, 44 })
+            {
+                var frame = Scenes.Render(scene, width, height, colour: false);
+                var lines = FrameLines(frame);
+                Equal(height, lines.Length, $"Scene '{scene}' line count at {width}x{height}");
+                True(lines.All(line => Text.DisplayWidth(line) == width),
+                    $"Scene '{scene}' line width at {width}x{height}");
+                True(!frame.Contains(''), $"Scene '{scene}' emits no escapes without colour");
+            }
+        }
+
+        // The same frame in colour must still be the same shape once the escapes are stripped.
+        var coloured = Scenes.Render(scene, 120, 34, colour: true);
+        True(coloured.Contains(''), $"Scene '{scene}' emits colour when asked");
+    }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>A refused answer has to say what was wrong with it, not merely refuse.</summary>
+static Task TestWizardValidationExplainsItselfAsync()
+{
+    var wizard = TaskWizard.Create(Scenes.SampleConfig());
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+
+    // An empty title cannot advance the form.
+    Equal(OverlayResult.Continue, Scenes.Press(wizard, ConsoleKey.Enter), "Empty title does not advance");
+    var frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, wizard);
+    True(frame.Contains("A title is required", StringComparison.Ordinal), "Empty title explains itself");
+    True(frame.Contains("Step 1 of", StringComparison.Ordinal), "Refused step stays on step 1");
+
+    // A title advances; a one-word brief does not.
+    Scenes.Type(wizard, "Add rate limiting");
+    Equal(OverlayResult.Continue, Scenes.Press(wizard, ConsoleKey.Enter), "Valid title advances");
+    Scenes.Type(wizard, "do it");
+    Equal(OverlayResult.Continue, Scenes.Press(wizard, ConsoleKey.Enter), "Too-short brief does not advance");
+    frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, wizard);
+    True(frame.Contains("too short to act on", StringComparison.Ordinal), "Short brief explains itself");
+
+    // Going back restores what was already typed rather than discarding it.
+    Scenes.Press(wizard, ConsoleKey.Tab, shift: true);
+    frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, wizard);
+    True(frame.Contains("Add rate limiting", StringComparison.Ordinal), "Stepping back keeps the earlier answer");
+    return Task.CompletedTask;
+}
+
+/// <summary>A destructive action must take the whole word and nothing else.</summary>
+static Task TestConfirmationRequiresTheWordAsync()
+{
+    var confirmation = new Confirmation("LAND THIS TASK", Theme.Green, "FKN-1 — Subject",
+        "This merges the task branch into main and cannot be undone from here.", "LAND", "land");
+    var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+
+    Equal(OverlayResult.Continue, Scenes.Press(confirmation, ConsoleKey.Enter), "Bare Enter does not confirm");
+    Scenes.Type(confirmation, "y");
+    Equal(OverlayResult.Continue, Scenes.Press(confirmation, ConsoleKey.Enter), "'y' does not confirm");
+    Scenes.Type(confirmation, "es");
+    Equal(OverlayResult.Continue, Scenes.Press(confirmation, ConsoleKey.Enter), "'yes' does not confirm");
+    var frame = renderer.Render(Scenes.EmptySnapshot(), 110, 40, useColor: false, confirmation);
+    True(frame.Contains("That is not the word", StringComparison.Ordinal), "A wrong word explains itself");
+
+    for (var index = 0; index < 3; index++)
+    {
+        Scenes.Press(confirmation, ConsoleKey.Backspace);
+    }
+
+    Scenes.Type(confirmation, "LAND");
+    Equal(OverlayResult.Submit, Scenes.Press(confirmation, ConsoleKey.Enter), "The exact word confirms");
+    Equal(OverlayResult.Cancel, Scenes.Press(confirmation, ConsoleKey.Escape), "Escape backs out");
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// The caret's character index has to map back to the row and column the wrap put it on, or typing
+/// into a wrapped brief draws the caret somewhere the operator is not.
+/// </summary>
+static Task TestTextFieldEditingAsync()
+{
+    var field = new TextField(multiline: false);
+    foreach (var character in "hello world")
+    {
+        field.HandleKey(new ConsoleKeyInfo(character, ConsoleKey.NoName, false, false, false));
+    }
+
+    Equal("hello world", field.Value, "Typed value");
+    Equal(11, field.Cursor, "Caret after typing");
+
+    field.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.LeftArrow, false, false, true));
+    Equal(6, field.Cursor, "Ctrl+Left jumps a word");
+    field.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.Home, false, false, false));
+    Equal(0, field.Cursor, "Home");
+    field.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.Delete, false, false, false));
+    Equal("ello world", field.Value, "Delete removes forwards");
+    field.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.End, false, false, false));
+    field.HandleKey(new ConsoleKeyInfo('\b', ConsoleKey.Backspace, false, false, true));
+    Equal("ello ", field.Value, "Ctrl+Backspace removes a word");
+
+    // Enter belongs to the form, not to a single-line field.
+    True(!field.HandleKey(new ConsoleKeyInfo('\r', ConsoleKey.Enter, false, false, false)),
+        "Enter is not consumed by a single-line field");
+
+    // A multi-line field takes a modified Enter for a paragraph break and leaves plain Enter alone.
+    var brief = new TextField(multiline: true);
+    True(brief.HandleKey(new ConsoleKeyInfo('\r', ConsoleKey.Enter, false, true, false)),
+        "Alt+Enter is consumed by a multi-line field");
+    Equal("\n", brief.Value, "Alt+Enter inserts a newline");
+    True(!brief.HandleKey(new ConsoleKeyInfo('\r', ConsoleKey.Enter, false, false, false)),
+        "Plain Enter still belongs to the form");
+
+    // Wrapping must cover every character exactly once, with no gaps and no overlaps.
+    const string paragraph = "The brief is the prompt.\nEvery agent on the task reads it, so say what done looks like.";
+    foreach (var width in new[] { 8, 17, 40, 200 })
+    {
+        var lines = TextField.Layout(paragraph, width);
+        True(lines.All(line => Text.DisplayWidth(paragraph.Substring(line.Start, line.Length)) <= width),
+            $"Wrapped line fits {width} columns");
+        var rebuilt = string.Concat(lines.Select(line => paragraph.Substring(line.Start, line.Length)));
+        Equal(paragraph.Replace("\n", string.Empty).Replace(" ", string.Empty),
+            rebuilt.Replace(" ", string.Empty), $"Wrap at {width} loses no characters");
+    }
+
+    return Task.CompletedTask;
+}
+
+/// <summary>An empty workspace must tell a first-time operator what to do, not just show nothing.</summary>
+static Task TestEmptyWorkspaceGuidesAsync()
+{
+    var frame = Scenes.Render("empty", 120, 34, colour: false);
+    True(frame.Contains("Press N", StringComparison.Ordinal), "Empty workspace names the next key");
+    True(frame.Contains("explained", StringComparison.Ordinal), "Empty workspace promises the explanation");
+    return Task.CompletedTask;
 }

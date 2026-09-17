@@ -13,6 +13,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <!-- TEMPORARY: the Codex seat is mid-write in Portal/. Remove this line once it reports done. -->
+    <Compile Remove="Portal\**" />
     <ProjectReference Include="..\FKNRTD.Core\FKNRTD.Core.csproj" />
   </ItemGroup>
 </Project>

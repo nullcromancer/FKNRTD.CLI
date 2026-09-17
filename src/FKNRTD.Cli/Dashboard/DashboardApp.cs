@@ -1,4 +1,5 @@
 using FKNRTD.Domain;
+using FKNRTD.Help;
 using FKNRTD.Services;
 using FKNRTD.Telemetry;
 
@@ -12,6 +13,8 @@ internal sealed class DashboardApp
     private readonly MessageService _messages;
     private readonly UsageService _usage;
     private readonly StateStore _store;
+    private readonly WorktreeService _worktrees;
+    private readonly DoctorService _doctor;
     private readonly Dictionary<string, Task> _running = new(StringComparer.OrdinalIgnoreCase);
     private int _selectedTask;
     private string? _selectedTaskId;
@@ -20,13 +23,24 @@ internal sealed class DashboardApp
     private DashboardView _view = DashboardView.Overview;
     private CancellationTokenSource? _sessionCancellation;
 
+    /// <summary>
+    /// The modal layer. Every question the dashboard asks is an overlay drawn over the frame, so the
+    /// operator never drops out of the alternate screen to answer an unexplained prompt on a blank
+    /// terminal — and can still see the task they are acting on while they answer.
+    /// </summary>
+    private IOverlay? _overlay;
+
+    private Func<IOverlay, CancellationToken, Task>? _overlayCompleted;
+
     public DashboardApp(
         DashboardSnapshotService snapshots,
         Orchestrator orchestrator,
         TaskService tasks,
         MessageService messages,
         UsageService usage,
-        StateStore store)
+        StateStore store,
+        WorktreeService worktrees,
+        DoctorService doctor)
     {
         _snapshots = snapshots;
         _orchestrator = orchestrator;
@@ -34,6 +48,8 @@ internal sealed class DashboardApp
         _messages = messages;
         _usage = usage;
         _store = store;
+        _worktrees = worktrees;
+        _doctor = doctor;
     }
 
     public async Task RunAsync(
@@ -106,16 +122,20 @@ internal sealed class DashboardApp
     }
 
     internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor) =>
-        RenderFrame(snapshot, width, height, useColor, 0, DashboardView.Overview, "Ready");
+        RenderFrame(snapshot, width, height, useColor, 0, DashboardView.Overview, "Ready", null);
 
     internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor, int selectedTaskIndex) =>
-        RenderFrame(snapshot, width, height, useColor, selectedTaskIndex, DashboardView.Overview, "Ready");
+        RenderFrame(snapshot, width, height, useColor, selectedTaskIndex, DashboardView.Overview, "Ready", null);
 
     internal string RenderLog(DashboardSnapshot snapshot, int width, int height, int selectedTaskIndex) =>
-        RenderFrame(snapshot, width, height, useColor: false, selectedTaskIndex, DashboardView.Logs, "Ready");
+        RenderFrame(snapshot, width, height, useColor: false, selectedTaskIndex, DashboardView.Logs, "Ready", null);
+
+    /// <summary>Renders a frame with a modal layer over it. The renderer's test seam for overlays.</summary>
+    internal string Render(DashboardSnapshot snapshot, int width, int height, bool useColor, IOverlay overlay) =>
+        RenderFrame(snapshot, width, height, useColor, 0, DashboardView.Overview, "Ready", overlay);
 
     private string RenderCurrent(DashboardSnapshot snapshot, int width, int height, bool useColor) =>
-        RenderFrame(snapshot, width, height, useColor, _selectedTask, _view, _toast);
+        RenderFrame(snapshot, width, height, useColor, _selectedTask, _view, _toast, _overlay);
 
     private string RenderFrame(
         DashboardSnapshot snapshot,
@@ -124,7 +144,8 @@ internal sealed class DashboardApp
         bool useColor,
         int selectedTaskIndex,
         DashboardView view,
-        string toast)
+        string toast,
+        IOverlay? overlay)
     {
         width = Math.Max(60, width);
         height = Math.Max(20, height);
@@ -150,7 +171,8 @@ internal sealed class DashboardApp
             RenderNarrow(canvas, snapshot, body, selectedTaskIndex);
         }
 
-        RenderFooter(canvas, footer, view, toast);
+        RenderFooter(canvas, footer, view, toast, overlay, snapshot, selectedTaskIndex);
+        overlay?.Draw(canvas, new Rect(0, 0, width, height));
         return canvas.Render(useColor);
     }
 
@@ -554,19 +576,105 @@ internal sealed class DashboardApp
         return tail.ToArray();
     }
 
-    private static void RenderFooter(Canvas canvas, Rect rect, DashboardView view, string toast)
+    private static void RenderFooter(
+        Canvas canvas,
+        Rect rect,
+        DashboardView view,
+        string toast,
+        IOverlay? overlay,
+        DashboardSnapshot snapshot,
+        int selectedTaskIndex)
     {
-        canvas.DrawText(rect.X, rect.Y,
-            Text.Truncate("[↑↓] Select  [Enter] Run  [N] New  [C] Cancel  [G] Land  [M] Message  [L] Logs  [U] Usage  [Tab] View  [Q] Quit", rect.Width),
-            Theme.Blue,
-            bold: true,
-            maxWidth: rect.Width);
-        canvas.DrawText(rect.X, rect.Y + 1, Text.Truncate($"{view} | {toast}", rect.Width), Theme.Muted,
-            maxWidth: rect.Width);
+        // The legend is drawn key-by-key so the key itself reads brighter than its meaning. On a
+        // narrow terminal the trailing entries are dropped rather than the whole line truncated
+        // mid-word, which keeps the first and most useful keys visible at every width.
+        var x = rect.X;
+        foreach (var (key, meaning) in Keymap.Footer)
+        {
+            var keyWidth = Text.DisplayWidth(key);
+            var meaningWidth = Text.DisplayWidth(meaning);
+            if (x + keyWidth + meaningWidth + 3 > rect.Right)
+            {
+                break;
+            }
+
+            canvas.DrawText(x, rect.Y, key, Theme.Blue, bold: true, maxWidth: keyWidth);
+            x += keyWidth + 1;
+            canvas.DrawText(x, rect.Y, meaning, Theme.Muted, maxWidth: meaningWidth);
+            x += meaningWidth + 2;
+        }
+
+        var mode = overlay?.Mode ?? view.ToString();
+        var hint = overlay is null ? NextStepHint(snapshot, selectedTaskIndex) : null;
+        var line = hint is null ? $"{mode} · {toast}" : $"{mode} · {toast} · {hint}";
+        canvas.DrawText(rect.X, rect.Y + 1, Text.Truncate(line, rect.Width),
+            hint is null ? Theme.Muted : Theme.Cyan, maxWidth: rect.Width);
+    }
+
+    /// <summary>
+    /// The single most useful thing the operator could do next, given what is on screen. A command
+    /// center that shows state without saying what to do with it leaves a first-time user stuck on
+    /// a screen full of correct information.
+    /// </summary>
+    private static string? NextStepHint(DashboardSnapshot snapshot, int selectedTaskIndex)
+    {
+        if (snapshot.Conflicts.Any(conflict => conflict.Kind == ConflictKind.Collision))
+        {
+            return "Two agents are writing the same file — press C to cancel one of them";
+        }
+
+        if (snapshot.Config.Agents.Count == 0)
+        {
+            return "No agents are configured — quit and run: fknrtd agent add";
+        }
+
+        if (snapshot.Tasks.Count == 0)
+        {
+            return "Press N to describe the first piece of work. Every field is explained as you go";
+        }
+
+        var task = SelectedTask(snapshot, selectedTaskIndex);
+        return task?.Status switch
+        {
+            WorkflowStatus.Queued => "This task has never run — press Enter to start it",
+            WorkflowStatus.Running => "Press L to watch the live log for this task",
+            WorkflowStatus.Failed => "Press L to read why it failed, then R to retry from the failed stage",
+            WorkflowStatus.ReadyToLand => "Verified and audited — press G to merge it into " +
+                                          (string.IsNullOrWhiteSpace(task.BaseRef) ? "the workspace" : task.BaseRef),
+            WorkflowStatus.Cancelled => "Cancelled — press R to retry it",
+            WorkflowStatus.Landed => "Landed — press X to remove its worktree and reclaim the disk space",
+            _ => null
+        };
     }
 
     private async Task HandleKeyAsync(ConsoleKeyInfo key, DashboardSnapshot snapshot, CancellationToken cancellationToken)
     {
+        // An open overlay owns every keystroke. Nothing behind it can be triggered by accident while
+        // the operator is part-way through answering a question.
+        if (_overlay is { } overlay)
+        {
+            switch (overlay.HandleKey(key))
+            {
+                case OverlayResult.Cancel:
+                    _overlay = null;
+                    _overlayCompleted = null;
+                    _toast = "Cancelled. Nothing was changed.";
+                    break;
+                case OverlayResult.Submit:
+                    var completed = _overlayCompleted;
+                    _overlay = null;
+                    _overlayCompleted = null;
+                    if (completed is not null)
+                    {
+                        await completed(overlay, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    break;
+            }
+
+            return;
+        }
+
         switch (key.Key)
         {
             case ConsoleKey.Q:
@@ -588,17 +696,28 @@ internal sealed class DashboardApp
                 if (SelectedTask(snapshot) is { } cancelTask)
                 {
                     await _tasks.RequestCancellationAsync(cancelTask.Id, cancellationToken).ConfigureAwait(false);
-                    _toast = $"Cancellation requested for {cancelTask.Id}";
+                    _toast = $"Cancellation requested for {cancelTask.Id}. The current stage finishes first.";
                 }
+                else
+                {
+                    _toast = "No task is selected.";
+                }
+
                 break;
             case ConsoleKey.G:
-                await LandSelectedAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                OpenLandConfirmation(snapshot);
+                break;
+            case ConsoleKey.X:
+                OpenCleanupConfirmation(snapshot);
+                break;
+            case ConsoleKey.R:
+                await RetrySelectedAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 break;
             case ConsoleKey.N:
-                await CreateTaskInteractivelyAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                OpenNewTaskWizard(snapshot);
                 break;
             case ConsoleKey.M:
-                await SendMessageInteractivelyAsync(cancellationToken).ConfigureAwait(false);
+                OpenMessageWizard(snapshot);
                 break;
             case ConsoleKey.L:
                 _view = _view == DashboardView.Logs ? DashboardView.Overview : DashboardView.Logs;
@@ -621,19 +740,31 @@ internal sealed class DashboardApp
         var task = SelectedTask(snapshot);
         if (task is null)
         {
-            _toast = "No task selected";
+            _toast = "No task is selected. Press N to create one.";
             return;
         }
 
+        StartTask(task, snapshot.Config.MaxParallelAgents);
+    }
+
+    private void StartTask(WorkflowTask task, int maxParallel)
+    {
         if (_running.ContainsKey(task.Id) || task.Status == WorkflowStatus.Running)
         {
-            _toast = $"{task.Id} is already running";
+            _toast = $"{task.Id} is already running. Press L to watch its log.";
             return;
         }
 
-        if (_running.Count >= snapshot.Config.MaxParallelAgents)
+        if (task.Status == WorkflowStatus.Landed)
         {
-            _toast = $"Parallel limit reached ({snapshot.Config.MaxParallelAgents})";
+            _toast = $"{task.Id} has already landed. Create a new task for further work.";
+            return;
+        }
+
+        if (_running.Count >= maxParallel)
+        {
+            _toast = $"Already running {maxParallel} tasks, which is this workspace's limit. " +
+                     "Wait for one to finish, or raise maxParallelAgents in .fknrtd/config.json.";
             return;
         }
 
@@ -650,84 +781,189 @@ internal sealed class DashboardApp
                 _toast = $"{task.Id}: {exception.Message}";
             }
         }, cancellationToken);
-        _toast = $"Started {task.Id}";
+        _toast = $"Started {task.Id}. Press L to watch it work.";
     }
 
-    private async Task LandSelectedAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    private void OpenLandConfirmation(DashboardSnapshot snapshot)
     {
         var task = SelectedTask(snapshot);
         if (task is null)
         {
-            _toast = "No task selected";
+            _toast = "No task is selected.";
             return;
         }
 
-        var answer = Prompt($"Merge {task.BranchName} into {task.BaseRef}? Type LAND to confirm: ");
-        if (!answer.Equals("LAND", StringComparison.Ordinal))
+        if (task.Status != WorkflowStatus.ReadyToLand)
         {
-            _toast = "Landing cancelled";
+            _toast = $"{task.Id} is {task.Status}. Only a verified and audited task can be landed.";
+            return;
+        }
+
+        var git = snapshot.Config.Mode == WorkspaceMode.Git;
+        _overlay = new Confirmation(
+            "LAND THIS TASK",
+            Theme.Green,
+            $"{task.Id} — {task.Title}",
+            git
+                ? $"This merges the branch {task.BranchName} into {task.BaseRef}. It is the only action " +
+                  "that changes your base branch, and the dashboard cannot undo it afterwards."
+                : "This records that the verified work already present in this folder is final. There is " +
+                  "no branch and no merge in a standalone workspace.",
+            "LAND",
+            "land",
+            git
+                ? $"The finished diff is in {task.WorktreePath} if you want to read it before you decide."
+                : null);
+        _overlayCompleted = async (_, token) =>
+        {
+            try
+            {
+                await _orchestrator.LandAsync(task.Id, token).ConfigureAwait(false);
+                _toast = $"Landed {task.Id}. Press X to remove its worktree when you are done with it.";
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _toast = "Could not land: " + exception.Message;
+            }
+        };
+    }
+
+    private void OpenCleanupConfirmation(DashboardSnapshot snapshot)
+    {
+        var task = SelectedTask(snapshot);
+        if (task is null)
+        {
+            _toast = "No task is selected.";
+            return;
+        }
+
+        if (task.Status == WorkflowStatus.Running)
+        {
+            _toast = $"{task.Id} is still running. Cancel it with C first.";
+            return;
+        }
+
+        if (snapshot.Config.Mode == WorkspaceMode.Standalone)
+        {
+            _toast = "Nothing to remove. A standalone workspace has no worktree or branch.";
+            return;
+        }
+
+        _overlay = new Confirmation(
+            "REMOVE THE WORKTREE",
+            Theme.Amber,
+            $"{task.Id} — {task.Title}",
+            $"This deletes the directory {task.WorktreePath} and nothing else. The task record, its " +
+            "stage logs and its Git branch are all kept, so you can still read what happened.",
+            "REMOVE",
+            "cleanup");
+        _overlayCompleted = async (_, token) =>
+        {
+            try
+            {
+                await _worktrees.RemoveAsync(task, force: false, snapshot.Config.Mode, token).ConfigureAwait(false);
+                _toast = $"Removed the worktree for {task.Id}. Its branch and log were kept.";
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _toast = "Could not remove the worktree: " + exception.Message;
+            }
+        };
+    }
+
+    private async Task RetrySelectedAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        var task = SelectedTask(snapshot);
+        if (task is null)
+        {
+            _toast = "No task is selected.";
             return;
         }
 
         try
         {
-            await _orchestrator.LandAsync(task.Id, cancellationToken).ConfigureAwait(false);
-            _toast = $"Landed {task.Id}";
+            await _tasks.ResetFailedStagesAsync(task.Id, cancellationToken).ConfigureAwait(false);
+            _toast = $"Reset the failed stages of {task.Id}. Press Enter to run it again.";
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            _toast = exception.Message;
+            _toast = "Could not retry: " + exception.Message;
         }
     }
 
-    private async Task CreateTaskInteractivelyAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
+    /// <summary>
+    /// Opens the guided task builder behind N. The form itself is defined in
+    /// <see cref="TaskWizard"/>; what belongs here is only what to do with the answers.
+    /// </summary>
+    private void OpenNewTaskWizard(DashboardSnapshot snapshot)
     {
-        var title = Prompt("Task title: ");
-        var brief = Prompt("Task brief: ");
-        var lead = Prompt($"Lead agent [{snapshot.Config.Agents.FirstOrDefault()?.Id ?? "claude"}]: ");
-        var implementer = Prompt($"Implementer [{snapshot.Config.Agents.Skip(1).FirstOrDefault()?.Id ?? "codex"}]: ");
-        var auditor = Prompt($"Auditor [{snapshot.Config.Agents.FirstOrDefault()?.Id ?? "claude"}]: ");
-        var verification = Prompt("Verification command (blank for none): ");
-        lead = string.IsNullOrWhiteSpace(lead) ? snapshot.Config.Agents.FirstOrDefault()?.Id ?? "claude" : lead;
-        implementer = string.IsNullOrWhiteSpace(implementer)
-            ? snapshot.Config.Agents.Skip(1).FirstOrDefault()?.Id ?? lead
-            : implementer;
-        auditor = string.IsNullOrWhiteSpace(auditor) ? lead : auditor;
-        try
+        var config = snapshot.Config;
+        if (!config.Agents.Any(agent => agent.Enabled))
         {
-            var task = await _tasks.CreateAsync(
-                    title,
-                    brief,
-                    lead,
-                    implementer,
-                    auditor,
-                    string.IsNullOrWhiteSpace(verification) ? [] : [verification],
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            _selectedTask = 0;
-            _selectedTaskId = task.Id;
-            _toast = $"Created {task.Id}";
+            _toast = "No agents are enabled. Quit and run: fknrtd agent list";
+            return;
         }
-        catch (Exception exception)
+
+        var git = config.Mode == WorkspaceMode.Git;
+        _overlay = TaskWizard.Create(config);
+        _overlayCompleted = async (completed, token) =>
         {
-            _toast = exception.Message;
-        }
+            var wizard = (Wizard)completed;
+            try
+            {
+                var task = await _tasks.CreateAsync(
+                        wizard.Value("title"),
+                        wizard.Value("brief"),
+                        wizard.Value("lead"),
+                        wizard.Value("implementer"),
+                        wizard.Value("auditor"),
+                        wizard.Lines("verify"),
+                        git ? wizard.Value("base") : null,
+                        int.TryParse(wizard.Value("repairs"), out var rounds) ? rounds : null,
+                        token)
+                    .ConfigureAwait(false);
+                _selectedTask = 0;
+                _selectedTaskId = task.Id;
+                if (wizard.Value("then") == "run")
+                {
+                    StartTask(task, config.MaxParallelAgents);
+                    return;
+                }
+
+                _toast = $"Created {task.Id}. Press Enter to run it, or I to read it back.";
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _toast = "Could not create the task: " + exception.Message;
+            }
+        };
     }
 
-    private async Task SendMessageInteractivelyAsync(CancellationToken cancellationToken)
+    private void OpenMessageWizard(DashboardSnapshot snapshot)
     {
-        var from = Prompt("From agent: ");
-        var to = Prompt("To agent: ");
-        var text = Prompt("Message: ");
-        try
+        if (snapshot.Config.Agents.Count == 0)
         {
-            await _messages.SendAsync(from, to, text, cancellationToken: cancellationToken).ConfigureAwait(false);
-            _toast = $"Message sent from {from} to {to}";
+            _toast = "No agents are configured, so there is nobody to send a message between.";
+            return;
         }
-        catch (Exception exception)
+
+        _overlay = TaskWizard.Message(snapshot.Config);
+        _overlayCompleted = async (completed, token) =>
         {
-            _toast = exception.Message;
-        }
+            var wizard = (Wizard)completed;
+            try
+            {
+                await _messages
+                    .SendAsync(wizard.Value("from"), wizard.Value("to"), wizard.Value("text"),
+                        cancellationToken: token)
+                    .ConfigureAwait(false);
+                _toast = $"Recorded a message from {wizard.Value("from")} to {wizard.Value("to")}.";
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _toast = "Could not send the message: " + exception.Message;
+            }
+        };
     }
 
     private async Task RefreshUsageAsync(CancellationToken cancellationToken)
@@ -742,15 +978,6 @@ internal sealed class DashboardApp
         {
             _toast = "Usage refresh failed: " + exception.Message;
         }
-    }
-
-    private static string Prompt(string label)
-    {
-        ExitScreen();
-        Console.Write(label);
-        var value = Console.ReadLine() ?? string.Empty;
-        EnterScreen();
-        return value.Trim();
     }
 
     private WorkflowTask? SelectedTask(DashboardSnapshot snapshot) => SelectedTask(snapshot, _selectedTask);

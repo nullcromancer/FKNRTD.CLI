@@ -1,0 +1,247 @@
+using FKNRTD.Dashboard;
+using FKNRTD.Domain;
+
+/// <summary>
+/// Named dashboard frames, built from one sample workspace. Two jobs: the self-tests assert against
+/// them, and a developer can print one to look at a rendering change rather than only assert about
+/// it. Because the overlays here are the same objects the dashboard opens, a scene cannot drift away
+/// from what the operator actually sees.
+/// </summary>
+internal static class Scenes
+{
+    public static readonly string[] Names =
+        ["overview", "empty", "wizard", "wizard-brief", "wizard-auditor", "message", "land", "remove"];
+
+    public static string Render(string name, int width, int height, bool colour)
+    {
+        var snapshot = name == "empty" ? EmptySnapshot() : Populated();
+        var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!);
+        var overlay = Overlay(name, snapshot.Config);
+        return overlay is null
+            ? renderer.Render(snapshot, width, height, colour)
+            : renderer.Render(snapshot, width, height, colour, overlay);
+    }
+
+    /// <summary>The overlay a scene opens, already advanced to the step worth looking at.</summary>
+    private static IOverlay? Overlay(string name, FknrtdConfig config)
+    {
+        switch (name)
+        {
+            case "wizard":
+                return TaskWizard.Create(config);
+            case "wizard-brief":
+            {
+                var wizard = TaskWizard.Create(config);
+                Type(wizard, "Add rate limiting to the login endpoint");
+                Press(wizard, ConsoleKey.Enter);
+                Type(wizard, "Requests to POST /login from one IP are limited to 5 a minute.");
+                return wizard;
+            }
+            case "wizard-auditor":
+            {
+                var wizard = TaskWizard.Create(config);
+                Type(wizard, "Add rate limiting to the login endpoint");
+                Press(wizard, ConsoleKey.Enter);
+                Type(wizard, "Requests to POST /login from one IP are limited to 5 a minute.");
+                Press(wizard, ConsoleKey.Enter);
+                Press(wizard, ConsoleKey.Enter);
+                Press(wizard, ConsoleKey.Enter);
+                return wizard;
+            }
+            case "message":
+                return TaskWizard.Message(config);
+            case "land":
+                return new Confirmation(
+                    "LAND THIS TASK",
+                    Theme.Green,
+                    "FKN-20260917-101500-a1b2 — Add rate limiting to the login endpoint",
+                    "This merges the branch fknrtd/rate-limiting into main. It is the only action that " +
+                    "changes your base branch, and the dashboard cannot undo it afterwards.",
+                    "LAND",
+                    "land",
+                    "The finished diff is in .fknrtd/worktrees/FKN-20260917-101500-a1b2 if you want to " +
+                    "read it before you decide.");
+            case "remove":
+                return new Confirmation(
+                    "REMOVE THE WORKTREE",
+                    Theme.Amber,
+                    "FKN-20260917-101500-a1b2 — Add rate limiting to the login endpoint",
+                    "This deletes the directory .fknrtd/worktrees/FKN-20260917-101500-a1b2 and nothing " +
+                    "else. The task record, its stage logs and its Git branch are all kept.",
+                    "REMOVE",
+                    "cleanup");
+            default:
+                return null;
+        }
+    }
+
+    public static void Type(IOverlay overlay, string text)
+    {
+        foreach (var character in text)
+        {
+            overlay.HandleKey(new ConsoleKeyInfo(character, ConsoleKey.NoName, false, false, false));
+        }
+    }
+
+    public static OverlayResult Press(IOverlay overlay, ConsoleKey key, bool shift = false, bool alt = false) =>
+        overlay.HandleKey(new ConsoleKeyInfo(
+            key switch
+            {
+                ConsoleKey.Enter => '\r',
+                ConsoleKey.Backspace => '\b',
+                ConsoleKey.Tab => '\t',
+                _ => '\0'
+            },
+            key,
+            shift,
+            alt,
+            control: false));
+
+    public static FknrtdConfig SampleConfig() => new()
+    {
+        ProjectName = "aurora-api",
+        Mode = WorkspaceMode.Git,
+        DefaultBaseRef = "main",
+        DefaultVerificationCommands = ["dotnet build", "dotnet test --no-build"],
+        Agents = BuiltInAgents.CreateDefaults().ToList()
+    };
+
+    public static DashboardSnapshot EmptySnapshot() => new()
+    {
+        Config = SampleConfig(),
+        Git = new GitSnapshot
+        {
+            RepositoryName = "aurora-api",
+            RepositoryRoot = "/src/aurora-api",
+            IsRepository = true,
+            Branch = "main"
+        },
+        CapturedAt = new DateTimeOffset(2026, 9, 17, 10, 15, 0, TimeSpan.Zero)
+    };
+
+    private static DashboardSnapshot Populated()
+    {
+        var captured = new DateTimeOffset(2026, 9, 17, 10, 15, 0, TimeSpan.Zero);
+        var tasks = new[]
+        {
+            Task("FKN-20260917-101500-a1b2", "Add rate limiting to the login endpoint",
+                WorkflowStatus.ReadyToLand, WorkflowStage.ReadyToLand),
+            Task("FKN-20260917-094212-c3d4", "Replace the hand-rolled CSV parser",
+                WorkflowStatus.Running, WorkflowStage.Implement),
+            Task("FKN-20260916-221030-e5f6", "Fix the timezone drift in scheduled reports",
+                WorkflowStatus.Failed, WorkflowStage.Verify),
+            Task("FKN-20260916-180422-g7h8", "Document the webhook retry policy",
+                WorkflowStatus.Landed, WorkflowStage.Land)
+        };
+
+        return new DashboardSnapshot
+        {
+            Config = SampleConfig(),
+            Git = new GitSnapshot
+            {
+                RepositoryName = "aurora-api",
+                RepositoryRoot = "/src/aurora-api",
+                IsRepository = true,
+                Branch = "main",
+                ChangedFiles = 2,
+                Ahead = 1
+            },
+            Tasks = tasks,
+            Agents =
+            [
+                new AgentRuntimeState
+                {
+                    AgentId = "claude",
+                    State = AgentActivityState.Reviewing,
+                    Role = AgentRole.Auditor,
+                    Intent = "Auditing the rate-limiting change",
+                    UpdatedAt = captured
+                },
+                new AgentRuntimeState
+                {
+                    AgentId = "codex",
+                    State = AgentActivityState.Running,
+                    Role = AgentRole.Implementer,
+                    Intent = "Rewriting CsvReader.Parse",
+                    UpdatedAt = captured
+                }
+            ],
+            Usage =
+            [
+                new UsageSnapshot
+                {
+                    AgentId = "claude", ContextRemainingPercent = 62, FiveHourRemainingPercent = 71,
+                    WeeklyRemainingPercent = 48, Source = "statusline", UpdatedAt = captured
+                },
+                new UsageSnapshot
+                {
+                    AgentId = "codex", FiveHourRemainingPercent = 34, WeeklyRemainingPercent = 80,
+                    Source = "codex", UpdatedAt = captured
+                }
+            ],
+            Messages =
+            [
+                new AgentMessage
+                {
+                    FromAgentId = "codex", ToAgentId = "claude", Text = "Ready for audit",
+                    Delivery = MessageDelivery.Delivered, CreatedAt = captured.AddMinutes(-4)
+                }
+            ],
+            Events =
+            [
+                new FknrtdEvent
+                {
+                    Severity = EventSeverity.Success, Type = "stage.passed",
+                    Message = "Verification passed for FKN-20260917-101500-a1b2",
+                    Timestamp = captured.AddMinutes(-2)
+                },
+                new FknrtdEvent
+                {
+                    Severity = EventSeverity.Error, Type = "stage.failed",
+                    Message = "dotnet test exited 1 for FKN-20260916-221030-e5f6",
+                    Timestamp = captured.AddMinutes(-31)
+                }
+            ],
+            Resources = new ResourceSnapshot
+            {
+                ProcessCpuPercent = 3, WorkingSetBytes = 48L * 1024 * 1024, ProcessorCount = 16,
+                CapturedAt = captured
+            },
+            CapturedAt = captured
+        };
+    }
+
+    private static WorkflowTask Task(string id, string title, WorkflowStatus status, WorkflowStage stage)
+    {
+        var task = new WorkflowTask
+        {
+            Id = id,
+            Title = title,
+            LeadAgentId = "claude",
+            ImplementerAgentId = "codex",
+            AuditorAgentId = "claude",
+            BaseRef = "main",
+            BranchName = "fknrtd/" + id.ToLowerInvariant(),
+            WorktreePath = ".fknrtd/worktrees/" + id,
+            VerificationCommands = ["dotnet build", "dotnet test --no-build"],
+            Status = status,
+            CurrentStage = stage
+        };
+
+        foreach (var record in task.Stages)
+        {
+            record.State = record.Stage < stage
+                ? StageState.Passed
+                : record.Stage == stage
+                    ? status == WorkflowStatus.Failed ? StageState.Failed : StageState.Running
+                    : StageState.Pending;
+        }
+
+        if (status == WorkflowStatus.Failed)
+        {
+            task.LastError = "dotnet test --no-build exited 1: 2 of 418 tests failed.";
+        }
+
+        return task;
+    }
+}

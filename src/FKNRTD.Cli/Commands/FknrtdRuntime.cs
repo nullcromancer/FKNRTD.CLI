@@ -21,7 +21,7 @@ internal sealed class FknrtdRuntime
         Orchestrator = new Orchestrator(Store, Git, Worktrees, Agents, Processes);
         Snapshots = new DashboardSnapshotService(Store, Git, Claims, Messages);
         Doctor = new DoctorService(Store, Git, Processes);
-        Dashboard = new DashboardApp(Snapshots, Orchestrator, Tasks, Messages, Usage, Store);
+        Dashboard = new DashboardApp(Snapshots, Orchestrator, Tasks, Messages, Usage, Store, Worktrees, Doctor);
     }
 
     public FknrtdPaths Paths { get; }
