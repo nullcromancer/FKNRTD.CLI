@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
     ];
 
     /// <summary>
@@ -200,6 +200,19 @@ internal static class Scenes
                 ]);
             case "welcome":
                 return Reference.Welcome(config);
+            case "setup-no-git":
+                // Git is not installed at all. This is the situation where the operator has the
+                // least idea what is happening and the fewest options, so it is the one most worth
+                // explaining - and it used to skip the question silently.
+                return SetupWizard.Create(new SetupWizard.Detected(
+                    "/src/notes", IsRepository: false, GitInstalled: false, string.Empty,
+                    [], HasClaude: true));
+            case "setup-no-repo":
+                // Git is installed; this folder is simply not a repository. Same lack of choice,
+                // completely different fix.
+                return SetupWizard.Create(new SetupWizard.Detected(
+                    "/src/notes", IsRepository: false, GitInstalled: true, string.Empty,
+                    [], HasClaude: true));
             case "setup":
                 return SetupWizard.Create(SampleDetection());
             case "agent":

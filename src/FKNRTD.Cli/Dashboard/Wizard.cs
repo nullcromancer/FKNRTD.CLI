@@ -540,7 +540,10 @@ internal sealed class Wizard : IOverlay
         // entirely — which on a two-option step means hiding that there was a choice at all.
         var visible = Math.Max(1, Math.Min(options.Count, lastRow - row + 1));
         var first = Math.Clamp(_choice - visible / 2, 0, Math.Max(0, options.Count - visible));
-        var labelWidth = Math.Min(16, options.Max(option => Text.DisplayWidth(option.Label)) + 1);
+        // The cap only binds on a label longer than it, so raising it changes nothing for the forms
+        // whose labels are short and stops truncating the ones that are not: "Yes, edit this folder"
+        // was arriving as "Yes, edit this ...".
+        var labelWidth = Math.Min(22, options.Max(option => Text.DisplayWidth(option.Label)) + 1);
 
         for (var index = first; index < first + visible && index < options.Count; index++)
         {

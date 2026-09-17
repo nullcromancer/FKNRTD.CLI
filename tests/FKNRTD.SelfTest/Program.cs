@@ -144,7 +144,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A panel never names a key that does nothing there", TestPanelsDoNotNameDeadKeysAsync),
     ("Every state the dashboard draws is explained", TestEveryDrawnStateIsExplainedAsync),
     ("The offline guide shows real screens", TestPortalShowsRealScreensAsync),
-    ("The agent builder can describe a piped agent", TestAgentBuilderAsync)
+    ("The agent builder can describe a piped agent", TestAgentBuilderAsync),
+    ("Setup explains why there is no choice of mode", TestSetupExplainsWhyThereIsNoChoiceAsync)
 };
 
 var failures = new List<string>();
@@ -3600,6 +3601,49 @@ static Task TestAgentBuilderAsync()
         Key = "id", Question = "?", GlossaryTerm = "agent"
     }]));
     Equal(string.Empty, bare.Id, "An unanswered form builds an empty id rather than throwing");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Setting up a folder that cannot be Git-backed. The mode question was skipped entirely when there
+/// was no repository, which meant the decision that most changes how safe this is got made in
+/// silence - and the two reasons it can be forced look identical from outside while having
+/// completely different fixes. GitInstalled existed on the input record for exactly this and was
+/// never read.
+/// </summary>
+static Task TestSetupExplainsWhyThereIsNoChoiceAsync()
+{
+    var noGit = Prose(Scenes.Render("setup-no-git", 100, 28, colour: false));
+    var noRepo = Prose(Scenes.Render("setup-no-repo", 100, 28, colour: false));
+
+    // Both say the same thing about what will happen.
+    foreach (var frame in new[] { noGit, noRepo })
+    {
+        True(frame.Contains("Agents will edit this folder", StringComparison.Ordinal),
+            "It says what will happen to the folder");
+        True(frame.Contains("UNTIL THEN", StringComparison.Ordinal),
+            "And what to do about it in the meantime");
+        True(frame.Contains("Yes, edit this folder", StringComparison.Ordinal),
+            "The single option is not truncated");
+    }
+
+    // And each says the thing that is true only of it, because the fixes are different.
+    True(noGit.Contains("Git is not installed on this machine", StringComparison.Ordinal),
+        "A machine without Git is told that Git is missing");
+    True(noGit.Contains("until Git is installed", StringComparison.Ordinal),
+        "And what would change it");
+
+    True(noRepo.Contains("There is no Git repository at /src/notes", StringComparison.Ordinal),
+        "A folder that is not a repository is told that instead");
+    True(noRepo.Contains("git init", StringComparison.Ordinal), "And what would change it");
+    True(!noRepo.Contains("Git is not installed", StringComparison.Ordinal),
+        "It does not blame a missing Git that is in fact present");
+
+    // A repository still gets the real choice rather than a one-option formality.
+    var repo = Prose(Scenes.Render("setup", 100, 28, colour: false));
+    True(repo.Contains("Git-backed", StringComparison.Ordinal), "A repository is offered Git mode");
+    True(repo.Contains("Standalone", StringComparison.Ordinal), "and standalone");
 
     return Task.CompletedTask;
 }

@@ -30,20 +30,55 @@ internal static class SetupWizard
             new()
             {
                 Key = "mode",
-                Question = "How should agents be kept away from your working copy?",
+                Question = detected.IsRepository
+                    ? "How should agents be kept away from your working copy?"
+                    : "Agents will edit this folder directly. Is that what you want?",
                 GlossaryTerm = "mode",
                 Input = WizardInput.Choice,
-                // With no repository there is no choice to offer, only a consequence to state.
-                Applies = _ => detected.IsRepository,
-                Default = _ => "git",
-                Options = _ =>
-                [
-                    new WizardOption("git", "Git-backed",
-                        "each task gets its own branch and checkout; your files never move",
-                        Recommended: true),
-                    new WizardOption("standalone", "Standalone",
-                        "agents edit this folder directly, with nothing to roll back to")
-                ]
+                Default = _ => detected.IsRepository ? "git" : "standalone",
+
+                // The step used to be skipped entirely when there was no repository, which meant the
+                // one decision that most changes how safe this is got made silently - and the two
+                // reasons it can be forced look identical from the outside while having completely
+                // different fixes.
+                Explanation = detected.IsRepository
+                    ? "A Git-backed workspace gives every task its own branch and its own checkout, " +
+                      "so an agent can edit, build and break things without touching the files you " +
+                      "have open. A standalone workspace has nothing to isolate against: agents " +
+                      "work in this folder, and landing records that the verified work is already " +
+                      "here. Git mode is strictly safer."
+                    : detected.GitInstalled
+                        ? $"There is no Git repository at {detected.Root}, so there is nothing to " +
+                          "branch from and no second checkout to give an agent. Agents will edit " +
+                          "this folder in place. Git is installed here, so 'git init' followed by a " +
+                          "first commit would let you set this up again with real isolation — which " +
+                          "is worth doing before you let anything loose on work you care about."
+                        : "Git is not installed on this machine, so isolation is not available at " +
+                          "all: there is no way to give an agent its own checkout. Agents will edit " +
+                          "this folder in place. Installing Git and running 'git init' here would " +
+                          "let you set this up again with every task in its own branch.",
+                Example = detected.IsRepository
+                    ? string.Empty
+                    : "Commit anything you care about before running a task, or work on a copy. " +
+                      "There is no branch to throw away if an agent does something you did not want.",
+                ExampleCaption = "UNTIL THEN",
+                Options = _ => detected.IsRepository
+                    ?
+                    [
+                        new WizardOption("git", "Git-backed",
+                            "each task gets its own branch and checkout; your files never move",
+                            Recommended: true),
+                        new WizardOption("standalone", "Standalone",
+                            "agents edit this folder directly, with nothing to roll back to")
+                    ]
+                    : new[]
+                    {
+                        new WizardOption("standalone", "Yes, edit this folder",
+                            detected.GitInstalled
+                                ? "the only option here until this folder is a Git repository"
+                                : "the only option here until Git is installed",
+                            Recommended: true)
+                    }
             },
             new()
             {
