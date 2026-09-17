@@ -114,8 +114,12 @@ internal static class HelpCommand
         Console.WriteLine();
         Write("EXIT CODES", Theme.Violet, useColor, bold: true);
         Console.WriteLine();
-        Console.WriteLine("  0 success   2 unknown command or a failed required check   " +
-                          "3 a failed or collided outcome   130 cancelled");
+        Console.WriteLine("  0  success");
+        Console.WriteLine("  1  an error was raised — read the diagnostic; bad configuration, a");
+        Console.WriteLine("     missing task or a refused confirmation all land here");
+        Console.WriteLine("  2  unknown command, or a required pre-flight check failed");
+        Console.WriteLine("  3  the operation ran and its outcome was a failure or a collision");
+        Console.WriteLine("  130  cancelled");
     }
 
     private static void Group(string group, int width, bool useColor)

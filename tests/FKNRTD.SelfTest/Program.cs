@@ -1653,6 +1653,13 @@ static async Task TestHelpSurfacesAsync()
         True(text.Contains(expected, StringComparison.Ordinal), $"The help overview names '{expected}'");
     }
 
+    // Every exit code the product can return has to appear. 1 was missing, which is the one a script
+    // is most likely to hit, because it is what an unhandled diagnostic becomes.
+    foreach (var code in new[] { "  0 ", "  1 ", "  2 ", "  3 ", "  130 " })
+    {
+        True(text.Contains(code, StringComparison.Ordinal), $"The help overview documents exit code{code}");
+    }
+
     // Every catalog entry has to render through the detail view without throwing.
     foreach (var entry in CommandCatalog.All)
     {
