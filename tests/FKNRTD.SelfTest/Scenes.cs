@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "land-landed", "remove", "remove-landed",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "welcome-standalone", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
     ];
 
     /// <summary>
@@ -228,6 +228,14 @@ internal static class Scenes
                         Detail = "not installed. Usage figures for Claude will stay blank."
                     }
                 ]);
+            case "welcome-standalone":
+                // The welcome panel's standalone branch, which said the folder is not a Git
+                // repository - true only when standalone was forced rather than chosen.
+                return Reference.Welcome(config with
+                {
+                    Mode = WorkspaceMode.Standalone,
+                    DefaultBaseRef = string.Empty
+                });
             case "welcome":
                 return Reference.Welcome(config);
             case "setup-no-git":

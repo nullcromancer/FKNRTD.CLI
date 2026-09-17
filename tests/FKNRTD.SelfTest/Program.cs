@@ -149,7 +149,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A confirmation finishes its sentences at any width", TestConfirmationFinishesItsSentencesAsync),
     ("Doctor says where it got to", TestDoctorReadsWellAsync),
     ("Corrected claims stay corrected", TestCorrectedClaimsStayCorrectedAsync),
-    ("The quieter commands work", TestTheQuieterCommandsWorkAsync)
+    ("The quieter commands work", TestTheQuieterCommandsWorkAsync),
+    ("The welcome panel tells the truth", TestWelcomeIsTrueAsync)
 };
 
 var failures = new List<string>();
@@ -3942,4 +3943,47 @@ static async Task TestTheQuieterCommandsWorkAsync()
         True(!quiet.ToString().Contains("now unknown", StringComparison.Ordinal),
             "A complete report says nothing about dropping anything");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// The welcome panel, which is the first thing a new operator reads and the last part of the
+/// reference nobody had fact-checked. Three of its sentences asserted things the workspace does not
+/// guarantee.
+/// </summary>
+static Task TestWelcomeIsTrueAsync()
+{
+    var git = Prose(Scenes.Render("welcome", 118, 40, colour: false));
+    var standalone = Prose(Scenes.Render("welcome-standalone", 118, 40, colour: false));
+
+    // Standalone is a choice the setup form offers inside a repository, so the panel must not
+    // assert that a standalone workspace is not one - and must not then advise making it one.
+    True(!standalone.Contains("it is not a Git repository", StringComparison.Ordinal),
+        "The standalone welcome does not assert why the workspace is standalone");
+    True(standalone.Contains("or because standalone was chosen", StringComparison.Ordinal),
+        "It names both reasons");
+    True(standalone.Contains("commit anything you care about", StringComparison.Ordinal),
+        "and says what to do either way");
+
+    // Nothing requires the auditor to be a different agent from the implementer, so the summary
+    // cannot promise a third one.
+    foreach (var frame in new[] { git, standalone })
+    {
+        True(!frame.Contains("A third agent audits", StringComparison.Ordinal),
+            "The summary does not promise three distinct agents");
+        True(frame.Contains("By default that is not the agent which wrote the change",
+                StringComparison.Ordinal),
+            "It says the separation is a default");
+        True(frame.Contains("while the repair budget lasts", StringComparison.Ordinal),
+            "and that failed work only goes back while there is budget for it");
+    }
+
+    // The last step is about merging in one mode and not the other.
+    True(git.Contains("Nothing merges without that", StringComparison.Ordinal),
+        "A Git workspace is told nothing merges without LAND");
+    True(standalone.Contains("Nothing is recorded as finished without that", StringComparison.Ordinal),
+        "A standalone workspace is told what LAND does there instead");
+    True(!standalone.Contains("Nothing merges without that", StringComparison.Ordinal),
+        "and is not told about a merge that will not happen");
+
+    return Task.CompletedTask;
 }

@@ -85,11 +85,20 @@ public sealed class DoctorService
             Name = "Git repository",
             Passed = isRepository || !gitRequired,
             Required = gitRequired,
-            Detail = isRepository
-                ? _store.Paths.Root
-                : gitRequired
-                    ? $"{_store.Paths.Root} is not a Git repository"
-                    : "Not required in a standalone workspace"
+            // A standalone workspace is either a choice made inside a repository or the only option
+            // there was, and those have completely different routes back to isolation. Reporting
+            // "not required" for both told an operator nothing about which one they were in.
+            Detail = gitRequired
+                ? isRepository
+                    ? _store.Paths.Root
+                    : $"{_store.Paths.Root} is not a Git repository"
+                : isRepository
+                    ? "Not required here, but this folder is a Git repository — so a Git-backed " +
+                      "workspace, with a branch and a checkout per task, is available with " +
+                      "'fknrtd init -git -force'"
+                    : "Not required in a standalone workspace, and this folder is not a Git " +
+                      "repository. 'git init' here, then 'fknrtd init -git -force', would give " +
+                      "every task its own branch and checkout"
         });
 
         foreach (var agent in config?.Agents ?? [])

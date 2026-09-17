@@ -860,9 +860,13 @@ internal static class Reference
                               (config.Mode == WorkspaceMode.Git
                                   ? " in its own worktree, so your checkout never moves."
                                   : " directly in this folder.")),
-            new InfoParagraph("4. Your own commands run. Every one must exit 0 or the work goes back."),
-            new InfoParagraph("5. A third agent audits the result and returns PASS or FAIL."),
-            new InfoParagraph("6. You read the diff and type LAND. Nothing merges without that."),
+            new InfoParagraph("4. Your own commands run. Every one must exit 0, or the work goes " +
+                              "back for another attempt while the repair budget lasts."),
+            new InfoParagraph("5. An agent audits the result and returns PASS or FAIL. By default " +
+                              "that is not the agent which wrote the change."),
+            new InfoParagraph(config.Mode == WorkspaceMode.Git
+                ? "6. You read the diff and type LAND. Nothing merges without that."
+                : "6. You read the diff and type LAND. Nothing is recorded as finished without that."),
             new InfoHeading("Start here"),
             new InfoLine("N", "Describe the first piece of work. Every field explains itself as you reach it."),
             new InfoLine("D", "Check that everything a run depends on is actually installed."),
@@ -873,9 +877,11 @@ internal static class Reference
         if (config.Mode == WorkspaceMode.Standalone)
         {
             blocks.Add(new InfoParagraph(
-                "This workspace is standalone: it is not a Git repository, so agents edit this folder " +
-                "in place and there is nothing to roll back to. Making it a repository first is " +
-                "strictly safer.",
+                "This workspace is standalone, so agents edit this folder in place and there is " +
+                "nothing to roll back to. That is either because the folder is not a Git repository " +
+                "or because standalone was chosen when it was set up; 'fknrtd doctor' says which. A " +
+                "Git-backed workspace gives every task its own branch and its own checkout, and is " +
+                "strictly safer. Until then, commit anything you care about before running a task.",
                 Theme.Amber));
         }
         else if (Glossary.Find("what-to-commit") is { } committing)
