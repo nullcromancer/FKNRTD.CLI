@@ -88,9 +88,11 @@ public static class Keymap
             "enables or disables the highlighted one, N adds another, and Del removes one after " +
             "confirming by name."),
         new("S", "settings",
-            "Explains every setting in this workspace's configuration: what it controls and what " +
-            "changing it would cost, with the current value shown for each top-level one. The file " +
-            "is plain JSON meant to be edited by hand; this is the explanation that was missing."),
+            "Every setting in this workspace's configuration with its current value, what it " +
+            "controls, and what changing it would cost. Enter changes the highlighted one through " +
+            "the same guided form the rest of the product uses, and writes the file. A few are " +
+            "shown with the reason they cannot be changed from here rather than being left out. F1 " +
+            "opens the full reference, including the nested agent fields."),
         new("K", "coordination",
             "Shows what the agents have reserved and where they overlap right now: every live file " +
             "claim, every conflict the sentinel currently sees, and the message bus. Claims warn; " +

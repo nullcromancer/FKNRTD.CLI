@@ -238,6 +238,22 @@ public static class Milestones
             "because it costs them the trip. The panel also says, before either key is pressed, " +
             "which of the two is reversible: disabling an agent changes nothing already recorded, " +
             "and removing one deletes profiles and arguments that nothing else stores."),
+
+        new("2026-09-17",
+            "Settings you can change",
+            "S explained every field in config.json and then left the operator to go and edit JSON " +
+            "by hand. Knowing what `agentStaleAfterSeconds` means is most of the problem, but it " +
+            "is not all of it.",
+            "The settings screen lists every top-level field with its live value, and Enter opens " +
+            "the same guided form the rest of the product uses to change it. A field this screen " +
+            "will not change - the schema version, the workspace mode, the agent roster - is shown " +
+            "with the reason, rather than left out.",
+            "Two defects surfaced on the way, both of the same kind: a panel sized by a guess " +
+            "rather than measured. The settings panel dropped its second explanation block " +
+            "entirely on exactly the fields where that block was the whole answer, and the form " +
+            "served its worked example before its explanation, starving a long explanation down " +
+            "to one clipped line. A step can now carry its own explanation instead of borrowing " +
+            "the general term it belongs to."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

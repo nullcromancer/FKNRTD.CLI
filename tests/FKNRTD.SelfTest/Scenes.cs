@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts"
     ];
 
     public static string Render(string name, int width, int height, bool colour)
@@ -129,7 +129,13 @@ internal static class Scenes
             case "coordination":
                 return Reference.Coordination(Populated());
             case "settings":
+                return new SettingsBrowser(SampleConfig(), "/src/aurora-api/.fknrtd/config.json");
+            case "settings-reference":
                 return Reference.Settings(SampleConfig(), "/src/aurora-api/.fknrtd/config.json");
+            case "settings-edit":
+                return SettingsBrowser.Form(SampleConfig(), "requireCleanTreeForLanding")!;
+            case "settings-number":
+                return SettingsBrowser.Form(SampleConfig(), "maxParallelAgents")!;
             case "prompts":
                 return Reference.Prompts(FailedTask(), config, string.Join((char)10,
                 [

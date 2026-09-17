@@ -1101,7 +1101,7 @@ internal sealed class DashboardApp
                 _overlay = Reference.Coordination(snapshot);
                 break;
             case "S":
-                _overlay = Reference.Settings(snapshot.Config, _store.Paths.Config);
+                OpenSettings(snapshot);
                 break;
             case "F":
                 OpenTaskPicker(snapshot);
@@ -1449,6 +1449,69 @@ internal sealed class DashboardApp
                 _toast = "Could not create the task: " + exception.Message;
             }
         };
+    }
+
+    /// <summary>
+    /// Opens the settings screen behind S, and applies whatever it asks to change. The explanation
+    /// was already here; what was missing was any way to act on it without leaving for a JSON file.
+    /// </summary>
+    private void OpenSettings(DashboardSnapshot snapshot)
+    {
+        _overlay = new SettingsBrowser(snapshot.Config, _store.Paths.Config);
+        _overlayCompleted = (completed, current, _) =>
+        {
+            var browser = (SettingsBrowser)completed;
+            if (browser.WantsReference)
+            {
+                _overlay = Reference.Settings(current.Config, _store.Paths.Config);
+                return Task.CompletedTask;
+            }
+
+            if (SettingsBrowser.ReadOnly.TryGetValue(browser.ChosenKey, out var reason))
+            {
+                _toast = reason;
+                return Task.CompletedTask;
+            }
+
+            OpenSettingEditor(current.Config, browser.ChosenKey);
+            return Task.CompletedTask;
+        };
+    }
+
+    /// <summary>
+    /// Asks for one setting's new value through the same guided form everything else uses, then
+    /// writes the whole configuration back.
+    /// </summary>
+    private void OpenSettingEditor(FknrtdConfig config, string key)
+    {
+        if (SettingsBrowser.Form(config, key) is not { } form ||
+            SettingsBrowser.Editor(key) is not { } setting)
+        {
+            _toast = $"'{key}' cannot be changed from here.";
+            return;
+        }
+
+        _overlay = form;
+        _overlayCompleted = async (completed, current, token) =>
+        {
+            var answered = ((Wizard)completed).Value(key);
+            // The configuration is re-read on every frame, so the write is built from the snapshot
+            // taken now rather than the one the form was opened against.
+            var updated = setting.Write(current.Config, answered);
+            await _store.SaveConfigAsync(updated, token).ConfigureAwait(false);
+            _toast = $"{key} is now {Summarise(setting, updated)}. Press S to see the rest.";
+        };
+    }
+
+    /// <summary>The saved value, said back the way the operator would recognise it.</summary>
+    private static string Summarise(EditableSetting setting, FknrtdConfig config)
+    {
+        var value = setting.Read(config);
+        return value.Length == 0
+            ? "empty"
+            : value.Contains((char)10)
+                ? value.Split((char)10).Length + " commands"
+                : value;
     }
 
     /// <summary>

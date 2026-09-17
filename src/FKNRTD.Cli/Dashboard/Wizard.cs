@@ -57,6 +57,19 @@ internal sealed class WizardStep
     public Func<string, IReadOnlyDictionary<string, string>, string?> Validate { get; init; } =
         (_, _) => null;
 
+    /// <summary>
+    /// An explanation specific to this question, used instead of the glossary term's. A step that
+    /// edits one named configuration field has a better answer to "what is this?" than the general
+    /// term it belongs to; F1 still reaches the term itself.
+    /// </summary>
+    public string Explanation { get; init; } = string.Empty;
+
+    /// <summary>A worked example specific to this question, used instead of the glossary term's.</summary>
+    public string Example { get; init; } = string.Empty;
+
+    /// <summary>The caption over <see cref="Example"/> when it is not an example at all.</summary>
+    public string ExampleCaption { get; init; } = "EXAMPLE";
+
     /// <summary>Lets a step be skipped entirely — a Git-only question in a standalone workspace.</summary>
     public Func<IReadOnlyDictionary<string, string>, bool> Applies { get; init; } = _ => true;
 }
@@ -78,16 +91,24 @@ internal sealed class Wizard : IOverlay
     private string? _error;
     private bool _expanded;
 
-    public Wizard(string title, Rgb accent, IEnumerable<WizardStep> steps)
+    public Wizard(string title, Rgb accent, IEnumerable<WizardStep> steps, string finishVerb = "create")
     {
         _title = title;
         _accent = accent;
         _steps = steps.ToList();
+        FinishVerb = finishVerb;
         _index = FirstApplicable(0, 1);
         LoadStep();
     }
 
     public string Mode => _title;
+
+    /// <summary>
+    /// What Enter does on the last step, for the footer. A form that changes one existing setting
+    /// says "save"; telling the operator it will "create" something would be a small lie about what
+    /// the key is about to do.
+    /// </summary>
+    private string FinishVerb { get; }
 
     public IReadOnlyDictionary<string, string> Values => _values;
 
@@ -344,20 +365,26 @@ internal sealed class Wizard : IOverlay
             row++;
         }
 
-        if (entry is not null && row < lastRow)
+        var detail = Detail(step, entry);
+        if (detail.Length > 0 && row < lastRow)
         {
-            var example = ShowsExample(step, entry) ? entry.Example : string.Empty;
+            var (example, caption) = Illustration(step, entry);
             // lastRow is the final usable row, so it counts towards the budget.
             var remaining = lastRow - row + 1;
-            // An example shown as half a sentence teaches less than no example at all, so on a
-            // terminal too short to hold the whole thing the block is dropped rather than clipped.
+            // The detail answers the question and the second block only illustrates it, so the
+            // detail is served first. Serving the illustration first starved a long explanation
+            // down to a single clipped line.
+            var detailRows = Math.Min(Text.Wrap(detail, width).Count + 1, remaining);
+            // A block shown as half a sentence teaches less than no block at all, so on a terminal
+            // too short to hold the whole thing it is dropped rather than clipped.
             var exampleNeeds = example.Length == 0 ? 0 : Text.Wrap(example, width).Count + 1;
-            var exampleRows = exampleNeeds > 0 && exampleNeeds + 2 <= remaining ? exampleNeeds : 0;
-            var detailRows = Math.Max(0, remaining - exampleRows - (exampleRows > 0 ? 1 : 0));
-            var after = Overlays.Explain(canvas, x, row, width, detailRows, "WHAT THIS IS", entry.Detail, _accent);
+            var exampleRows = exampleNeeds > 0 && detailRows + 1 + exampleNeeds <= remaining
+                ? exampleNeeds
+                : 0;
+            var after = Overlays.Explain(canvas, x, row, width, detailRows, "WHAT THIS IS", detail, _accent);
             if (exampleRows > 1 && after + 1 < lastRow)
             {
-                Overlays.Explain(canvas, x, after + 1, width, exampleRows, "EXAMPLE", example, _accent);
+                Overlays.Explain(canvas, x, after + 1, width, exampleRows, caption, example, _accent);
             }
 
             // There is deliberately no "there is more, press F1" marker here. On a narrow terminal it
@@ -379,6 +406,20 @@ internal sealed class Wizard : IOverlay
     /// The panel's height, from what this step actually has to say. Sizing to content rather than to
     /// a fixed box keeps a two-line question from being framed by fifteen lines of nothing.
     /// </summary>
+    /// <summary>
+    /// The body of the "what this is" block: the step's own explanation when it has one, and the
+    /// glossary term's otherwise. Measuring and drawing both read this, because the last time they
+    /// each decided for themselves the panel clipped its own text.
+    /// </summary>
+    private static string Detail(WizardStep step, GlossaryEntry? entry) =>
+        step.Explanation.Length > 0 ? step.Explanation : entry?.Detail ?? string.Empty;
+
+    /// <summary>The body of the second block, and the caption that fits whatever it turned out to be.</summary>
+    private static (string Body, string Caption) Illustration(WizardStep step, GlossaryEntry? entry) =>
+        step.Example.Length > 0
+            ? (step.Example, step.ExampleCaption)
+            : entry is not null && ShowsExample(step, entry) ? (entry.Example, "EXAMPLE") : (string.Empty, "");
+
     private int Measure(WizardStep step, GlossaryEntry? entry, int width)
     {
         var rows = 2;                                              // progress row, then a gap
@@ -397,12 +438,13 @@ internal sealed class Wizard : IOverlay
             rows += Math.Min(2, Text.Wrap(_error, width).Count) + 1;
         }
 
-        if (entry is not null)
+        var detail = Detail(step, entry);
+        if (detail.Length > 0)
         {
-            rows += Text.Wrap(entry.Detail, width).Count + 1;
-            if (ShowsExample(step, entry))
+            rows += Text.Wrap(detail, width).Count + 1;
+            if (Illustration(step, entry).Body is { Length: > 0 } illustration)
             {
-                rows += Text.Wrap(entry.Example, width).Count + 2;
+                rows += Text.Wrap(illustration, width).Count + 2;
             }
         }
 
@@ -412,7 +454,7 @@ internal sealed class Wizard : IOverlay
 
     private (string Key, string Meaning)[] FooterKeys(WizardStep step)
     {
-        var confirm = LastApplicable() == _index ? "create" : "next";
+        var confirm = LastApplicable() == _index ? FinishVerb : "next";
         var keys = new List<(string, string)>();
         if (step.Input == WizardInput.Choice)
         {

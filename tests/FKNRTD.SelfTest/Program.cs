@@ -128,7 +128,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync),
     ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync),
     ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync),
-    ("The agent roster lists and changes the roster", TestAgentManagerAsync)
+    ("The agent roster lists and changes the roster", TestAgentManagerAsync),
+    ("The settings screen can change what it explains", TestSettingsBrowserAsync)
 };
 
 var failures = new List<string>();
@@ -2629,4 +2630,67 @@ static Task TestAgentManagerAsync()
         "The empty roster does not offer a key that would do nothing");
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// The settings screen. It explained a file the operator then had to leave and edit by hand; the
+/// point of the table is that every field it offers to change is one it can also explain.
+/// </summary>
+static async Task TestSettingsBrowserAsync()
+{
+    var config = Scenes.SampleConfig();
+
+    // Every field this screen will change has an explanation, and every top-level field in the
+    // catalog is either changeable or carries the reason it is not. Silence would read as an
+    // oversight, and an editable field with no explanation is the exact defect this work exists
+    // to remove.
+    foreach (var setting in SettingsBrowser.Editable)
+    {
+        True(SettingsCatalog.Find(setting.Key) is not null,
+            $"{setting.Key} can be changed and is explained");
+        True(!SettingsBrowser.ReadOnly.ContainsKey(setting.Key),
+            $"{setting.Key} is not both editable and read-only");
+    }
+
+    foreach (var entry in SettingsCatalog.All.Where(item => !item.Key.Contains('[') && !item.Key.Contains('.')))
+    {
+        True(SettingsBrowser.Editor(entry.Key) is not null || SettingsBrowser.ReadOnly.ContainsKey(entry.Key),
+            $"{entry.Key} is either changeable or says why not");
+    }
+
+    // Reading a value and writing it straight back leaves the configuration alone, which is what
+    // makes opening a field and pressing Enter safe.
+    foreach (var setting in SettingsBrowser.Editable)
+    {
+        var unchanged = setting.Write(config, setting.Read(config));
+        Equal(setting.Read(config), setting.Read(unchanged), $"{setting.Key} round-trips");
+    }
+
+    // Each validator rejects what the type cannot hold, rather than throwing on the write.
+    foreach (var setting in SettingsBrowser.Editable.Where(item => item.Input == WizardInput.Number))
+    {
+        foreach (var bad in new[] { "", "-1", "not a number", "999999999999" })
+        {
+            True(setting.Validate?.Invoke(bad) is not null, $"{setting.Key} rejects '{bad}'");
+        }
+    }
+
+    // The form for a field carries that field's own explanation, not the general term it belongs to.
+    var form = SettingsBrowser.Form(config, "maxParallelAgents");
+    True(form is not null, "A changeable field has a form");
+    var frame = Scenes.Render("settings-number", 100, 30, colour: false);
+    True(frame.Contains("IF YOU CHANGE IT", StringComparison.Ordinal),
+        "The form says what changing it would cost");
+    True(frame.Contains("rate-limit failures.", StringComparison.Ordinal),
+        "That consequence reaches its final word");
+    True(frame.Contains("Enter save", StringComparison.Ordinal),
+        "The form says it will save rather than create");
+
+    // A read-only field has no form at all, so nothing can route an edit to one by accident.
+    foreach (var key in SettingsBrowser.ReadOnly.Keys)
+    {
+        True(SettingsBrowser.Form(config, key) is null, $"{key} has no editor");
+    }
+
+    await Task.CompletedTask;
 }
