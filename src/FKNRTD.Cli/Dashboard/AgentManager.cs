@@ -13,7 +13,10 @@ internal enum AgentAction
     Add,
 
     /// <summary>Take the highlighted agent out of the configuration.</summary>
-    Remove
+    Remove,
+
+    /// <summary>Open the full per-agent reference: every profile, and where the executable is.</summary>
+    Explain
 }
 
 /// <summary>
@@ -98,6 +101,10 @@ internal sealed class AgentManager : IOverlay
                 Action = AgentAction.Add;
                 AgentId = string.Empty;
                 return OverlayResult.Submit;
+            case ConsoleKey.F1:
+                Action = AgentAction.Explain;
+                AgentId = Selected?.Id ?? string.Empty;
+                return OverlayResult.Submit;
         }
 
         // Space and Enter both toggle. Enter is the habit the rest of the dashboard builds, and
@@ -140,7 +147,7 @@ internal sealed class AgentManager : IOverlay
             canvas.DrawWrapped(x, y, width, Math.Max(1, lastRow - y + 1), EmptyMessage,
                 Theme.Foreground, background: Theme.Surface);
             Overlays.Footer(canvas, panel, Theme.Violet,
-                ("N", "add an agent"), ("Esc", "close"));
+                ("N", "add an agent"), ("F1", "full detail"), ("Esc", "close"));
             return;
         }
 
@@ -189,7 +196,7 @@ internal sealed class AgentManager : IOverlay
 
         Overlays.Footer(canvas, panel, Theme.Violet,
             ("↑↓", "choose"), ("Space", Selected?.Enabled == true ? "disable" : "enable"),
-            ("N", "add"), ("Del", "remove"), ("Esc", "close"));
+            ("N", "add"), ("Del", "remove"), ("F1", "full detail"), ("Esc", "close"));
     }
 
     private const int PreferredWidth = 100;

@@ -11,12 +11,28 @@ public sealed class GitService
         _processRunner = processRunner;
     }
 
-    /// <summary>Reports whether a usable <c>git</c> executable is on PATH.</summary>
+    /// <summary>
+    /// Whether <c>git</c> was found on PATH. Remembered once it has been, because the dashboard
+    /// takes a snapshot every second and each probe walks every PATH directory against every
+    /// executable extension - well over a hundred file checks on Windows, repeated forever, to
+    /// answer a question whose answer does not change.
+    /// </summary>
+    /// <remarks>
+    /// Only the positive answer is remembered. Git appearing mid-session is the case worth
+    /// noticing, and it is noticed on the next probe; git disappearing mid-session is not, and
+    /// would surface as a real error at the point something tried to run it.
+    /// </remarks>
     public static bool IsInstalled()
     {
+        if (_gitFound)
+        {
+            return true;
+        }
+
         try
         {
-            return ExecutableLocator.Find("git") is not null;
+            _gitFound = ExecutableLocator.Find("git") is not null;
+            return _gitFound;
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException)
@@ -24,6 +40,8 @@ public sealed class GitService
             return false;
         }
     }
+
+    private static bool _gitFound;
 
     public async Task<bool> IsRepositoryAsync(string directory, CancellationToken cancellationToken = default)
     {

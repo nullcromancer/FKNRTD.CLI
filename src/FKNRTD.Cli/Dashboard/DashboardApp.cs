@@ -1679,6 +1679,9 @@ internal sealed class DashboardApp
                 case AgentAction.Remove:
                     ConfirmAgentRemoval(current, manager.AgentId);
                     return;
+                case AgentAction.Explain:
+                    _overlay = Reference.Agents(current.Config);
+                    return;
             }
         };
     }

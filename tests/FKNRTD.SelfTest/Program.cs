@@ -2651,6 +2651,14 @@ static Task TestAgentManagerAsync()
     Equal(OverlayResult.Continue, manager.HandleKey(Key(ConsoleKey.Backspace)),
         "Backspace does not start removing an agent");
 
+    // F1 reaches the full per-agent reference. Without it that screen became unreachable the
+    // moment A started opening the roster, and only this suite could still see it.
+    manager = AgentManager.Create(snapshot);
+    Equal(OverlayResult.Submit, manager.HandleKey(Key(ConsoleKey.F1)), "F1 submits");
+    Equal(AgentAction.Explain, manager.Action, "F1 asks for the full detail");
+    True(frame.Contains("F1 full detail", StringComparison.Ordinal),
+        "And the footer offers it");
+
     // An empty roster cannot toggle or remove anything, and must not claim it can.
     var empty = new AgentManager([], new Dictionary<string, int>());
     Equal(OverlayResult.Continue, empty.HandleKey(Key(ConsoleKey.Spacebar)),
