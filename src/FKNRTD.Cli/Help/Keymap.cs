@@ -74,7 +74,8 @@ public static class Keymap
             "you want to know what actually happened rather than what the current state implies."),
         new("/", "commands",
             "Opens the command palette: every action the dashboard can take, searchable by name, " +
-            "with the reason stated for any that cannot be taken right now.",
+            "with the reason stated for any that cannot be taken right now. ':' does the same, " +
+            "for layouts where that is the same physical key.",
             InFooter: true),
         new("?", "help",
             "Opens the key reference and the searchable glossary of every term the product uses.",

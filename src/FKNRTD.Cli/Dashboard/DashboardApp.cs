@@ -865,10 +865,13 @@ internal sealed class DashboardApp
             ConsoleKey.F => "F",
             ConsoleKey.Tab => "Tab",
             // '?' and '/' have no ConsoleKey of their own and arrive differently on different
-            // keyboard layouts, so they are matched on the character instead.
+            // keyboard layouts, so they are matched on the character instead. ':' is accepted for the
+            // palette because it is the same key as '/' on several layouts; nothing else is aliased,
+            // because a key that does something without appearing in the reference is a key nobody
+            // can discover and nobody can look up.
             _ => key.KeyChar switch
             {
-                '?' or 'h' or 'H' => "?",
+                '?' => "?",
                 '/' or ':' => "/",
                 _ => null
             }
