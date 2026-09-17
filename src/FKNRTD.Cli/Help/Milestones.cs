@@ -199,6 +199,21 @@ public static class Milestones
             "enforce."),
 
         new("2026-09-17",
+            "Three answers, not nine",
+            "Creating a task walked nine questions even when every answer after the second was " +
+            "already correct for the workspace. Each was one keystroke, but nine of them is still a " +
+            "form, and a form is what stops people creating small tasks.",
+            "After the brief it asks once whether anything else needs changing, and the option that " +
+            "accepts the defaults spells out what they are — who plans, who implements, who audits, " +
+            "and what verifies it. Choosing to look walks the same five questions as before.",
+            "Accepting defaults blind would be the exact thing the form exists to prevent, which is " +
+            "why the summary is on the option rather than behind it. Two real bugs surfaced doing " +
+            "this: a step skipped because its default was right received no value at all, so the " +
+            "quick path would have created a task with no lead agent; and choice steps sized their " +
+            "visible rows with a constant that predated content-sized panels, hiding the second " +
+            "option — which on a two-option step hides that there was a choice."),
+
+        new("2026-09-17",
             "This page",
             "The only written guide was the repository's README, which nobody reads from the " +
             "machine they are working on, and which is free to describe a command that no longer " +
