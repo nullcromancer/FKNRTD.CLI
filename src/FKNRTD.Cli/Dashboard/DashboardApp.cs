@@ -1387,7 +1387,7 @@ internal sealed class DashboardApp
         if (_running.Count >= maxParallel)
         {
             _toast = $"Already running {maxParallel} tasks, which is this workspace's limit. " +
-                     "Wait for one to finish, or raise maxParallelAgents in .fknrtd/config.json.";
+                     "Wait for one to finish, or press S and raise maxParallelAgents.";
             return;
         }
 
@@ -1534,7 +1534,8 @@ internal sealed class DashboardApp
         var config = snapshot.Config;
         if (!config.Agents.Any(agent => agent.Enabled))
         {
-            _toast = "No agents are enabled. Quit and run: fknrtd agent list";
+            _toast = "No agents are enabled, so there would be nobody to give the work to. " +
+                     "Press A to enable one.";
             return;
         }
 

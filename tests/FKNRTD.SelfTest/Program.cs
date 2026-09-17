@@ -137,7 +137,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The help screen writes itself out as a page", TestHelpWritesThePageAsync),
     ("What to do next fits the workspace it is in", TestNextStepFitsTheWorkspaceAsync),
     ("A task naming a missing agent says so", TestOrphanedAgentIsFlaggedAsync),
-    ("The busy repaint stays inside the dashboard loop", TestBusyRepaintStaysInsideTheLoopAsync)
+    ("The busy repaint stays inside the dashboard loop", TestBusyRepaintStaysInsideTheLoopAsync),
+    ("Nothing on screen tells you to leave the dashboard", TestNothingTellsYouToLeaveAsync)
 };
 
 var failures = new List<string>();
@@ -3202,4 +3203,35 @@ static async Task TestBusyRepaintStaysInsideTheLoopAsync()
         Equal(string.Empty, captured.ToString(),
             "No frame is painted when the dashboard loop has never painted one");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// Nothing on screen tells the operator to leave the dashboard for something the dashboard now
+/// does. Five messages did: they were all true when they were written, and the roster and the
+/// settings editor that made them untrue arrived the same morning. This is the kind of claim that
+/// rots silently, because it keeps making sense right up until somebody tries to follow it.
+/// </summary>
+static Task TestNothingTellsYouToLeaveAsync()
+{
+    // The imperative forms. A screen naming the config file's path, or naming the shell command
+    // that does the same job, is useful and stays allowed.
+    var sendsYouAway = new[] { "Quit the dashboard", "Quit and run", "quit the dashboard and run" };
+
+    foreach (var scene in Scenes.Names)
+    {
+        var frame = Scenes.Render(scene, 120, 44, colour: false);
+        foreach (var phrase in sendsYouAway)
+        {
+            True(!frame.Contains(phrase, StringComparison.OrdinalIgnoreCase),
+                $"The {scene} scene does not say '{phrase}'");
+        }
+    }
+
+    // And the roster's own empty state points at its own key rather than at a shell.
+    var empty = Scenes.Render("agents-empty", 110, 30, colour: false);
+    True(empty.Contains("N to describe one", StringComparison.Ordinal) ||
+         empty.Contains("Press N", StringComparison.Ordinal),
+        "An empty roster names the key that fills it");
+
+    return Task.CompletedTask;
 }

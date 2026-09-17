@@ -144,7 +144,7 @@ internal static class AgentWizard
         yield return found is not null
             ? $"  Found {agent.Executable} at {found}"
             : $"  Warning: {agent.Executable} is not on PATH. A task assigned to {agent.Id} would fail " +
-              "to launch it. Install it, or fix the executable name in .fknrtd/config.json.";
+              "to launch it. Install it, or press A and give the agent a different executable.";
         yield return audits
             ? $"  {agent.Id} may plan, implement, or audit."
             : $"  {agent.Id} may plan or implement, but cannot audit — it returns no verdict.";

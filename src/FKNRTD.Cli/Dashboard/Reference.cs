@@ -369,7 +369,11 @@ internal static class Reference
         {
             var blocks = new List<InfoBlock>
             {
-                new InfoParagraph("Edit these in " + configPath + ", then run 'fknrtd config validate'.",
+                new InfoParagraph(
+                    "Every field in this workspace's configuration, including the nested agent ones " +
+                    "the settings screen does not list. Press Esc to go back there and Enter to " +
+                    "change a top-level field. The file itself is " + configPath +
+                    "; if you edit it by hand, 'fknrtd config validate' checks its shape afterwards.",
                     Theme.Muted)
             };
 
@@ -785,9 +789,10 @@ internal static class Reference
         if (config.Agents.Count == 0)
         {
             blocks.Add(new InfoParagraph(
-                "No agents are configured. Quit the dashboard and run 'fknrtd agent add -id <name> " +
-                "-exe <executable>' to register a coding CLI, or 'fknrtd init -force' to restore the " +
-                "built-in Claude and Codex definitions."));
+                "No agents are configured, so there is nobody to give work to. Press Esc and then N " +
+                "on the roster to describe one: you will need the name of a command-line coding " +
+                "tool that is already installed. To start over with the built-in Claude and Codex " +
+                "definitions instead, quit and run 'fknrtd init -force'."));
             return new InfoPanel("AGENTS", Theme.Amber, blocks);
         }
 
@@ -821,10 +826,12 @@ internal static class Reference
             blocks.Add(new InfoParagraph(entry.Detail, Theme.Muted));
         }
 
-        blocks.Add(new InfoHeading("Adding another"));
+        blocks.Add(new InfoHeading("Changing this list"));
         blocks.Add(new InfoParagraph(
-            "Quit the dashboard and run 'fknrtd agent new'. It asks what to call the agent, which " +
-            "program runs it and how that program wants its prompt, explaining each as it goes."));
+            "Press Esc to go back to the roster. There, Space enables or disables the highlighted " +
+            "agent, N describes a new one - asking what to call it, which program runs it and how " +
+            "that program wants its prompt, explaining each as it goes - and Del removes one. " +
+            "'fknrtd agent new' opens the same form from a shell."));
 
         return new InfoPanel("AGENTS", Theme.Violet, blocks);
     }
