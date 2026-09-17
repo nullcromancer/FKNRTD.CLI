@@ -3,7 +3,7 @@
 ## 2026-09-17 — the usability programme
 
 Revision: 1.0.0
-Commit verified: `bb7eef43974d453585066531c9528a023ab37d3c`
+Commit verified: `cda7e8309023b19c87d766ba01fcf094663e949d`
 (branch `feature/standalone-workspaces-and-tool-management`)
 
 Environment: .NET SDK 10.0.401, Git 2.55.0.windows.4, Windows 11 (10.0.26200).
@@ -15,21 +15,37 @@ nothing is reported that was not run.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 38/38 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 49/49 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
-| `fknrtd agent list` | Exit 0. |
+| `fknrtd agent list` / `-json` | Exit 0 for both. |
 | `fknrtd config validate` | Exit 0. |
 | `fknrtd task create` | Exit 0; task created with an `FKN-` identifier. |
-| `fknrtd task show <id>` | Exit 0; brief, roles, verification, every stage and the next step. |
+| `fknrtd task list` / `-json` | Exit 0 for both. |
+| `fknrtd task show <id>` / `-json` | Exit 0; brief, roles, verification, every stage and the next step. |
+| `fknrtd task prompts <id>` | Exit 0; all three prompts, with the placeholders named as placeholders. |
 | `fknrtd task diff <id>` | Exit 0; reported that the task has no worktree yet rather than printing nothing. |
+| `fknrtd task land <id> -confirm LAND` on a queued task | Exit 1; named the status and what it would need to be. |
+| `fknrtd task cancel <id>` | Exit 0; recorded the request. |
+| `fknrtd task cancel <missing id>` | Exit 1; said no such task exists in this workspace. |
+| `fknrtd claim add` | Exit 0; claim registered with its expiry. |
+| `fknrtd claim list` / `-json`, no conflict | Exit 0 for both. |
+| `fknrtd message list`, `fknrtd usage list` | Exit 0. |
+| `fknrtd events` / `-json` | Exit 0 for both. |
 | `fknrtd status -json` | Exit 0; complete normalised snapshot. |
 | `fknrtd dashboard -once -no-color -width 100 -height 30` | Exit 0; one frame, no ANSI. |
-| `fknrtd events` | Exit 0. |
-| `fknrtd explain brief` | Exit 0. |
-| `fknrtd help task diff` | Exit 0. |
-| `fknrtd portal -out <file>` | Exit 0; 69 terms, 43 commands, 25 keys, 25 settings, 12 log entries. |
+| `fknrtd explain brief`, `fknrtd help task diff`, `fknrtd version` | Exit 0. |
+| `fknrtd portal -out <file>` | Exit 0; 71 terms, 44 commands, 26 keys, 25 settings, 21 log entries; 170 KB. |
 | `fknrtd taks` | Exit 2; reported the typo and named the commands meant. |
+
+The exit codes documented but never observed were checked directly, because writing one down
+is not the same as having seen it:
+
+| Situation | Documented | Observed |
+| --- | --- | --- |
+| `claim list` with two agents claiming one path in one worktree | 3 | 3, and the collision named both agents and the path |
+| `fknrtd task show <id>` on a failed task | 3 | 3 |
+| `fknrtd task show <id> -json` on a failed task | 0 | 0 |
 
 Also verified directly, outside the suite:
 
@@ -47,14 +63,21 @@ Also verified directly, outside the suite:
 - **The generated guide.** `fknrtd-portal.html` was checked to contain no external references,
   no broken internal links, and balanced structural tags.
 - **A renderer sweep.** `dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz` renders
-  every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 7,040 frames — and
-  checks each for the right number of rows, the right display width on every row, and no exception.
-  All 7,040 passed. The suite itself samples five widths and three heights; this is the wider net.
+  every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 8,140 frames
+  across 37 scenes — and checks each for the right number of rows, the right display width on
+  every row, and no exception. All 8,140 passed. The suite itself samples five widths and three
+  heights; this is the wider net.
+- **A landing Git refuses.** A task was run to ready-to-land, a conflicting version of the same
+  file was committed to `main`, and the landing was attempted. The task came back Failed with
+  its land stage failed, the base branch was exactly where it had been, and no conflict markers
+  were left in the working copy. This is a regression test now; it was written because the
+  command used to report that landing as a success and exit 0.
 
-Independent review: two read-only audits by an OpenAI Codex seat, recorded in
+Independent review: three read-only audits by an OpenAI Codex seat, recorded in
 `docs/collab/LOG.md`. The first found a non-terminating text wrap and eight other real defects
-in the overlay layer; the second found twenty-six factual errors in the documentation tables.
-All are fixed, with regressions.
+in the overlay layer. The second found twenty-six factual errors in the glossary. The third
+found twenty-one in the command catalog, one of which was the landing bug above rather than a
+documentation error. All are fixed, with regressions.
 
 ## 2026-09-15 — baseline
 
