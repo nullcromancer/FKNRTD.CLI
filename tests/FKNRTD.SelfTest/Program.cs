@@ -157,7 +157,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("No retired claim survives anywhere in the source", TestNoRetiredClaimInAnySourceFileAsync),
     ("An unreadable task file is reported, not hidden", TestUnreadableTasksAreReportedAsync),
     ("An unreadable configuration explains itself", TestUnreadableConfigExplainsItselfAsync),
-    ("A missing worktree is not a missing stage", TestMissingWorktreeIsDistinguishedAsync)
+    ("A missing worktree is not a missing stage", TestMissingWorktreeIsDistinguishedAsync),
+    ("A blank task field says what it is", TestBlankTaskFieldsAreExplainedAsync)
 };
 
 var failures = new List<string>();
@@ -4468,4 +4469,36 @@ static async Task TestMissingWorktreeIsDistinguishedAsync()
         True(freshSaid.Contains("has not reached its worktree stage", StringComparison.Ordinal),
             $"A task that never had a worktree is told exactly that: {freshSaid.Trim()}");
     }).ConfigureAwait(false);
+}
+
+/// <summary>
+/// A task record whose title or brief is blank. Creating a task refuses both, so this can only
+/// arrive by a hand edit or a half-finished write - at which point the pipeline drew a row with an
+/// identifier and nothing beside it, which reads as a bug in the renderer rather than as a fact
+/// about the task.
+/// </summary>
+static Task TestBlankTaskFieldsAreExplainedAsync()
+{
+    var blank = new WorkflowTask { Id = "FKN-20260917-000000-bare" };
+
+    True(TaskText.Title(blank).Contains("no title", StringComparison.Ordinal),
+        "A blank title is named as missing");
+    True(TaskText.Title(blank).Contains("edited by hand", StringComparison.Ordinal),
+        "and the only way it can have happened is said");
+    True(TaskText.Brief(blank).Contains("no brief", StringComparison.Ordinal),
+        "A blank brief is named as missing");
+    True(TaskText.Brief(blank).Contains("nothing to act on", StringComparison.Ordinal),
+        "and what running it would then do is said");
+
+    // A real task is untouched: the fallback must not decorate anything that has a title.
+    var real = new WorkflowTask { Id = "x", Title = "Add rate limiting", Brief = "Do the thing." };
+    Equal("Add rate limiting", TaskText.Title(real), "A real title passes through unchanged");
+    Equal("Do the thing.", TaskText.Brief(real), "and so does a real brief");
+
+    // Whitespace counts as blank: a title of three spaces draws as an empty row just the same.
+    var spaces = new WorkflowTask { Id = "y", Title = "   ", Brief = "  " };
+    True(TaskText.Title(spaces).Contains("no title", StringComparison.Ordinal),
+        "Whitespace is blank too");
+
+    return Task.CompletedTask;
 }

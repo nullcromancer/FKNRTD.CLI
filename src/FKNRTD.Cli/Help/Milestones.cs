@@ -407,6 +407,21 @@ public static class Milestones
             "help. It is the same argument as the tables that drive every explanation in this " +
             "product: a fact stated in one place can be corrected, and a fact stated in four " +
             "places will be corrected in one of them."),
+
+        new("2026-09-17",
+            "Taking a workspace apart on purpose",
+            "Nothing in the suite had ever broken a workspace, which made the error paths the " +
+            "least-exercised part of the product. Four were tried by hand.",
+            "Three were wrong. A task file that would not parse made the task vanish, and the shell " +
+            "then reported the workspace empty - a wrong answer, not an unhelpful one, and the kind " +
+            "that sends somebody off to write the task again. A broken config.json produced the " +
+            "JSON parser's own message, which names no file and no remedy, on one unwrapped line. A " +
+            "task whose worktree had been deleted was told it had not reached its worktree stage.",
+            "The fourth - a torn last line in the append-only event log - was already handled " +
+            "correctly, which is what that reader exists for. The pattern in the other three is the " +
+            "same one this whole programme is about: the product knew something and said nothing, " +
+            "or said something that was true of a different situation. Breaking things on purpose " +
+            "found in an hour what reading the code had not found all day."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

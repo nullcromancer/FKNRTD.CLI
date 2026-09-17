@@ -74,7 +74,7 @@ internal static class Reference
     {
         var blocks = new List<InfoBlock>
         {
-            new InfoHeading(task.Title),
+            new InfoHeading(TaskText.Title(task)),
             new InfoLine("Id", task.Id, Theme.Muted),
             new InfoLine("Status", Describe(task.Status), StatusColour(task.Status), Bold: true)
         };
@@ -94,7 +94,7 @@ internal static class Reference
         blocks.Add(new InfoParagraph(NextStep(task, config)));
 
         blocks.Add(new InfoHeading("What was asked for"));
-        blocks.Add(new InfoParagraph(task.Brief));
+        blocks.Add(new InfoParagraph(TaskText.Brief(task)));
 
         blocks.Add(new InfoHeading("Who is on it"));
         Role("Lead", task.LeadAgentId, RoleNotes.LeadShort);

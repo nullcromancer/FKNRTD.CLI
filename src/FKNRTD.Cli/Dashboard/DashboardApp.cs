@@ -464,7 +464,7 @@ internal sealed class DashboardApp
                 overflowMarker = "↕";
             }
 
-            var line = $"{selectedMarker}{overflowMarker} {StatusIcon(task.Status)} {task.Id} {task.Title}";
+            var line = $"{selectedMarker}{overflowMarker} {StatusIcon(task.Status)} {task.Id} {TaskText.Title(task)}";
             canvas.DrawText(inner.X, row++, Text.Truncate(line, inner.Width),
                 index == selectedTaskIndex ? Theme.Foreground : Theme.Muted,
                 bold: index == selectedTaskIndex,
@@ -680,7 +680,7 @@ internal sealed class DashboardApp
         var inner = rect.Inset();
         var row = inner.Y;
 
-        canvas.DrawText(inner.X, row++, Text.Truncate(task.Title, inner.Width), Theme.Foreground, bold: true,
+        canvas.DrawText(inner.X, row++, Text.Truncate(TaskText.Title(task), inner.Width), Theme.Foreground, bold: true,
             maxWidth: inner.Width);
         if (stageEntry is not null && row < inner.Bottom)
         {

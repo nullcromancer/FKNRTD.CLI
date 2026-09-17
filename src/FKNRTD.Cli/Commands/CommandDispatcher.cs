@@ -675,7 +675,7 @@ internal static class CommandDispatcher
         Console.WriteLine("ID                           STATUS         STAGE          AGENTS                 TITLE");
         foreach (var task in tasks)
         {
-            Console.WriteLine($"{task.Id,-28} {task.Status,-14} {task.CurrentStage,-14} {task.LeadAgentId}>{task.ImplementerAgentId,-14} {task.Title}");
+            Console.WriteLine($"{task.Id,-28} {task.Status,-14} {task.CurrentStage,-14} {task.LeadAgentId}>{task.ImplementerAgentId,-14} {TaskText.Title(task)}");
         }
 
         return 0;
@@ -697,12 +697,12 @@ internal static class CommandDispatcher
         var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
         var width = Math.Clamp(Screen.Width(88) - 2, 40, 96);
 
-        Console.WriteLine(task.Title);
+        Console.WriteLine(TaskText.Title(task));
         Console.WriteLine($"{task.Id}   {Glossary.Find("status." + task.Status.ToString().ToLowerInvariant())?.Title ?? task.Status.ToString()}");
         Console.WriteLine();
 
         Console.WriteLine("WHAT WAS ASKED FOR");
-        foreach (var line in Text.Wrap(task.Brief, width - 2))
+        foreach (var line in Text.Wrap(TaskText.Brief(task), width - 2))
         {
             Console.WriteLine("  " + line);
         }

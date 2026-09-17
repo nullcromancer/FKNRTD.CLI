@@ -161,7 +161,7 @@ internal sealed class Picker : IOverlay
             .Select(task => new PickerItem(
                 task.Id,
                 Describe(task.Status),
-                task.Title,
+                TaskText.Title(task),
                 Colour(task.Status)))
             .ToArray(),
         "part of a title, a status such as failed, or a task id",
