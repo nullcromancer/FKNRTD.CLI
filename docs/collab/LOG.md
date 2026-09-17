@@ -192,3 +192,30 @@ documentation is worse than missing documentation, and all of it was written by 
 also wrote the code it describes. That is the product's own argument, demonstrated on itself.
 
 Local suite: 36/36 passing, Release build clean.
+
+## 2026-09-17 — claude (Codex is out of budget until 05:50)
+
+The third fact-check ended with `ERROR: You've hit your usage limit ... try again at 5:50 AM`.
+That also explains every earlier stall: the write-sandbox dispatches were not hanging on the
+repository, they were queued against an exhausted budget and the CLI waits silently. Nothing
+was wrong with the briefs.
+
+Per the standing instruction, the seat waits for its window. Claude carried on and did the
+remaining fact-check by hand, looking specifically for the classes of error the first two audits
+found, since they were all the author's own:
+
+- `stage.implement` claimed the implementer's work is committed as that stage ends. Same error as
+  the settings entry: the commit happens after verification and the audit have both passed.
+- `verdict` claimed the scan takes the *last* marker. It counts: PASS on exactly one line, FAIL on
+  none, case-insensitively and tolerating quoting, bullets and Markdown emphasis.
+- `stagestate.skipped` named only the worktree case. The verify stage is also skipped when a task
+  has no verification commands — the more important case, because it means nothing checked the work.
+- `task land` was documented as exiting 3 on a failed landing. It exits 1 on every failure;
+  confirmed by running it against a task that was not ready.
+
+**When the window reopens**, the outstanding read-only job is a fact-check of the rest of
+`Glossary.cs` and `CommandCatalog.cs` — the parts not covered above. Same shape as the one that
+worked: name the two files, name the code to check each claim against, ask for errors of fact
+only, and keep the prompt short. Long prompts stalled; short ones returned.
+
+Local suite: 36/36 passing, Release build clean.

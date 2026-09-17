@@ -169,7 +169,7 @@ public static class CommandCatalog
             "Records a cancellation request under .fknrtd/runtime/cancels so the running " +
             "workflow can observe it and stop its external process. The request does not " +
             "roll back completed edits, remove the worktree or merge changes. A successful " +
-            "request exits 0; the cancelled execution exits 130.",
+            "The request itself always exits 0, whether or not anything was running to receive it.",
             "Inspect fknrtd task show <id> and its log before choosing whether to retry.",
             TaskId(), ["fknrtd task cancel FKN-<id>"], ["status.cancelled", "task"]),
 
@@ -179,7 +179,8 @@ public static class CommandCatalog
             "merges its branch into the base branch after landing checks, changing the base " +
             "checkout and task record. In standalone mode it records completion of edits " +
             "already in the folder. It does not approve a failed task or clean up its worktree. " +
-            "Exit 0 means success; a failed landing outcome exits 3, while rejected prerequisites exit 1.",
+            "Exit 0 means the task landed. Anything that stops it — a task that is not ready, a " +
+            "dirty checkout, a merge Git refuses — reports the reason and exits 1.",
             "After checking the landed result, reclaim the checkout with fknrtd task cleanup <id> -confirm REMOVE.",
             [.. TaskId(), new("-confirm", "LAND", "Explicit confirmation of landing.", true)],
             ["fknrtd task land FKN-<id> -confirm LAND"], ["land", "base-ref", "status.readytoland", "mode"]),

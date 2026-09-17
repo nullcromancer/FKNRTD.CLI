@@ -201,12 +201,14 @@ public static class Glossary
             "claude"),
 
         new("verdict", "Audit verdict", Roles,
-            "The exact line FKNRTD_VERDICT: PASS or FKNRTD_VERDICT: FAIL that ends an audit.",
-            "An auditor communicates its judgement by printing a verdict marker. FKNRTD.CLI scans " +
-            "the audit output for the last such marker, and requires an explicit PASS before a task " +
-            "becomes landable — a missing verdict is treated as a failure, never as consent. The " +
-            "prompt itself contains the marker text, so the scan deliberately ignores lines that " +
-            "merely echo the instruction and reads only the agent's own conclusion.",
+            "The line FKNRTD_VERDICT: PASS or FKNRTD_VERDICT: FAIL that an auditor ends its report with.",
+            "An auditor communicates its judgement by printing a verdict marker. An audit passes " +
+            "only when the PASS marker appears on exactly one line of the report and the FAIL marker " +
+            "on none, so neither silence nor a hedged answer that prints both can be read as " +
+            "consent. The match ignores case and tolerates a line wrapped in quoting, a list bullet " +
+            "or Markdown emphasis, because agents format their conclusions. The prompt itself " +
+            "contains the marker text, so lines that merely echo the instruction are stripped before " +
+            "the count and only the agent's own conclusion is read.",
             "FKNRTD_VERDICT: PASS"),
 
         new("profile", "Command profile", Roles,
@@ -249,9 +251,9 @@ public static class Glossary
         new("stage.implement", "Stage 4 — Implement", Stages,
             "The implementer makes the change in the worktree. The only stage that writes files.",
             "The implementer is launched with the brief and the plan, and is the one agent given " +
-            "write access to the worktree. If the workspace commits agent changes automatically, " +
-            "its work is committed to the task branch as this stage ends, so the diff is " +
-            "inspectable whatever happens next."),
+            "write access to the worktree. Its work is not committed here: if the workspace commits " +
+            "agent changes automatically, that happens once verification and the audit have both " +
+            "passed, immediately before the task becomes landable."),
 
         new("stage.verify", "Stage 5 — Verify", Stages,
             "Your verification commands run. Every one must exit 0.",
@@ -341,9 +343,11 @@ public static class Glossary
             "known-bad result forward. Its log holds the full output that explains why."),
         new("stagestate.skipped", "Skipped  ◊", StageStates,
             "Deliberately not applicable — not a failure.",
-            "The stage did not apply to this workspace and was passed over deliberately. The usual case is " +
-            "the worktree stage in a standalone workspace, where there is no repository to isolate " +
-            "against. A skip is not a failure and does not block landing."),
+            "The stage did not apply and was passed over deliberately. Two stages can be skipped: the " +
+            "worktree stage in a standalone workspace, where there is no repository to isolate " +
+            "against, and the verify stage when the task has no verification commands — which is " +
+            "worth noticing, because it means nothing independent checked the work. A skip is not a " +
+            "failure and does not block landing."),
 
         // Agent state markers
         new("agentstate.offline", "Offline  ○", AgentStates,

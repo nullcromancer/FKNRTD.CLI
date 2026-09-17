@@ -683,7 +683,10 @@ internal static class CommandDispatcher
         var id = Required(arguments.Get("id") ?? positional, "task ID");
         if (!string.Equals(arguments.Get("confirm"), "LAND", StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("Landing requires the explicit option -confirm LAND.");
+            throw new InvalidOperationException(
+                "Landing needs -confirm LAND spelled out. It is the only command that changes your " +
+                "base branch, so it will not act on an abbreviation or a yes. Read the finished work " +
+                $"first with 'fknrtd task show {id}'.");
         }
 
         var task = await runtime.Orchestrator.LandAsync(id, cancellationToken).ConfigureAwait(false);
@@ -705,7 +708,9 @@ internal static class CommandDispatcher
 
         if (!string.Equals(arguments.Get("confirm"), "REMOVE", StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("Worktree cleanup requires the explicit option -confirm REMOVE.");
+            throw new InvalidOperationException(
+                "Removing a worktree needs -confirm REMOVE spelled out. Only the worktree directory " +
+                "goes; the task record, its logs and its Git branch are all kept.");
         }
 
         var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
