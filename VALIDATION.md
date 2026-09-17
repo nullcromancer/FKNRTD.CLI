@@ -15,7 +15,7 @@ nothing is reported that was not run.
 | Command | Result |
 | --- | --- |
 | `dotnet build FKNRTD.CLI.sln -c Release` | Build succeeded. 0 warnings, 0 errors. |
-| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 75/75 self-tests passed, exit 0. |
+| `dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build` | 76/76 self-tests passed, exit 0. |
 | `fknrtd init -yes` | Workspace created, pre-flight checks run, exit 0. |
 | `fknrtd doctor` | Exit 0; both configured agent executables resolved and reported versions. |
 | `fknrtd agent list` / `-json` | Exit 0 for both. |
@@ -65,7 +65,7 @@ Also verified directly, outside the suite:
 - **A renderer sweep.** `dotnet run --project tests/FKNRTD.SelfTest -c Release -- fuzz` renders
   every scene at twenty widths from 1 to 400 and eleven heights from 1 to 80 — 9,460 frames
   across 43 scenes — and checks each for the right number of rows, the right display width on
-  every row, and no exception. All 11,220 passed. The suite itself samples five widths and three
+  every row, and no exception. All 11,440 passed. The suite itself samples five widths and three
   heights; this is the wider net.
 - **A landing Git refuses.** A task was run to ready-to-land, a conflicting version of the same
   file was committed to `main`, and the landing was attempted. The task came back Failed with
@@ -86,6 +86,11 @@ gone unnoticed for the same reason — the situation was rendered nowhere:
 - **A roster with nothing installed.** What is on the machine running the suite is not something a
   test can arrange, so the state a first-time operator meets was unrenderable. The roster takes the
   resolved answer as an argument now, supplied only by the scene.
+- **Wide characters, end to end.** The README claims a CJK or emoji task title does not shear the
+  borders, because the renderer measures in terminal columns rather than characters. Two tasks were
+  created through the real CLI — one Japanese, one with emoji — and every row of the resulting
+  frame measured exactly the width asked for. Wide glyphs are now in the scene set as well, so the
+  sweep puts them through every panel at every size rather than one snapshot at a few.
 - **A workspace taken apart by hand.** Nothing in the suite had ever broken one, so the error paths
   were the least-exercised part of the product. Four things were tried and three were wrong:
   a task file that will not parse made the task vanish and `task list` reported the workspace

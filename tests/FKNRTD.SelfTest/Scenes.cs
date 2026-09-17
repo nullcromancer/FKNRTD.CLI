@@ -14,7 +14,7 @@ internal static class Scenes
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "land-landed", "remove", "remove-landed",
         "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "welcome-standalone", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running",
-        "tasks-unreadable", "tasks-all-unreadable"
+        "tasks-unreadable", "tasks-all-unreadable", "wide-glyphs"
     ];
 
     /// <summary>
@@ -92,6 +92,31 @@ internal static class Scenes
                     landed, CancellationToken.None)
                 .GetAwaiter().GetResult();
             return app.RenderLive(landed, width, height, colour);
+        }
+
+        if (name == "wide-glyphs")
+        {
+            // Every panel, with text that is two columns per character. The renderer measures in
+            // terminal columns rather than characters, and the one test that covered that used one
+            // snapshot at a handful of sizes - so the sweep, which is where a shearing border would
+            // actually show up, walked fifty-one scenes of pure ASCII.
+            var wide = snapshot with
+            {
+                Tasks =
+                [
+                    snapshot.Tasks[0] with { Title = "ログインのレート制限を追加する" },
+                    snapshot.Tasks[1] with { Title = "Emoji 🚀 in a title 🎯 here" },
+                    snapshot.Tasks[2] with { Title = "混合 mixed 宽度 widths 🧪 test" },
+                    .. snapshot.Tasks.Skip(3)
+                ],
+                Agents = snapshot.Agents
+                    .Select(agent => agent with { Intent = "ファイルを編集中 🛠" })
+                    .ToArray(),
+                Messages = snapshot.Messages
+                    .Select(message => message with { Text = "監査の準備ができました ✓" })
+                    .ToArray()
+            };
+            return renderer.Render(wide, width, height, colour);
         }
 
         if (name is "tasks-unreadable" or "tasks-all-unreadable")
