@@ -141,7 +141,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Nothing on screen tells you to leave the dashboard", TestNothingTellsYouToLeaveAsync),
     ("Quitting asks when work is running", TestQuittingAsksWhenWorkIsRunningAsync),
     ("A stage log reads as sentences, not JSON", TestLogIsReadableAsync),
-    ("A panel never names a key that does nothing there", TestPanelsDoNotNameDeadKeysAsync)
+    ("A panel never names a key that does nothing there", TestPanelsDoNotNameDeadKeysAsync),
+    ("Every state the dashboard draws is explained", TestEveryDrawnStateIsExplainedAsync)
 };
 
 var failures = new List<string>();
@@ -3381,6 +3382,45 @@ static Task TestPanelsDoNotNameDeadKeysAsync()
         "The footer offers the key the body names");
     True(!frame.Contains("Press U to ask", StringComparison.Ordinal),
         "And the body no longer names the key that opened it");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Every value of every enum the dashboard draws has an entry in the glossary. Nine of the ten
+/// agent states did; the missing one was Unknown, which is the state FKNRTD.CLI itself assigns when
+/// an agent stops reporting - so the one condition the product invents was the one it could not
+/// explain. A value nobody can look up is a value nobody can act on.
+/// </summary>
+static Task TestEveryDrawnStateIsExplainedAsync()
+{
+    var families = new (string Prefix, string[] Values)[]
+    {
+        ("agentstate.", Enum.GetNames<AgentActivityState>()),
+        ("status.", Enum.GetNames<WorkflowStatus>()),
+        ("stagestate.", Enum.GetNames<StageState>()),
+        ("stage.", Enum.GetNames<WorkflowStage>()),
+        ("conflict.", Enum.GetNames<ConflictKind>()),
+        ("claim-mode.", Enum.GetNames<ClaimMode>())
+    };
+
+    foreach (var (prefix, values) in families)
+    {
+        // A family is either explained value by value or not used as a family at all; the ones that
+        // are must be complete, because a half-covered family is worse than an uncovered one.
+        var covered = values.Count(value => Glossary.Find(prefix + value.ToLowerInvariant()) is not null);
+        if (covered == 0)
+        {
+            continue;
+        }
+
+        foreach (var value in values)
+        {
+            True(Glossary.Find(prefix + value.ToLowerInvariant()) is not null,
+                $"{prefix}{value.ToLowerInvariant()} is explained ({covered} of {values.Length} in " +
+                "this family already are)");
+        }
+    }
 
     return Task.CompletedTask;
 }

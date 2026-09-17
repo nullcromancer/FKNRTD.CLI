@@ -80,7 +80,10 @@ public sealed class DashboardSnapshotService
                     AgentActivityState.Reviewing)
             {
                 state.State = AgentActivityState.Unknown;
-                state.Intent = "Stale runtime state";
+                // Not "stale runtime state". That names an internal condition; this names what
+                // happened and what it does not prove, which is what somebody reading the radar
+                // needs. A long compile and a dead process look identical from here.
+                state.Intent = $"Nothing reported for over {staleAfterSeconds}s — press L for its last output";
             }
         }
 

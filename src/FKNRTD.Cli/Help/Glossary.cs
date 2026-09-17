@@ -417,6 +417,16 @@ public static class Glossary
             "failure and does not block landing."),
 
         // Agent state markers
+        new("agentstate.unknown", "Not reporting  ?", AgentStates,
+            "It was working, then stopped saying anything.",
+            "An agent is put here when it was planning, running or reviewing and then stopped " +
+            "reporting for longer than agentStaleAfterSeconds - two minutes by default. It does " +
+            "not mean the agent has died: a long compile, a long download or a model thinking hard " +
+            "all look the same from outside, because the only evidence is output and there has not " +
+            "been any. Press L to see what it last wrote. If that was a while ago and nothing has " +
+            "followed, C cancels the task and R resets it to run again. Raising " +
+            "agentStaleAfterSeconds on the settings screen widens the window before this appears.",
+            "fknrtd task cancel FKN-...   then   fknrtd task retry FKN-..."),
         new("agentstate.offline", "Offline  ○", AgentStates,
             "Configured but not currently running or reporting.",
             "The normal resting state. It does not mean the agent is broken; run doctor to check " +
@@ -494,6 +504,14 @@ public static class Glossary
             "sides are reading. What counts is two different agents overlapping with at least one " +
             "of them writing."),
 
+        new("conflict.safe", "Safe  √", Coordination,
+            "No overlap that counts. The header shows this when there is nothing to report.",
+            "Safe does not mean nothing is happening or that nothing overlaps: two claims held by " +
+            "the same agent are ignored, and so is an overlap where both sides are only reading. " +
+            "What it means is that no two different agents have claimed the same path with at " +
+            "least one of them writing. It is also what you see when nobody has declared anything " +
+            "at all, because an agent that makes no claims cannot be warned about — so read it as " +
+            "\"nothing detected\" rather than as \"nothing to detect\"."),
         new("conflict.collision", "Collision  ×", Coordination,
             "Two agents have claimed the same path in one worktree, and at least one is writing.",
             "The highest severity, because both sides are working in the same directory rather than " +
