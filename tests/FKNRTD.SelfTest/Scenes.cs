@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
     ];
 
     /// <summary>
@@ -155,6 +155,17 @@ internal static class Scenes
                 return Reference.Task(FailedTask(), config);
             case "agents":
                 return AgentManager.Create(Populated() with { Config = RosterConfig(config) });
+            case "agents-nothing-installed":
+                // What a first-time operator meets: agents configured, none of them installed.
+                // What is on the machine running this suite is not something a test can arrange,
+                // so the answer is supplied rather than looked up.
+                return new AgentManager(
+                    RosterConfig(config).Agents,
+                    new Dictionary<string, int>(),
+                    RosterConfig(config).Agents.ToDictionary(
+                        agent => agent.Executable,
+                        _ => false,
+                        StringComparer.OrdinalIgnoreCase));
             case "agents-empty":
                 return new AgentManager([], new Dictionary<string, int>());
             case "agents-remove":

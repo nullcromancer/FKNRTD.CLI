@@ -16,7 +16,10 @@ internal enum AgentAction
     Remove,
 
     /// <summary>Open the full per-agent reference: every profile, and where the executable is.</summary>
-    Explain
+    Explain,
+
+    /// <summary>Change which program the highlighted agent runs.</summary>
+    Repoint
 }
 
 /// <summary>
@@ -32,7 +35,16 @@ internal sealed class AgentManager : IOverlay
     private readonly IReadOnlyDictionary<string, bool> _onPath;
     private int _selected;
 
-    public AgentManager(IReadOnlyList<AgentDefinition> agents, IReadOnlyDictionary<string, int> usage)
+    /// <param name="onPath">
+    /// Which executables were found, keyed by name. Supplied only by the renderer's test seam: what
+    /// is installed on the machine running the suite is not something a test can arrange, and the
+    /// state a first-time operator meets - nothing installed at all - is exactly the one worth
+    /// drawing.
+    /// </param>
+    public AgentManager(
+        IReadOnlyList<AgentDefinition> agents,
+        IReadOnlyDictionary<string, int> usage,
+        IReadOnlyDictionary<string, bool>? onPath = null)
     {
         _agents = agents;
         _usage = usage;
@@ -42,7 +54,7 @@ internal sealed class AgentManager : IOverlay
         // and this panel asked it about every agent about eight times a frame for as long as it was
         // open. The roster is a picture of one moment either way; installing something while it is
         // open and reopening it is the same gesture as any other refresh.
-        _onPath = agents
+        _onPath = onPath ?? agents
             .Select(agent => agent.Executable)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
@@ -105,6 +117,17 @@ internal sealed class AgentManager : IOverlay
                 Action = AgentAction.Explain;
                 AgentId = Selected?.Id ?? string.Empty;
                 return OverlayResult.Submit;
+            case ConsoleKey.E:
+                // The commonest problem this screen reports is an executable that is not on PATH,
+                // and until now the only thing it could do about it was name a shell command.
+                if (Selected is { } repointed)
+                {
+                    Action = AgentAction.Repoint;
+                    AgentId = repointed.Id;
+                    return OverlayResult.Submit;
+                }
+
+                return OverlayResult.Continue;
         }
 
         // Space and Enter both toggle. Enter is the habit the rest of the dashboard builds, and
@@ -196,7 +219,8 @@ internal sealed class AgentManager : IOverlay
 
         Overlays.Footer(canvas, panel, Theme.Violet,
             ("↑↓", "choose"), ("Space", Selected?.Enabled == true ? "disable" : "enable"),
-            ("N", "add"), ("Del", "remove"), ("F1", "full detail"), ("Esc", "close"));
+            ("N", "add"), ("E", "change its command"), ("Del", "remove"), ("F1", "full detail"),
+            ("Esc", "close"));
     }
 
     private const int PreferredWidth = 100;
@@ -284,8 +308,8 @@ internal sealed class AgentManager : IOverlay
 
         parts.Add(!OnPath(agent)
             ? $"That command is not on this machine's PATH, so any task that names {agent.Id} would " +
-              "fail the moment it tried to launch it. Install it, or point this agent at a different " +
-              $"executable with: fknrtd agent add -id {agent.Id} -exe <command>."
+              "fail the moment it tried to launch it. Install it, or press E to point this agent at " +
+              "a program that is there."
             : "It was found on PATH, so a task can launch it.");
 
         parts.Add(TaskWizard.CanAudit(_agents, agent.Id)

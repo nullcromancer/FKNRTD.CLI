@@ -1546,11 +1546,11 @@ static Task TestEmptyWorkspaceGuidesAsync()
     True(logs.Contains("Verify", StringComparison.Ordinal), "The log view names the stage");
     True(logs.Contains("Every one must exit 0", StringComparison.Ordinal),
         "The log view says what the stage is for");
-    True(logs.Contains("Press I to see the full record", StringComparison.Ordinal),
+    True(Prose(logs).Contains("Press I to see the full record", StringComparison.Ordinal),
         "An absent log explains itself and names a next step");
 
     // And it must not tell the operator to open the view they are already looking at.
-    True(!logs.Contains("Press L to read", StringComparison.Ordinal),
+    True(!Prose(logs).Contains("Press L to read", StringComparison.Ordinal),
         "The log view does not point at itself");
     return Task.CompletedTask;
 }
@@ -2606,6 +2606,27 @@ static Task TestOverlayHostFrameAsync()
 /// A keystroke with no character behind it, which is what a bare function or arrow key delivers.
 /// Spelling it out at every call site meant a literal NUL character sitting invisibly in the source.
 /// </summary>
+/// <summary>
+/// A frame's prose, with the panel borders removed and the wrapping undone, so a test can look for
+/// a sentence without caring where the renderer happened to break it. Searching a raw frame for a
+/// phrase silently stops working the moment the phrase grows past the panel width.
+/// </summary>
+static string Prose(string frame)
+{
+    var words = FrameLines(frame)
+        .Select(line => line.Trim('│', '┃', '┌', '┐', '└', '┘',
+            '├', '┤', '┬', '┴', '┼', '─', '━',
+            '┏', '┓', '┗', '┛', ' '))
+        .Where(line => line.Length > 0);
+    var joined = string.Join(' ', words);
+    while (joined.Contains("  ", StringComparison.Ordinal))
+    {
+        joined = joined.Replace("  ", " ", StringComparison.Ordinal);
+    }
+
+    return joined;
+}
+
 static ConsoleKeyInfo Key(ConsoleKey key) => new((char)0, key, false, false, false);
 
 static Task TestAgentManagerAsync()
@@ -2663,6 +2684,23 @@ static Task TestAgentManagerAsync()
 
     // F1 reaches the full per-agent reference. Without it that screen became unreachable the
     // moment A started opening the roster, and only this suite could still see it.
+    // E repoints the highlighted agent. An executable that is not on PATH is the commonest fault
+    // this screen reports, and until it had this key the only thing it could do was name a command
+    // to go and type somewhere else.
+    manager = AgentManager.Create(snapshot);
+    Equal(OverlayResult.Submit, manager.HandleKey(Key(ConsoleKey.E)), "E submits");
+    Equal(AgentAction.Repoint, manager.Action, "E changes what the agent runs");
+    Equal(snapshot.Config.Agents[0].Id, manager.AgentId, "E acts on the highlighted agent");
+
+    var missing = Prose(Scenes.Render("agents-nothing-installed", 110, 36, colour: false));
+    True(missing.Contains("NOT on PATH", StringComparison.Ordinal),
+        "A missing executable is reported");
+    True(missing.Contains("press E to point this agent at a program that is there",
+            StringComparison.Ordinal),
+        "And the screen offers to fix it rather than naming a command to go and type");
+    True(missing.Contains("E change its command", StringComparison.Ordinal),
+        "The footer offers the key too");
+
     manager = AgentManager.Create(snapshot);
     Equal(OverlayResult.Submit, manager.HandleKey(Key(ConsoleKey.F1)), "F1 submits");
     Equal(AgentAction.Explain, manager.Action, "F1 asks for the full detail");
@@ -2760,12 +2798,12 @@ static Task TestCoordinationReleaseAsync()
     var frame = Scenes.Render("coordination", 110, 44, colour: false);
     True(frame.Contains("R release", StringComparison.Ordinal),
         "The panel offers the key that clears them");
-    True(frame.Contains("does not go away on its own", StringComparison.Ordinal),
+    True(Prose(frame).Contains("does not go away on its own", StringComparison.Ordinal),
         "It says why they need clearing");
 
     // The two entries on this screen used to contradict each other: one said claims expire on
     // their own, the other said an expired claim is reported until somebody releases it.
-    True(!frame.Contains("Claims expire on their own", StringComparison.Ordinal),
+    True(!Prose(frame).Contains("Claims expire on their own", StringComparison.Ordinal),
         "Nothing on the screen claims a reservation clears itself");
 
     var panel = Reference.Coordination(snapshot);
@@ -3153,14 +3191,14 @@ static Task TestOrphanedAgentIsFlaggedAsync()
 
     True(frame.Contains("NOT CONFIGURED", StringComparison.Ordinal),
         "A removed agent is named as missing");
-    True(frame.Contains("this stage cannot run", StringComparison.Ordinal),
+    True(Prose(frame).Contains("this stage cannot run", StringComparison.Ordinal),
         "And the screen says what that costs");
-    True(frame.Contains("Press A to add it back", StringComparison.Ordinal),
+    True(Prose(frame).Contains("Press A to add it back", StringComparison.Ordinal),
         "And what to do about it");
 
     // A disabled agent is a different case and must not be reported as the same one: the
     // orchestrator looks agents up by id and never reads Enabled, so an existing task still runs.
-    True(frame.Contains("it will still run here", StringComparison.Ordinal),
+    True(Prose(frame).Contains("it will still run here", StringComparison.Ordinal),
         "A disabled agent is distinguished from a removed one");
 
     // An ordinary task says none of this.
@@ -3268,7 +3306,7 @@ static async Task TestQuittingAsksWhenWorkIsRunningAsync()
         var frame = busy.RenderLive(snapshot, 110, 34);
         True(frame.Contains("LEAVE WHILE WORK IS RUNNING?", StringComparison.Ordinal),
             "It asks rather than leaving");
-        True(frame.Contains("killed where it stands", StringComparison.Ordinal),
+        True(Prose(frame).Contains("killed where it stands", StringComparison.Ordinal),
             "And says what leaving would do to the agent");
 
         // Staying is the default, so Enter on the untouched form keeps the session.

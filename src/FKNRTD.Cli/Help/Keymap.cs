@@ -99,9 +99,11 @@ public static class Keymap
         new("A", "manage agents",
             "Lists the configured agents - which are enabled, which can actually be found on PATH, " +
             "and which are equipped to act as an auditor - and lets you change the roster: Space " +
-            "enables or disables the highlighted one, N adds another, Del removes one after you " +
-            "type the word REMOVE in full, and F1 opens the full detail for every agent: where its " +
-            "executable actually is, and which command profiles it has."),
+            "enables or disables the highlighted one, N adds another, E changes which program the " +
+            "highlighted one runs - which is the fix for the commonest fault this screen reports, " +
+            "an executable that is not on PATH - Del removes one after you type the word REMOVE in " +
+            "full, and F1 opens the full detail for every agent: where its executable actually is, " +
+            "and which command profiles it has."),
         new("S", "settings",
             "Every setting in this workspace's configuration with its current value, what it " +
             "controls, and what changing it would cost. Enter changes the highlighted one through " +

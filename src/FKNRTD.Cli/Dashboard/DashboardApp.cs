@@ -1821,7 +1821,74 @@ internal sealed class DashboardApp
                 case AgentAction.Explain:
                     _overlay = Reference.Agents(current.Config);
                     return;
+                case AgentAction.Repoint:
+                    OpenAgentExecutableEditor(current.Config, manager.AgentId);
+                    return;
             }
+        };
+    }
+
+    /// <summary>
+    /// Asks which program an agent should run, and writes it back. An executable that is not on
+    /// PATH is the commonest fault this product reports, and the roster could say so without being
+    /// able to do anything about it.
+    /// </summary>
+    private void OpenAgentExecutableEditor(FknrtdConfig config, string agentId)
+    {
+        var agent = config.Agents.FirstOrDefault(item =>
+            item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase));
+        if (agent is null)
+        {
+            _toast = $"'{agentId}' is no longer configured.";
+            return;
+        }
+
+        _overlay = new Wizard($"WHAT {agent.Id.ToUpperInvariant()} RUNS", Theme.Violet,
+        [
+            new WizardStep
+            {
+                Key = "executable",
+                Question = $"Which program should {agent.DisplayName} run?",
+                GlossaryTerm = "agent",
+                Default = _ => agent.Executable,
+                Placeholder = "claude",
+                Explanation =
+                    "A command on PATH, like 'claude', or a full path to one. It is launched with " +
+                    "this agent's profile arguments, so changing it only changes which program " +
+                    "receives them — if the new program wants its prompt differently, its profiles " +
+                    "need changing too, which is a job for 'fknrtd agent add'.",
+                Example = "Nothing that has already run changes. A task that is queued or failed " +
+                          "will use the new command the next time it runs.",
+                ExampleCaption = "WHAT THIS CHANGES",
+                Validate = (value, _) =>
+                {
+                    var trimmed = value.Trim();
+                    if (trimmed.Length == 0)
+                    {
+                        return "An agent needs a program to run.";
+                    }
+
+                    return ExecutableLocator.Find(trimmed) is null
+                        ? $"'{trimmed}' is not on PATH and is not a file that exists. Check the " +
+                          "spelling, or give the full path to it."
+                        : null;
+                }
+            }
+        ], finishVerb: "save");
+
+        _overlayCompleted = async (completed, current, token) =>
+        {
+            var executable = ((Wizard)completed).Value("executable").Trim();
+            var updated = current.Config with
+            {
+                Agents = current.Config.Agents
+                    .Select(item => item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase)
+                        ? item with { Executable = executable }
+                        : item)
+                    .ToList()
+            };
+            await _store.SaveConfigAsync(updated, token).ConfigureAwait(false);
+            _toast = $"{agentId} now runs {executable}. Press D to check it answers.";
         };
     }
 
