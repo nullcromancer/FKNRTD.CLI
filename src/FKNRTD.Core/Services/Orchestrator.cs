@@ -40,7 +40,9 @@ public sealed class Orchestrator
         var task = await _store.LoadTaskAsync(taskId, cancellationToken).ConfigureAwait(false);
         if (task.Status == WorkflowStatus.Landed)
         {
-            throw new InvalidOperationException($"Task {task.Id} has already been landed.");
+            throw new InvalidOperationException(
+                $"Task {task.Id} has already landed, so its work is in the base branch and running it " +
+                "again would achieve nothing. Create a new task for any further change.");
         }
 
         if (task.Status == WorkflowStatus.Cancelled)
@@ -152,7 +154,9 @@ public sealed class Orchestrator
         if (task.Status != WorkflowStatus.ReadyToLand)
         {
             throw new InvalidOperationException(
-                $"Task {task.Id} must be ReadyToLand before it can be merged. Current status: {task.Status}.");
+                $"Task {task.Id} is {task.Status}, and only a task that has passed verification and " +
+                "received a PASS verdict from its auditor can be landed. Run 'fknrtd task show " +
+                $"{task.Id}' to see which stage it stopped at.");
         }
 
         var stage = BeginStage(task, WorkflowStage.Land, null);
@@ -272,7 +276,10 @@ public sealed class Orchestrator
         {
             CompleteStage(stage, StageState.Failed, $"Lead exited with code {result.ExitCode}.", result.ExitCode);
             await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException("The lead agent could not produce a plan.");
+            throw new InvalidOperationException(
+                "The lead agent ended without producing a plan, so there is nothing for the implementer " +
+                "to work from. Its full output is in the task's plan log; the usual causes are a brief " +
+                "too vague to act on, or the agent exhausting its rate-limit budget mid-run.");
         }
 
         var planPath = _store.TaskArtifactPath(task.Id, "plan.md");
@@ -346,7 +353,10 @@ public sealed class Orchestrator
         {
             CompleteStage(stage, StageState.Failed, $"Implementer exited with code {result.ExitCode}.", result.ExitCode);
             await SaveTaskAsync(task, cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException("The implementing agent failed.");
+            throw new InvalidOperationException(
+                "The implementing agent exited without completing the change. Its full output is in the " +
+                "task's implement log. Anything it did write is still in the task's worktree and is not " +
+                "in your checkout.");
         }
 
         CompleteStage(
@@ -537,7 +547,9 @@ public sealed class Orchestrator
         if (!config.AutoCommitAgentChanges)
         {
             throw new InvalidOperationException(
-                "The task passed, but the worktree still has uncommitted changes and auto-commit is disabled.");
+                "The work verified and passed its audit, but the worktree still has uncommitted changes " +
+                "and autoCommitAgentChanges is off, so there is no commit to merge. Commit them in the " +
+                "worktree yourself, or turn the setting on in .fknrtd/config.json and run the task again.");
         }
 
         var userName = await _git.GitAsync(
@@ -554,14 +566,17 @@ public sealed class Orchestrator
             !userEmail.Success || string.IsNullOrWhiteSpace(userEmail.StandardOutput))
         {
             throw new InvalidOperationException(
-                "Unable to commit verified agent changes because Git committer identity is not configured. " +
-                "Set user.name and user.email before retrying.");
+                "The verified changes cannot be committed because Git has no committer identity here. " +
+                "Set user.name and user.email — globally, or with 'git config' in this repository — and " +
+                "run the task again. The work itself is safe in the task's worktree.");
         }
 
         var add = await _git.GitAsync(task.WorktreePath, ["add", "-A"], cancellationToken).ConfigureAwait(false);
         if (!add.Success)
         {
-            throw new InvalidOperationException("Unable to stage verified agent changes: " + add.StandardError.Trim());
+            throw new InvalidOperationException(
+                "Git could not stage the verified changes, so the task cannot be committed or landed. " +
+                "The work is still in the task's worktree. Git said: " + add.StandardError.Trim());
         }
 
         var message = $"FKNRTD.CLI {task.Id}: {task.Title}";
@@ -569,7 +584,9 @@ public sealed class Orchestrator
             .ConfigureAwait(false);
         if (!commit.Success)
         {
-            throw new InvalidOperationException("Unable to commit verified agent changes: " + commit.StandardError.Trim());
+            throw new InvalidOperationException(
+                "Git could not commit the verified changes, so there is nothing for landing to merge. " +
+                "The work is still in the task's worktree. Git said: " + commit.StandardError.Trim());
         }
     }
 
@@ -715,14 +732,19 @@ public sealed class Orchestrator
 
     private static AgentDefinition FindAgent(FknrtdConfig config, string agentId) =>
         config.Agents.FirstOrDefault(agent => agent.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase))
-        ?? throw new InvalidOperationException($"Agent '{agentId}' is not configured.");
+        ?? throw new InvalidOperationException(
+            $"This task is assigned to an agent called '{agentId}', which is not configured in this " +
+            "workspace. Run 'fknrtd agent list' to see what is, then 'fknrtd agent new' to register it.");
 
     private static AgentCommandProfile ResolveProfile(AgentDefinition definition, string name) =>
         definition.Profiles.TryGetValue(name, out var profile)
             ? profile
             : definition.Profiles.TryGetValue("default", out profile)
                 ? profile
-                : throw new InvalidOperationException($"Agent '{definition.Id}' has no '{name}' profile.");
+                : throw new InvalidOperationException(
+                    $"Agent '{definition.Id}' has no '{name}' profile and no 'default' to fall back on, " +
+                    "so there are no arguments to launch it with for this stage. Add one under this " +
+                    "agent in .fknrtd/config.json.");
 
     internal static bool IsPassingAuditVerdict(
         string report,

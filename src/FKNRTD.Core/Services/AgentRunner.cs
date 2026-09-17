@@ -144,7 +144,9 @@ public sealed class AgentRunner
         }
 
         throw new InvalidOperationException(
-            $"Agent '{definition.Id}' does not define the '{name}' or 'default' command profile.");
+            $"Agent '{definition.Id}' cannot be launched for the '{name}' stage: it defines neither a " +
+            $"'{name}' profile nor a 'default' one, so there are no arguments to run it with. Add one " +
+            "under this agent in .fknrtd/config.json, or re-register it with 'fknrtd agent new'.");
     }
 
     private static IReadOnlyList<string> ExpandArguments(

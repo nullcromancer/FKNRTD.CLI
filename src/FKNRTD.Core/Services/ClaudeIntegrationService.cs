@@ -32,11 +32,15 @@ public sealed class ClaudeIntegrationService
                                AllowTrailingCommas = true,
                                CommentHandling = JsonCommentHandling.Skip
                            })?.AsObject()
-                ?? throw new InvalidDataException($"Claude settings are not a JSON object: {settingsPath}");
+                ?? throw new InvalidDataException(
+                    $"{settingsPath} does not contain a JSON object, so the statusline cannot be added " +
+                    "to it without losing whatever is there. Fix or move that file, then try again.");
             if (settings["statusLine"] is not null && !force)
             {
                 throw new InvalidOperationException(
-                    "Claude already has a status line. Re-run with -force to replace it after a backup is created.");
+                    "Claude Code already has a status line configured, and replacing it silently would " +
+                    "discard whatever you had. Re-run with -force to replace it; the previous settings " +
+                    "are backed up first.");
             }
 
             var backup = settingsPath + ".fknrtd-backup-" + DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff");

@@ -29,7 +29,10 @@ public sealed class ClaimService
             .ToList();
         if (normalized.Count == 0)
         {
-            throw new ArgumentException("At least one claimed path is required.", nameof(paths));
+            throw new ArgumentException(
+                "A claim has to name at least one path, because a claim on nothing cannot warn anyone " +
+                "about anything. Pass -path once for each file the agent is about to touch.",
+                nameof(paths));
         }
 
         var claim = new FileClaim
@@ -52,7 +55,9 @@ public sealed class ClaimService
     {
         var claim = (await _store.LoadClaimsAsync(cancellationToken).ConfigureAwait(false))
             .FirstOrDefault(item => item.Id.Equals(claimId, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Claim '{claimId}' was not found.");
+            ?? throw new InvalidOperationException(
+                $"There is no claim '{claimId}'. It may have expired on its own, which is what claims " +
+                "do when they are not renewed. Run 'fknrtd claim list' to see the live ones.");
         claim = claim with
         {
             UpdatedAt = DateTimeOffset.UtcNow,
@@ -66,7 +71,9 @@ public sealed class ClaimService
     {
         if (!_store.DeleteClaim(claimId))
         {
-            throw new InvalidOperationException($"Claim '{claimId}' was not found.");
+            throw new InvalidOperationException(
+                $"There is no claim '{claimId}' to release. It may already have expired. Run " +
+                "'fknrtd claim list' to see the live ones.");
         }
     }
 

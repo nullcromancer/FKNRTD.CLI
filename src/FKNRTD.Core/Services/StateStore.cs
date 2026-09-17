@@ -208,7 +208,10 @@ public sealed class StateStore
     {
         if (!File.Exists(path))
         {
-            throw new FileNotFoundException($"Required FKNRTD.CLI state file was not found: {path}", path);
+            throw new FileNotFoundException(
+                $"A file this workspace depends on is missing: {path}. If .fknrtd was partly deleted, " +
+                "'fknrtd init -force' rebuilds the configuration while keeping existing task records.",
+                path);
         }
 
         await using var stream = new FileStream(
@@ -220,7 +223,10 @@ public sealed class StateStore
             FileOptions.Asynchronous | FileOptions.SequentialScan);
         return await JsonSerializer.DeserializeAsync<T>(stream, JsonSupport.Options, cancellationToken)
                    .ConfigureAwait(false)
-               ?? throw new InvalidDataException($"The JSON file is empty or invalid: {path}");
+               ?? throw new InvalidDataException(
+                   $"{path} is empty or is not valid JSON, so this workspace cannot be read. If you " +
+                   "edited it by hand, check it against 'fknrtd config validate'; a backup of the " +
+                   "previous configuration may be in .fknrtd/runtime/backups.");
     }
 
     private static async Task<IReadOnlyList<T>> ReadDirectoryAsync<T>(

@@ -113,3 +113,23 @@ reflection so a field cannot be added without being documented.
 message strings under `src/FKNRTD.Core/Services/**` only, as re-briefed.
 
 Local suite: 34/34 passing, Release build clean.
+
+## 2026-09-17 — claude (Codex seat handover)
+
+**Codex seat 02 did not produce work across three dispatches.** Each sat at under 0.1s of CPU
+with no files touched — 15 minutes, then 7, then 4. A trivial probe (`codex exec "Reply with
+exactly: PROBE OK"`) returned correctly in seconds, so the CLI and the account are fine; the
+longer workspace-write dispatches specifically never started. Not diagnosed further.
+
+Rather than leave the gap, Claude has taken both halves of brief 02:
+
+- `Help/SettingsCatalog.cs` — every settable field documented with what changing it costs.
+- Error messages across `src/FKNRTD.Core/Services/**` — 38 thrown messages rewritten so each
+  says what happened, why it matters, and the next action, naming an exact command or file.
+  Strings only: the diff shows no change to any condition, exception type or signature.
+
+**Both of those files are now Claude's.** If the Codex seat comes back, take fresh work rather
+than brief 02; `docs/collab/BRIEF-codex-02-settings-and-errors.md` is complete and should be
+treated as closed.
+
+Local suite: 35/35 passing, Release build clean.

@@ -120,7 +120,10 @@ public sealed class GitService
         var result = await GitAsync(directory, ["rev-parse", "HEAD"], cancellationToken).ConfigureAwait(false);
         if (!result.Success)
         {
-            throw new InvalidOperationException("Unable to resolve the current Git commit: " + result.StandardError.Trim());
+            throw new InvalidOperationException(
+                "Git could not resolve the current commit, so there is nothing to branch a task from. " +
+                "This usually means the repository has no commits yet: make one, then try again. Git " +
+                "said: " + result.StandardError.Trim());
         }
 
         return result.StandardOutput.Trim();
@@ -140,7 +143,9 @@ public sealed class GitService
             if (!current.Success || branch.Length == 0)
             {
                 throw new InvalidOperationException(
-                    "Unable to resolve a base branch because the primary worktree has a detached HEAD.");
+                    "This checkout has a detached HEAD, so there is no branch for a task to start from " +
+                    "and merge back into. Check out a branch, or name one explicitly when creating the " +
+                    "task.");
             }
 
             return branch;
@@ -152,7 +157,9 @@ public sealed class GitService
             : requested;
         if (!await BranchExistsAsync(directory, branchName, cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException($"Base ref '{requested}' does not name a local Git branch.");
+            throw new InvalidOperationException(
+                $"'{requested}' is not a local branch in this repository, so a task cannot start from it. " +
+                "Check the spelling, or create the branch first. 'git branch' lists what exists.");
         }
 
         return branchName;

@@ -26,12 +26,19 @@ public sealed class TaskService
     {
         if (string.IsNullOrWhiteSpace(title))
         {
-            throw new ArgumentException("A task title is required.", nameof(title));
+            throw new ArgumentException(
+                "A task needs a title: it is how you will recognise this task in a list of thirty. A few " +
+                "words describing the outcome is enough. 'fknrtd task new' asks for it with an example.",
+                nameof(title));
         }
 
         if (string.IsNullOrWhiteSpace(brief))
         {
-            throw new ArgumentException("A task brief is required.", nameof(brief));
+            throw new ArgumentException(
+                "A task needs a brief: it is the instruction every agent on this task reads, and the " +
+                "thing the auditor judges the finished work against. 'fknrtd explain brief' says what " +
+                "to put in one.",
+                nameof(brief));
         }
 
         var config = await _store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
@@ -78,7 +85,9 @@ public sealed class TaskService
         var task = await _store.LoadTaskAsync(taskId, cancellationToken).ConfigureAwait(false);
         if (task.Status == WorkflowStatus.Landed)
         {
-            throw new InvalidOperationException($"Task {taskId} has already been landed and cannot be cancelled.");
+            throw new InvalidOperationException(
+                $"Task {taskId} has already landed, so there is nothing left to cancel — its work is in " +
+                "the base branch. Revert the merge with Git if that is what you meant.");
         }
 
         if (task.Status != WorkflowStatus.Running)
@@ -117,7 +126,9 @@ public sealed class TaskService
         var task = await _store.LoadTaskAsync(taskId, cancellationToken).ConfigureAwait(false);
         if (task.Status is WorkflowStatus.Landed or WorkflowStatus.Running)
         {
-            throw new InvalidOperationException($"Task {taskId} cannot be reset while it is {task.Status}.");
+            throw new InvalidOperationException(
+                $"Task {taskId} is {task.Status}, and only a failed or cancelled task has stages worth " +
+                "resetting. A running task can be stopped first with 'fknrtd task cancel " + taskId + "'.");
         }
 
         foreach (var stage in task.Stages.Where(stage => stage.State == StageState.Failed))
@@ -146,12 +157,16 @@ public sealed class TaskService
             candidate.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase));
         if (agent is null)
         {
-            throw new InvalidOperationException($"The configured {role} agent '{agentId}' does not exist.");
+            throw new InvalidOperationException(
+                $"There is no agent called '{agentId}' to act as the {role}. Run 'fknrtd agent list' to " +
+                "see what this workspace has, or 'fknrtd agent new' to register another.");
         }
 
         if (!agent.Enabled)
         {
-            throw new InvalidOperationException($"The configured {role} agent '{agentId}' is disabled.");
+            throw new InvalidOperationException(
+                $"The agent '{agentId}' is disabled, so it cannot be given the {role} role. Re-enable it " +
+                $"with 'fknrtd agent enable {agentId}', or choose a different agent.");
         }
 
         var profile = agent.Profiles.TryGetValue(profileName, out var configured)
@@ -159,12 +174,17 @@ public sealed class TaskService
             : agent.Profiles.TryGetValue("default", out configured)
                 ? configured
                 : throw new InvalidOperationException(
-                    $"The configured {role} agent '{agentId}' has no '{profileName}' or 'default' profile.");
+                    $"The agent '{agentId}' cannot act as the {role}: it has neither a '{profileName}' " +
+                    "profile nor a 'default' one, so there are no arguments to launch it with for that " +
+                    "stage. Add one under this agent in .fknrtd/config.json.");
         if (requireVerdict &&
             (string.IsNullOrWhiteSpace(profile.SuccessMarker) || string.IsNullOrWhiteSpace(profile.FailureMarker)))
         {
             throw new InvalidOperationException(
-                $"The configured auditor '{agentId}' needs successMarker and failureMarker values.");
+                $"The agent '{agentId}' cannot act as the auditor because its audit profile has no " +
+                "successMarker and failureMarker, so it would have no way to signal a pass or a fail — " +
+                "and a missing verdict is treated as a failure. Add both to its audit profile in " +
+                ".fknrtd/config.json, or pick an agent that already has them.");
         }
     }
 }

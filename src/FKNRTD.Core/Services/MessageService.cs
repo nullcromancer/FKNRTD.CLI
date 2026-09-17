@@ -20,7 +20,10 @@ public sealed class MessageService
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            throw new ArgumentException("A message cannot be empty.", nameof(text));
+            throw new ArgumentException(
+                "An empty message would not tell the receiving agent anything, so it is not recorded. " +
+                "Pass the text with -text.",
+                nameof(text));
         }
 
         var message = new AgentMessage
@@ -46,7 +49,9 @@ public sealed class MessageService
     {
         var messages = await GetCurrentAsync(1000, cancellationToken).ConfigureAwait(false);
         var original = messages.FirstOrDefault(item => item.Id.Equals(messageId, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Message '{messageId}' was not found.");
+            ?? throw new InvalidOperationException(
+                $"There is no message '{messageId}' to acknowledge. Run 'fknrtd message list' to see " +
+                "the current ones and their ids.");
         var acknowledged = original with
         {
             Delivery = MessageDelivery.Acknowledged,

@@ -28,8 +28,10 @@ public sealed class WorktreeService
         if (!await _git.IsRepositoryAsync(_store.Paths.Root, cancellationToken).ConfigureAwait(false))
         {
             throw new InvalidOperationException(
-                "FKNRTD.CLI worktree isolation requires a Git repository. " +
-                "Re-run 'fknrtd init -force -standalone' to work without Git.");
+                "This task needs an isolated worktree, which only a Git repository can provide. Either " +
+                "make this folder a repository with 'git init', or re-run " +
+                "'fknrtd init -force -standalone' to work without isolation — agents will then edit this " +
+                "folder directly, with nothing to roll back to.");
         }
 
         task.BaseRef = await _git.ResolveBaseBranchAsync(
@@ -60,7 +62,10 @@ public sealed class WorktreeService
         var result = await _git.GitAsync(_store.Paths.Root, arguments, cancellationToken).ConfigureAwait(false);
         if (!result.Success)
         {
-            throw new InvalidOperationException("Unable to create the isolated worktree: " + result.StandardError.Trim());
+            throw new InvalidOperationException(
+                "Git could not create the task's isolated worktree, so the task cannot start. Nothing in " +
+                "your checkout was touched. A stale worktree of the same name is the usual cause; " +
+                "'git worktree prune' clears those. Git said: " + result.StandardError.Trim());
         }
 
         return (path, branch);
@@ -87,13 +92,18 @@ public sealed class WorktreeService
         task.BaseRef = baseBranch;
         if (requireCleanTree && !snapshot.IsClean)
         {
-            throw new InvalidOperationException("Landing is blocked because the primary worktree has uncommitted changes.");
+            throw new InvalidOperationException(
+                "Landing is blocked because your own checkout has uncommitted changes, and merging on " +
+                "top of them would mix verified work with work nothing has checked. Commit or stash " +
+                "them, then land again. The task is unaffected and stays ready.");
         }
 
         if (!string.Equals(snapshot.Branch, baseBranch, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Landing is blocked because the primary worktree is on '{snapshot.Branch}', not '{baseBranch}'.");
+                $"Landing is blocked because your checkout is on '{snapshot.Branch}' and this task " +
+                $"merges into '{baseBranch}'. Switch to '{baseBranch}' and land again. The task is " +
+                "unaffected and stays ready.");
         }
 
         var result = await _git.GitAsync(
@@ -129,7 +139,10 @@ public sealed class WorktreeService
             var remove = await _git.GitAsync(_store.Paths.Root, arguments, cancellationToken).ConfigureAwait(false);
             if (!remove.Success)
             {
-                throw new InvalidOperationException("Unable to remove the worktree: " + remove.StandardError.Trim());
+                throw new InvalidOperationException(
+                    "Git could not remove the task's worktree directory. Nothing was deleted, and the " +
+                    "task record and branch are untouched. A process holding a file open inside it is " +
+                    "the usual cause. Git said: " + remove.StandardError.Trim());
             }
         }
 
@@ -137,7 +150,10 @@ public sealed class WorktreeService
             .ConfigureAwait(false);
         if (!prune.Success)
         {
-            throw new InvalidOperationException("Unable to prune stale worktree state: " + prune.StandardError.Trim());
+            throw new InvalidOperationException(
+                "The worktree directory was removed, but Git could not prune its own record of it. Run " +
+                "'git worktree prune' in the repository to finish tidying up. Git said: " +
+                prune.StandardError.Trim());
         }
 
         if (task.Status == WorkflowStatus.Landed &&
@@ -151,8 +167,10 @@ public sealed class WorktreeService
                 .ConfigureAwait(false);
             if (!delete.Success)
             {
-                throw new InvalidOperationException("Unable to delete the landed task branch: " +
-                                                    delete.StandardError.Trim());
+                throw new InvalidOperationException(
+                    "The worktree was removed, but the landed task branch could not be deleted. It is " +
+                    "harmless to leave; 'git branch -d' removes it later. Git said: " +
+                    delete.StandardError.Trim());
             }
         }
     }
