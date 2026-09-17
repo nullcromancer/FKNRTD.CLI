@@ -355,7 +355,12 @@ internal sealed class DashboardApp
         Rect rect,
         int selectedTaskIndex)
     {
-        canvas.DrawBox(rect, "PIPELINE", Theme.Blue);
+        // The panel shows a handful of rows with a small arrow in the margin when there are more.
+        // Naming the total is what tells a reader the arrow means three tasks rather than one.
+        canvas.DrawBox(
+            rect,
+            snapshot.Tasks.Count > 1 ? $"PIPELINE · {snapshot.Tasks.Count} tasks · F to find" : "PIPELINE",
+            Theme.Blue);
         var inner = rect.Inset();
         if (snapshot.Tasks.Count == 0)
         {
