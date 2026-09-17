@@ -138,7 +138,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("What to do next fits the workspace it is in", TestNextStepFitsTheWorkspaceAsync),
     ("A task naming a missing agent says so", TestOrphanedAgentIsFlaggedAsync),
     ("The busy repaint stays inside the dashboard loop", TestBusyRepaintStaysInsideTheLoopAsync),
-    ("Nothing on screen tells you to leave the dashboard", TestNothingTellsYouToLeaveAsync)
+    ("Nothing on screen tells you to leave the dashboard", TestNothingTellsYouToLeaveAsync),
+    ("Quitting asks when work is running", TestQuittingAsksWhenWorkIsRunningAsync)
 };
 
 var failures = new List<string>();
@@ -3234,4 +3235,47 @@ static Task TestNothingTellsYouToLeaveAsync()
         "An empty roster names the key that fills it");
 
     return Task.CompletedTask;
+}
+
+/// <summary>
+/// Quitting with work in flight. Leaving cancels the session, and cancelling a session kills every
+/// running agent's process tree - which is a great deal to do for one unconfirmed keystroke from
+/// somebody who may only have meant "put this away for a minute".
+/// </summary>
+static async Task TestQuittingAsksWhenWorkIsRunningAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { ProjectName = "quit-test" }).ConfigureAwait(false);
+        var config = await store.LoadConfigAsync().ConfigureAwait(false);
+        var snapshot = new DashboardSnapshot { Config = config };
+
+        // Nothing running: Q leaves at once, because there is nothing to lose by leaving.
+        var idle = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+        await idle.HandleKeyAsync(Key(ConsoleKey.Q), snapshot, CancellationToken.None).ConfigureAwait(false);
+        True(idle.WantsToQuit, "Q leaves at once when nothing is running");
+
+        // Something running: Q asks, and the frame says what leaving would cost.
+        var busy = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+        busy.PretendTaskIsRunning("FKN-20260917-000000-busy");
+        await busy.HandleKeyAsync(Key(ConsoleKey.Q), snapshot, CancellationToken.None).ConfigureAwait(false);
+        True(!busy.WantsToQuit, "Q does not leave straight away while a task is running");
+
+        var frame = busy.RenderLive(snapshot, 110, 34);
+        True(frame.Contains("LEAVE WHILE WORK IS RUNNING?", StringComparison.Ordinal),
+            "It asks rather than leaving");
+        True(frame.Contains("killed where it stands", StringComparison.Ordinal),
+            "And says what leaving would do to the agent");
+
+        // Staying is the default, so Enter on the untouched form keeps the session.
+        await busy.HandleKeyAsync(Key(ConsoleKey.Enter), snapshot, CancellationToken.None).ConfigureAwait(false);
+        True(!busy.WantsToQuit, "Enter takes the recommended answer, which is to stay");
+
+        // Choosing to leave does leave.
+        await busy.HandleKeyAsync(Key(ConsoleKey.Q), snapshot, CancellationToken.None).ConfigureAwait(false);
+        await busy.HandleKeyAsync(Key(ConsoleKey.DownArrow), snapshot, CancellationToken.None).ConfigureAwait(false);
+        await busy.HandleKeyAsync(Key(ConsoleKey.Enter), snapshot, CancellationToken.None).ConfigureAwait(false);
+        True(busy.WantsToQuit, "Choosing to stop them and quit does quit");
+    }).ConfigureAwait(false);
 }

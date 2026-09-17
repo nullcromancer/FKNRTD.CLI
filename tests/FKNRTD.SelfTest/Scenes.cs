@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "message", "land", "remove",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent"
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-remove", "doctor", "welcome", "setup", "palette", "palette-search", "logs", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running"
     ];
 
     /// <summary>
@@ -45,6 +45,16 @@ internal static class Scenes
         {
             // Index 2 is the failed task, which is the state the log view exists to serve.
             return renderer.RenderLog(snapshot, width, height, selectedTaskIndex: 2, colour);
+        }
+
+        if (name == "quit-while-running")
+        {
+            var app = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
+                WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
+            app.PretendTaskIsRunning(snapshot.Tasks[1].Id);
+            app.HandleKeyAsync(new ConsoleKeyInfo((char)0, ConsoleKey.Q, false, false, false),
+                snapshot, CancellationToken.None).GetAwaiter().GetResult();
+            return app.RenderLive(snapshot, width, height, colour);
         }
 
         if (name == "inspect-missing-agent")

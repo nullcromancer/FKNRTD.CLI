@@ -1004,6 +1004,23 @@ internal sealed class DashboardApp
     /// <summary>How far back through the stage log the operator has scrolled. A test seam.</summary>
     internal int LogScroll => _logScroll;
 
+    /// <summary>Whether the loop has been asked to stop. A test seam.</summary>
+    internal bool WantsToQuit => _quit;
+
+    /// <summary>
+    /// Renders exactly what the loop would paint right now, overlay and message included. The other
+    /// Render overloads take those as arguments so a scene can compose one; this one reads the live
+    /// state, which is what a test driving keystrokes needs to see.
+    /// </summary>
+    internal string RenderLive(DashboardSnapshot snapshot, int width, int height, bool useColor = false) =>
+        RenderCurrent(snapshot, width, height, useColor);
+
+    /// <summary>
+    /// Registers a task as running without launching anything, so a test can reach the paths that
+    /// only matter while work is in flight.
+    /// </summary>
+    internal void PretendTaskIsRunning(string taskId) => _running[taskId] = Task.CompletedTask;
+
     internal async Task HandleKeyAsync(ConsoleKeyInfo key, DashboardSnapshot snapshot, CancellationToken cancellationToken)
     {
         // An open overlay owns every keystroke. Nothing behind it can be triggered by accident while
@@ -1122,7 +1139,16 @@ internal sealed class DashboardApp
         switch (action)
         {
             case "Q":
-                _quit = true;
+                // Quitting cancels the session, which kills every running agent's process tree.
+                // That is a lot to do for one unconfirmed keystroke, so it is only unconfirmed when
+                // there is nothing to lose.
+                if (_running.Count == 0)
+                {
+                    _quit = true;
+                    break;
+                }
+
+                OpenQuitConfirmation();
                 break;
             case "up":
                 _selectedTask = Math.Max(0, _selectedTask - 1);
@@ -1571,6 +1597,58 @@ internal sealed class DashboardApp
             {
                 _toast = "Could not create the task: " + exception.Message;
             }
+        };
+    }
+
+    /// <summary>
+    /// Asks before quitting with work in flight. Leaving cancels the session, and cancelling a
+    /// session kills each running agent's process tree - so an operator who pressed Q meaning
+    /// "put this away" would come back to tasks that had stopped part-way through.
+    /// </summary>
+    private void OpenQuitConfirmation()
+    {
+        var running = _running.Count;
+        var subject = running == 1
+            ? "One task is still running."
+            : $"{running} tasks are still running.";
+
+        _overlay = new Wizard("LEAVE WHILE WORK IS RUNNING?", Theme.Amber,
+        [
+            new WizardStep
+            {
+                Key = "leave",
+                Question = subject + " What should happen to " +
+                           (running == 1 ? "it" : "them") + "?",
+                GlossaryTerm = "status.running",
+                Input = WizardInput.Choice,
+                Default = _ => "stay",
+                Explanation =
+                    "Quitting cancels this session, and cancelling kills each running agent where it " +
+                    $"stands — whatever it had already written to disk stays there, and the task is " +
+                    "recorded as cancelled. Nothing is merged either way. A cancelled task can be " +
+                    "reset with R and run again, picking up from the first stage that has not passed.",
+                Example = "Leaving the dashboard open costs nothing. It polls the workspace once a " +
+                          "second and does no work of its own.",
+                ExampleCaption = "IF YOU STAY",
+                Options = _ =>
+                [
+                    new WizardOption("stay", "Stay here",
+                        running == 1 ? "let it finish" : "let them finish", Recommended: true),
+                    new WizardOption("leave", "Stop " + (running == 1 ? "it" : "them") + " and quit",
+                        "each running agent is killed where it stands")
+                ]
+            }
+        ], finishVerb: "confirm");
+
+        _overlayCompleted = (completed, _, _) =>
+        {
+            _quit = ((Wizard)completed).Value("leave") == "leave";
+            if (!_quit)
+            {
+                _toast = "Still here. Press L to watch what is running.";
+            }
+
+            return Task.CompletedTask;
         };
     }
 

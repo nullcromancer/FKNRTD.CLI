@@ -529,7 +529,7 @@ internal sealed class Wizard : IOverlay
         var options = step.Options(_values);
         if (options.Count == 0)
         {
-            canvas.DrawText(x, row, "Nothing to choose from. Esc, then run: fknrtd agent list", Theme.Amber,
+            canvas.DrawText(x, row, "Nothing to choose from. Press Esc, then A to set this up.", Theme.Amber,
                 maxWidth: width, background: Theme.Surface);
             return row + 1;
         }
@@ -558,7 +558,10 @@ internal sealed class Wizard : IOverlay
                 : option.Recommended
                     ? option.Description + " · recommended"
                     : option.Description;
-            var detailX = x + 2 + labelWidth + 1;
+            // Two columns of gutter, not one. A label that exactly fills its column - "Stop it and
+            // quit" is sixteen characters against a sixteen-wide column - otherwise runs straight
+            // into its own description with a single space between them.
+            var detailX = x + 2 + labelWidth + 2;
             var detailWidth = Math.Max(0, width - (detailX - x));
             canvas.DrawText(detailX, y, Text.Truncate(detail, detailWidth),
                 option.Warning is not null ? Theme.Amber : selected ? Theme.Muted : Theme.Muted.Blend(fill, 0.25),

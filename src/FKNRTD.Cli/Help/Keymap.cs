@@ -137,8 +137,11 @@ public static class Keymap
         new("Tab", "switch view",
             "Cycles between the overview and the log view."),
         new("Q", "quit",
-            "Leaves the dashboard and restores the terminal. Running tasks are cancelled first; " +
-            "nothing is merged and nothing is lost.",
+            "Leaves the dashboard and restores the terminal. Leaving cancels the session, which " +
+            "kills each running agent where it stands, so with anything running it asks first. " +
+            "Whatever an agent had already written to disk stays there and nothing is merged; the " +
+            "task is recorded as cancelled and R resets it to run again. Escape does the same as Q " +
+            "when no panel is open.",
             InFooter: true, Essential: true),
         new("Esc", "back",
             "Closes whatever overlay is open. With nothing open it quits, the same as Q, from the " +
