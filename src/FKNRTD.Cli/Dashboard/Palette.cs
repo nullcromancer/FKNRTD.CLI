@@ -105,7 +105,9 @@ internal sealed class Palette : IOverlay
         var rows = Math.Max(1, Math.Min(matching.Count, Math.Max(3, area.Height - 12)));
         var detailRows = matching.Count == 0
             ? 1
-            : Math.Min(3, Text.Wrap(Describe(matching[_selected]), contentWidth).Count);
+            // A description cut off mid-sentence is worse than a slightly taller panel, and a narrow
+            // terminal is exactly where these wrap to four lines.
+            : Math.Min(5, Text.Wrap(Describe(matching[_selected]), contentWidth).Count);
         var panel = Overlays.Centre(area, 92, Math.Clamp(rows + detailRows + 8, 10, area.Height - 2));
         canvas.DrawPanel(panel, "WHAT WOULD YOU LIKE TO DO?", Theme.Blue, Theme.Surface);
 

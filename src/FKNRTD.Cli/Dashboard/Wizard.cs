@@ -310,22 +310,20 @@ internal sealed class Wizard : IOverlay
             var example = ShowsExample(step, entry) ? entry.Example : string.Empty;
             // lastRow is the final usable row, so it counts towards the budget.
             var remaining = lastRow - row + 1;
-            var exampleRows = example.Length == 0
-                ? 0
-                : Math.Min(Text.Wrap(example, width).Count + 1, Math.Max(0, remaining / 2));
+            // An example shown as half a sentence teaches less than no example at all, so on a
+            // terminal too short to hold the whole thing the block is dropped rather than clipped.
+            var exampleNeeds = example.Length == 0 ? 0 : Text.Wrap(example, width).Count + 1;
+            var exampleRows = exampleNeeds > 0 && exampleNeeds + 2 <= remaining ? exampleNeeds : 0;
             var detailRows = Math.Max(0, remaining - exampleRows - (exampleRows > 0 ? 1 : 0));
             var after = Overlays.Explain(canvas, x, row, width, detailRows, "WHAT THIS IS", entry.Detail, _accent);
-            var truncated = Text.Wrap(entry.Detail, width).Count > Math.Max(0, detailRows - 1);
             if (exampleRows > 1 && after + 1 < lastRow)
             {
                 Overlays.Explain(canvas, x, after + 1, width, exampleRows, "EXAMPLE", example, _accent);
             }
 
-            if (truncated)
-            {
-                canvas.DrawText(panel.Right - 20, lastRow, "F1 for all of it", Theme.Muted, maxWidth: 17,
-                    background: Theme.Surface);
-            }
+            // There is deliberately no "there is more, press F1" marker here. On a narrow terminal it
+            // had nowhere to go but on top of the text it was describing, and the footer already
+            // carries F1 on every step.
         }
 
         Overlays.Footer(canvas, panel, _accent, FooterKeys(step));
