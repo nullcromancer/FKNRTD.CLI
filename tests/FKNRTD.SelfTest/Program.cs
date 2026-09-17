@@ -155,7 +155,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every key a screen names can be pressed there", TestNamedKeysArePressableAsync),
     ("Every question can explain itself", TestEveryQuestionCanExplainItselfAsync),
     ("No retired claim survives anywhere in the source", TestNoRetiredClaimInAnySourceFileAsync),
-    ("An unreadable task file is reported, not hidden", TestUnreadableTasksAreReportedAsync)
+    ("An unreadable task file is reported, not hidden", TestUnreadableTasksAreReportedAsync),
+    ("An unreadable configuration explains itself", TestUnreadableConfigExplainsItselfAsync)
 };
 
 var failures = new List<string>();
@@ -4350,4 +4351,46 @@ static async Task TestUnreadableTasksAreReportedAsync()
     True(none.Contains("could not be read", StringComparison.Ordinal), "It says what happened");
     True(none.Contains("Press E for the history", StringComparison.Ordinal),
         "and where the record of the task still is");
+}
+
+/// <summary>
+/// What the product says when a file it depends on will not parse. The parser's own message is
+/// accurate and useless to the person reading it - "'n' is an invalid start of a property name.
+/// Expected a '"'." names no file, no cause and no remedy - and it was reaching the operator
+/// unchanged, on one unwrapped line.
+/// </summary>
+static async Task TestUnreadableConfigExplainsItselfAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { ProjectName = "broken-config" }).ConfigureAwait(false);
+        await File.WriteAllTextAsync(store.Paths.Config, "{ not json", new UTF8Encoding(false))
+            .ConfigureAwait(false);
+
+        var message = string.Empty;
+        try
+        {
+            await store.LoadConfigAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            message = exception.Message;
+        }
+
+        True(message.Length > 0, "Reading a broken configuration fails rather than returning nonsense");
+        True(message.Contains("config.json", StringComparison.Ordinal),
+            $"The message names the file: {message}");
+        True(message.Contains("not valid JSON", StringComparison.Ordinal),
+            "and says what is wrong with it");
+        True(message.Contains("init -force", StringComparison.Ordinal),
+            "and how to rebuild it");
+        True(message.Contains("backups", StringComparison.Ordinal),
+            "and where the previous one may be");
+
+        // The parser's position is worth keeping: it is the only part of its message that helps
+        // somebody who is going to open the file and fix it.
+        True(message.Contains("LineNumber", StringComparison.Ordinal),
+            "and keeps the parser's position");
+    }).ConfigureAwait(false);
 }

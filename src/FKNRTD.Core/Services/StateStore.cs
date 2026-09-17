@@ -256,13 +256,40 @@ public sealed class StateStore
             FileShare.ReadWrite | FileShare.Delete,
             64 * 1024,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return await JsonSerializer.DeserializeAsync<T>(stream, JsonSupport.Options, cancellationToken)
-                   .ConfigureAwait(false)
-               ?? throw new InvalidDataException(
-                   $"{path} is empty or is not valid JSON, so this workspace cannot be read. If you " +
-                   "edited it by hand, check it against 'fknrtd config validate'; a backup of the " +
-                   "previous configuration may be in .fknrtd/runtime/backups.");
+        T? value;
+        try
+        {
+            value = await JsonSerializer.DeserializeAsync<T>(stream, JsonSupport.Options, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (JsonException exception)
+        {
+            // Rethrown as a JsonException rather than something tidier, because every caller that
+            // tolerates a bad file catches this type - doctor most of all, which must report a
+            // broken workspace and never throw at it. InvalidDataException would have been the
+            // natural choice and derives from SystemException rather than IOException, so it slipped
+            // past those catches; the suite caught that immediately.
+            //
+            // The parser's own message is accurate and useless to the person reading it: it names no
+            // file, no cause and no remedy. Its position is worth keeping; the rest is supplied.
+            throw new JsonException(
+                Unreadable(path, $"it is not valid JSON ({exception.Message.Trim()})"), exception);
+        }
+
+        // A file holding the literal `null` parses cleanly and yields nothing, which is a different
+        // fault from a syntax error and reads as one.
+        return value ?? throw new JsonException(Unreadable(path, "it holds no object at all"));
     }
+
+    /// <summary>
+    /// What to say about a file this workspace needs and cannot read. Every one of these is either
+    /// a hand edit that went wrong or a write that was interrupted, and both have a way out.
+    /// </summary>
+    private static string Unreadable(string path, string why) =>
+        $"{path} cannot be read because {why}. If you edited it by hand, check it with 'fknrtd " +
+        "config validate'. If a write was interrupted, 'fknrtd init -force' rebuilds the " +
+        "configuration and keeps existing task records, and the previous configuration may already " +
+        "be saved in .fknrtd/runtime/backups.";
 
     /// <param name="unreadable">
     /// Collects the paths that could not be read, when the caller cares. Most callers do not: a

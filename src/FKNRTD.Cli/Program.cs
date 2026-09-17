@@ -24,12 +24,54 @@ catch (OperationCanceledException)
 }
 catch (Exception exception) when (exception is not StackOverflowException && exception is not OutOfMemoryException)
 {
-    Console.Error.WriteLine("FKNRTD.CLI error: " + exception.Message);
+    // Wrapped to the window. These messages were rewritten to say what went wrong and what to do
+    // about it, which made several of them a paragraph - and a paragraph printed as one line is
+    // read as far as the right edge and no further.
+    Terminal.WriteError("FKNRTD.CLI error: " + exception.Message);
     return 1;
 }
 
 internal static partial class Terminal
 {
+    /// <summary>
+    /// Writes a diagnostic to standard error, wrapped to the window and indented after the first
+    /// line so the message reads as one block rather than trailing off the edge.
+    /// </summary>
+    public static void WriteError(string message)
+    {
+        var width = 100;
+        try
+        {
+            width = Math.Clamp(Console.WindowWidth - 2, 40, 100);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or
+                                          PlatformNotSupportedException)
+        {
+            // No console attached; the default is what a pipe gets.
+        }
+
+        var line = new StringBuilder();
+        foreach (var word in message.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length > 0 && line.Length + 1 + word.Length > width)
+            {
+                Console.Error.WriteLine(line.ToString());
+                line.Clear().Append("  ");
+            }
+            else if (line.Length > 0)
+            {
+                line.Append(' ');
+            }
+
+            line.Append(word);
+        }
+
+        if (line.Length > 0)
+        {
+            Console.Error.WriteLine(line.ToString());
+        }
+    }
+
     private const int StandardOutputHandle = -11;
     private const uint EnableVirtualTerminalProcessing = 0x0004;
 
