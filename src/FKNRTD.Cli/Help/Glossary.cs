@@ -163,6 +163,17 @@ public static class Glossary
             "paste in a command you have not read.",
             "dotnet build   and   dotnet test --no-build"),
 
+        new("checks", "The checks row", TaskFields,
+            "BUILD, TEST and LINT: your verification commands, sorted by what they look like.",
+            "Every verification command is filed into one of these by its own text. A command " +
+            "mentioning build or compile counts as BUILD, one mentioning lint or format as LINT, " +
+            "one mentioning type or security into its own category, and everything else as TEST. " +
+            "The marker is that category's worst result, so one failing command among three shows " +
+            "as a failure. A category with no command matching it stays pending forever, which is " +
+            "why a project verified only by 'make check' shows TEST and nothing else. All three " +
+            "pending simply means the task has not reached its verify stage yet.",
+            "dotnet build -> BUILD,  dotnet test -> TEST,  npm run lint -> LINT"),
+
         new("repair-round", "Repair rounds", TaskFields,
             "How many times a failed verification is handed back to the implementer to fix.",
             "When verification fails, the implementer is given the failure output and one more " +
