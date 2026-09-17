@@ -276,6 +276,15 @@ public static class Glossary
             "The final stage merges the task branch back. In standalone mode there is no merge and " +
             "the stage records that the verified work is already in place in the folder."),
 
+        new("stage-strip", "The stage strip", Stages,
+            "The row of eight initials under a task: its whole pipeline in one line.",
+            "b is Brief, w Worktree, p Plan, i Implement, v Verify, a Audit, r Ready to land and l " +
+            "Land, in the order they run. Each initial carries the marker for that stage's state, so " +
+            "the strip reads as a progress bar with the reason built in: a cross tells you which " +
+            "stage failed, and a lozenge tells you which was skipped rather than run. Press I for the " +
+            "same thing with the stages named in full.",
+            "b√ w√ p√ i√ v× a○ r○ l○   verification failed on a task that planned and implemented cleanly"),
+
         // Task status
         new("status.queued", "Queued", Statuses,
             "Created but never started. Press Enter to run it.",

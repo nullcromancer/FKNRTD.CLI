@@ -392,7 +392,19 @@ internal sealed class DashboardApp
         row++;
         var stages = string.Join(' ', selected.Stages.Select(stage =>
             $"{StageAbbreviation(stage.Stage)}{StageIcon(stage.State)}"));
-        canvas.DrawText(inner.X, row++, Text.Truncate(stages, inner.Width), Theme.Foreground, maxWidth: inner.Width);
+
+        // Eight initials and eight markers mean nothing on their own. The label is what turns the
+        // strip from a cipher into a pipeline, and it is dropped only when there is genuinely no
+        // room for it. 'fknrtd explain stage-strip' spells the letters out.
+        var label = "Stages ";
+        var labelled = Text.DisplayWidth(stages) + label.Length <= inner.Width;
+        if (labelled)
+        {
+            canvas.DrawText(inner.X, row, label, Theme.Muted, maxWidth: label.Length);
+        }
+
+        canvas.DrawText(inner.X + (labelled ? label.Length : 0), row++, Text.Truncate(stages, inner.Width),
+            Theme.Foreground, maxWidth: inner.Width - (labelled ? label.Length : 0));
         if (row < inner.Bottom)
         {
             var progress = selected.Stages.Count == 0
