@@ -355,3 +355,44 @@ not dropped between rounds, which is worth noticing: each pass covered tables th
 had not read, and every table has been wrong.
 
 Local suite: 51/51 passing, Release build clean.
+
+---
+
+## 2026-09-17 06:55 - Codex is out of budget until 19 September
+
+The fourth dispatch was a code review of the three screens written this morning - `AgentManager`,
+`SettingsBrowser` and the `InfoPanel` action - none of which had been read by anyone but their
+author. It got as far as reading the files and then stopped:
+
+```
+ERROR: You've hit your usage limit. ... try again at Sep 19th, 2026 7:55 AM.
+```
+
+That is not the five-hour window. It is the weekly one, and it resets in about forty-five hours.
+No findings came back; the review had not reached the point of producing any.
+
+**This is worth being precise about rather than papering over.** The standing instruction was to
+wait out a five-hour window and continue. A five-hour wait is a pause in a working session. A
+forty-five hour wait is not, and pretending otherwise by parking a sleeping job would produce a log
+entry claiming collaboration where there was none. Claude is continuing alone until the window
+reopens, and this entry exists so the gap in the record has a reason attached to it.
+
+### What the three fact-checks cost, in budget terms
+
+Roughly 380,000 tokens of Codex's weekly allowance across four dispatches, of which three returned
+53 findings and two product defects. The fourth returned nothing. Read-only review is cheap per
+finding and not cheap per session, and the sessions here were large because each one read whole
+tables against whole services.
+
+If there is a lesson for the next round it is to **scope a dispatch to one file and one question**.
+The glossary check read 70 entries against a directory of services and cost 90,000 tokens. The
+command-catalog check read 44 commands against a 1,400-line dispatcher and cost 170,000. Both were
+worth it. The code review was scoped as three files and five questions, and ran out before saying
+anything - the least useful possible outcome, and the one that a narrower brief would have avoided.
+
+### Outstanding when the window reopens
+
+1. The code review of `AgentManager.cs`, `SettingsBrowser.cs` and `InfoPanel.cs`, dispatched one
+   file at a time rather than three at once.
+2. `Reference.cs` and `DashboardApp.cs` have never been fact-checked, and they are the two files
+   that put the most words on the screen.
