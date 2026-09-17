@@ -585,6 +585,19 @@ public static class CommandCatalog
         Entries.Where(entry => entry.Group.Equals(group, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Exact names win; hyphenated names and an unambiguous final word also resolve.</summary>
+    /// <summary>
+    /// The entry whose name is exactly this, or null. Unlike <see cref="Find"/> this never falls
+    /// back to a near match, because its caller rejects command lines: resolving "run" to "task
+    /// run" would check one command's options against another command's list.
+    /// </summary>
+    public static CommandEntry? Exact(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var needle = Normalize(name);
+        return Entries.FirstOrDefault(entry =>
+            Normalize(entry.Name).Equals(needle, StringComparison.OrdinalIgnoreCase));
+    }
+
     public static CommandEntry? Find(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;

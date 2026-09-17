@@ -286,7 +286,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The output observer survives anything an agent prints", TestAgentOutputObserverSurvivesAnythingAsync),
     ("An age reads like a time", TestAgeReadsLikeATimeAsync),
     ("Every label on the main screen leads somewhere", TestEveryLabelOnTheMainScreenLeadsSomewhereAsync),
-    ("The log window is right at scale and at its edges", TestLogWindowAtScaleAsync)
+    ("The log window is right at scale and at its edges", TestLogWindowAtScaleAsync),
+    ("Documented examples survive the option check", TestDocumentedExamplesSurviveTheOptionCheckAsync)
 };
 
 var failures = new List<string>();
@@ -5146,6 +5147,107 @@ static Task TestLogWindowAtScaleAsync()
     var (big, bigTotal) = DashboardApp.ReadWindow(Of(huge + newline + "after"), 0, 10);
     Equal(2, bigTotal, "A line longer than the buffer is still one line");
     Equal("after", big[^1], "and the line after it is found");
+
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Every option the documentation shows must survive the option check, and a mistyped one must not.
+/// </summary>
+/// <remarks>
+/// The check fails open: a command the catalog does not list, or lists no options for, is waved
+/// through, because refusing a valid command line is worse than the silence it replaces. That
+/// design is only honest if something proves the check still catches things, and that the examples
+/// printed by `fknrtd help` are all actually accepted — an example the product refuses to run is
+/// the worst kind of documentation.
+/// </remarks>
+static Task TestDocumentedExamplesSurviveTheOptionCheckAsync()
+{
+    // Split on spaces, except inside quotes: the examples quote titles and shell commands.
+    static string[] Tokenize(string line)
+    {
+        var tokens = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+        foreach (var character in line)
+        {
+            if (character == '"')
+            {
+                quoted = !quoted;
+            }
+            else if (character == ' ' && !quoted)
+            {
+                if (current.Length > 0) { tokens.Add(current.ToString()); current.Clear(); }
+            }
+            else
+            {
+                current.Append(character);
+            }
+        }
+
+        if (current.Length > 0) { tokens.Add(current.ToString()); }
+        return [.. tokens];
+    }
+
+    var examined = 0;
+    var withOptions = 0;
+    foreach (var entry in CommandCatalog.All)
+    {
+        foreach (var example in entry.Examples)
+        {
+            var tokens = Tokenize(example);
+            True(tokens.Length > 0 && tokens[0] == "fknrtd",
+                $"Example for '{entry.Name}' starts with the program name: {example}");
+
+            var arguments = new CliArguments(tokens.Skip(1));
+            examined++;
+            if (arguments.Supplied.Count > 0) { withOptions++; }
+
+            var (_, offender) = CommandDispatcher.FirstUnacceptedOption(arguments);
+            Equal(null, offender,
+                $"'{example}' is a documented example, so nothing on it may be refused");
+        }
+    }
+
+    // A regex or a tokenizer that quietly matches nothing would let every case above pass without
+    // looking at anything. These two numbers are what the assertions were actually applied to.
+    True(examined > 40, $"The sweep read every documented example, not a few ({examined} read)");
+    True(withOptions > 20, $"and most of them carry options ({withOptions} did)");
+
+    // The other half: the check still refuses what it exists to refuse.
+    var (typoEntry, typo) = CommandDispatcher.FirstUnacceptedOption(
+        new CliArguments(["task", "list", "-jsno"]));
+    Equal("task list", typoEntry?.Name, "A mistyped option is attributed to the right command");
+    Equal("jsno", typo, "and the option itself is named");
+
+    // -root, colour and the help flags are read by the process rather than by the command, so they
+    // belong on any command line whether or not that command's entry lists them.
+    foreach (var universal in new[] { "-root", "-color", "-no-color", "-help", "-h" })
+    {
+        var (_, refused) = CommandDispatcher.FirstUnacceptedOption(
+            new CliArguments(["events", universal, "x"]));
+        Equal(null, refused, $"{universal} is accepted on any command");
+    }
+
+    // A positional the catalog names without a dash is still accepted as a flag, because every
+    // command reads one as `Get(name) ?? Positional(n)`. These two forms predate the check and it
+    // must not be the thing that breaks them.
+    foreach (var (line, form) in new[]
+             {
+                 (new[] { "task", "create", "-title", "x", "-brief", "y" }, "task create -title"),
+                 (new[] { "task", "show", "-id", "FKN-1" }, "task show -id"),
+                 (new[] { "agent", "enable", "-id", "codex" }, "agent enable -id")
+             })
+    {
+        var (_, refused) = CommandDispatcher.FirstUnacceptedOption(new CliArguments(line));
+        Equal(null, refused, $"{form} is accepted, as it was before this check existed");
+    }
+
+    // Failing open, demonstrated rather than asserted in a comment: an unknown command carries an
+    // unknown option and is not rejected here, because the command itself is rejected later with a
+    // better message than this one could give.
+    var (missing, _) = CommandDispatcher.FirstUnacceptedOption(new CliArguments(["taks", "-jsno"]));
+    Equal(null, missing?.Name, "An unknown command is left for the command check to report");
 
     return Task.CompletedTask;
 }

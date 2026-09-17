@@ -46,6 +46,7 @@ internal sealed class CliArguments
                 {
                     values = [];
                     _options[name] = values;
+                    Supplied.Add(name);
                 }
 
                 values.Add(value);
@@ -58,6 +59,17 @@ internal sealed class CliArguments
     }
 
     public List<string> Positionals { get; } = [];
+
+    /// <summary>
+    /// Every option name given on the command line, once each, in the order first written.
+    /// </summary>
+    /// <remarks>
+    /// Commands read the options they know by name and nothing looks at the rest, so an option
+    /// nobody reads used to be silently discarded: <c>fknrtd task list -jsno</c> printed a table
+    /// and exited 0, which is a script asking for JSON and being told everything went well. This
+    /// is what the dispatcher checks against the command's documented options before running it.
+    /// </remarks>
+    public List<string> Supplied { get; } = [];
 
     public string Command => Positional(0)?.ToLowerInvariant() ?? string.Empty;
 

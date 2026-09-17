@@ -451,6 +451,35 @@ public static class Milestones
             "lowering it wants to know beforehand. The remaining sequential call was left alone " +
             "deliberately: removing it would change what 'git status' reports for a workspace whose " +
             "root is not the repository root, in exchange for eighty milliseconds of a thousand."),
+
+        new("2026-09-17",
+            "Showing the log without reading all of it",
+            "The log view built a string for every line in the file to display the last twenty-five " +
+            "of them, once a second. Against a log of the size a long task really produces that is " +
+            "58 MB of allocation per refresh, on the one screen somebody sits and watches while " +
+            "they wait.",
+            "It scans bytes to find where the window starts and seeks there, so no line before the " +
+            "window is ever built: 53 milliseconds and 58 MB per read became 27 milliseconds and " +
+            "nothing. The first attempt only reached 56 MB, because discarding a line is not " +
+            "cheaper than keeping it - the string is built either way.",
+            "Counting the lines still reads the whole file, and that stays, because the footer says " +
+            "'of 120000' and there is no way to know that without looking. What changed is that it " +
+            "now looks without building anything."),
+
+        new("2026-09-17",
+            "A mistyped option was worse than a mistyped command",
+            "A mistyped command has always been caught and corrected. A mistyped option was " +
+            "discarded in silence: each command reads the options it recognises and nothing ever " +
+            "looked at the rest.",
+            "'fknrtd task list -jsno' printed a human table and exited 0 - a script that asked for " +
+            "JSON, one letter off, being told everything went well. Every command line is now " +
+            "checked against the options its own help page documents, and a near miss is named " +
+            "with the option meant.",
+            "The check fails open, and the interesting part was where that mattered. Refusing " +
+            "anything undocumented would have rejected 'task create -title' and 'task show -id', " +
+            "which have always worked: the catalog lists those without a dash because they are " +
+            "usually positional, while the commands accept either form. A sweep of every command " +
+            "found it; the self-tests did not, because nothing documented used that form."),
     ];
 
     public static IReadOnlyList<Milestone> All => Entries;

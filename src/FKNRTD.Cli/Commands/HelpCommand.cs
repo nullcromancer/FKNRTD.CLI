@@ -217,6 +217,54 @@ internal static class HelpCommand
     }
 
     /// <summary>The message for a command that does not exist, with the nearest ones that do.</summary>
+    /// <summary>
+    /// Reject an option the command does not accept, naming the nearest one it does.
+    /// </summary>
+    /// <remarks>
+    /// A mistyped command has always been caught. A mistyped option was not: every command reads
+    /// the options it knows and nothing looked at the remainder, so <c>fknrtd task list -jsno</c>
+    /// printed a human table and exited 0. The exit code is the damage — a script that asked for
+    /// JSON was told it succeeded — so this exits 2, the same as a mistyped command.
+    /// </remarks>
+    public static int UnknownOption(string command, string option, CommandEntry entry)
+    {
+        Console.Error.WriteLine($"FKNRTD.CLI error: 'fknrtd {command}' has no -{option} option.");
+
+        var accepted = entry.Options
+            .Where(candidate => candidate.Name.StartsWith('-'))
+            .ToArray();
+        var near = accepted
+            .Select(candidate => (candidate, distance: Distance(option, candidate.Name.TrimStart('-'))))
+            .Where(item => item.distance <= (option.Length <= 4 ? 1 : 2))
+            .OrderBy(item => item.distance)
+            .Select(item => item.candidate)
+            .ToArray();
+
+        if (near.Length > 0)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine(near.Length == 1 ? "Did you mean:" : "The closest options are:");
+            foreach (var candidate in near.Take(3))
+            {
+                Console.Error.WriteLine($"  {candidate.Name + " " + candidate.ValueHint,-22} {candidate.Meaning}");
+            }
+        }
+        else if (accepted.Length > 0)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine($"It accepts: {string.Join(", ", accepted.Select(candidate => candidate.Name))}");
+        }
+        else
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("It accepts no options.");
+        }
+
+        Console.Error.WriteLine();
+        Console.Error.WriteLine($"Run 'fknrtd help {command}' for what each one does.");
+        return 2;
+    }
+
     public static int Unknown(string command)
     {
         Console.Error.WriteLine($"There is no '{command}' command in FKNRTD.CLI.");

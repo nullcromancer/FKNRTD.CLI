@@ -35,6 +35,11 @@ internal static class CommandDispatcher
             return 0;
         }
 
+        if (RejectUnknownOptions(arguments) is { } rejected)
+        {
+            return rejected;
+        }
+
         if (arguments.Command == "init")
         {
             return await InitializeAsync(arguments, cancellationToken).ConfigureAwait(false);
@@ -103,6 +108,75 @@ internal static class CommandDispatcher
                 .ConfigureAwait(false),
             _ => Unknown(arguments.Command)
         };
+    }
+
+
+    /// <summary>
+    /// Options every command line may carry, whatever the command. These are read by the process
+    /// itself rather than by the command: -root chooses the workspace before dispatch, colour is
+    /// decided for any output, and the help and version flags are answered above.
+    /// </summary>
+    private static readonly HashSet<string> Universal = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "root", "color", "no-color", "help", "h", "version", "v"
+    };
+
+    /// <summary>
+    /// Refuse a command line carrying an option its command does not accept, and say which one.
+    /// Returns null when there is nothing to complain about.
+    /// </summary>
+    /// <remarks>
+    /// This fails open on purpose. If the command is not in the catalog, or the catalog lists no
+    /// options for it, nothing is rejected: wrongly refusing a valid command line is a worse fault
+    /// than the silence it replaces. What keeps that from hiding the check is a self-test that runs
+    /// every documented example of every command through it and requires all of them to pass.
+    /// </remarks>
+    internal static int? RejectUnknownOptions(CliArguments arguments)
+    {
+        var (entry, offender) = FirstUnacceptedOption(arguments);
+        return entry is null || offender is null ? null : HelpCommand.UnknownOption(entry.Name, offender, entry);
+    }
+
+    /// <summary>
+    /// The command a line names and the first option on it that command does not accept, either of
+    /// which may be null. Separated from the rejection so a test can ask the question without
+    /// reading the answer off the error stream.
+    /// </summary>
+    internal static (CommandEntry? Entry, string? Option) FirstUnacceptedOption(CliArguments arguments)
+    {
+        if (arguments.Supplied.Count == 0)
+        {
+            return (null, null);
+        }
+
+        // Longest name first: "task create" rather than "task", and never a near match.
+        var entry = CommandCatalog.Exact(arguments.Command + " " + arguments.Subcommand)
+                    ?? CommandCatalog.Exact(arguments.Command);
+        if (entry is null)
+        {
+            return (null, null);
+        }
+
+        var accepted = new HashSet<string>(Universal, StringComparer.OrdinalIgnoreCase);
+        foreach (var option in entry.Options)
+        {
+            // Dash or no dash. The catalog lists a command's positionals beside its options and
+            // marks them by leaving the dash off, but the commands themselves read every positional
+            // as `Get(name) ?? Positional(n)` — `fknrtd task create -title "x"` and
+            // `fknrtd task show -id FKN-...` have always worked. Accepting only the dashed names
+            // refused both, which is the fault this check exists to avoid committing itself.
+            accepted.Add(option.Name.TrimStart('-'));
+        }
+
+        foreach (var supplied in arguments.Supplied)
+        {
+            if (!accepted.Contains(supplied))
+            {
+                return (entry, supplied);
+            }
+        }
+
+        return (entry, null);
     }
 
     private static FknrtdRuntime CreateRuntime(CliArguments arguments)
