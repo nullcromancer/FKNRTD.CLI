@@ -315,7 +315,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Every command on the help page is readable", TestEveryCommandOnTheHelpPageIsReadableAsync),
     ("A narrow footer says it left keys out", TestANarrowFooterSaysItLeftKeysOut),
     ("A path too long for the line breaks where a path breaks", TestALongPathBreaksAtASeparator),
-    ("A standalone pipeline promises no branch", TestAStandalonePipelinePromisesNoBranch)
+    ("A standalone pipeline promises no branch", TestAStandalonePipelinePromisesNoBranch),
+    ("The checks panel names only checks that exist", TestTheChecksPanelNamesOnlyChecksThatExist)
 };
 
 var failures = new List<string>();
@@ -5809,6 +5810,53 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestTheChecksPanelNamesOnlyChecksThatExist()
+{
+    // The panel headed CHECKS drew "BUILD, TEST, LINT" for every task, whatever the task actually
+    // ran. In a workspace with no verification commands - which doctor reports, at the same
+    // moment, as nothing checking this work - that is three named checks that will never run, and
+    // two surfaces of the same product disagreeing about whether the work gets checked at all.
+
+    Equal(0, QualityCategories.Covered([]).Count, "No commands cover no checks");
+    Equal(0, QualityCategories.Covered(null).Count, "and neither does nothing at all");
+    Equal(0, QualityCategories.Covered(["   "]).Count, "nor a blank command");
+
+    var two = QualityCategories.Covered(["dotnet build", "dotnet test"]);
+    Equal(2, two.Count, "Two commands of different kinds cover two checks");
+    True(two.Contains(QualityCategory.Build) && two.Contains(QualityCategory.Tests),
+        "and they are the two the commands name");
+    True(!two.Contains(QualityCategory.Lint),
+        "and nothing offers a lint check to a task that has no lint command");
+
+    // The same reading the orchestrator uses when it records what a command did, which is the
+    // point of asking one rule rather than keeping two.
+    Equal(QualityCategory.Build, QualityCategories.Classify("npm run compile"), "compile is a build");
+    Equal(QualityCategory.Lint, QualityCategories.Classify("npm run format:check"), "format is a lint");
+    Equal(QualityCategory.Types, QualityCategories.Classify("tsc --noEmit --typecheck"), "typecheck is types");
+    Equal(QualityCategory.Security, QualityCategories.Classify("npm audit"), "audit is security");
+    Equal(QualityCategory.Tests, QualityCategories.Classify("pytest -q"),
+        "and a command naming none of them counts as a test rather than being dropped");
+
+    // Repeated kinds collapse: three test commands are one TEST marker, not three.
+    Equal(1, QualityCategories.Covered(["pytest a", "pytest b", "pytest c"]).Count,
+        "Three commands of one kind are one check");
+
+    // And the panel says so on screen.
+    var snapshot = Scenes.PopulatedSnapshot();
+    foreach (var task in snapshot.Tasks)
+    {
+        task.VerificationCommands.Clear();
+    }
+
+    var frame = Scenes.RenderWith(snapshot, 140, 40);
+    True(frame.Contains("No checks configured", StringComparison.Ordinal),
+        "A task with no verification commands says so where its checks would be");
+    True(!frame.Contains("BUILD", StringComparison.Ordinal),
+        "rather than naming a build that nothing will run");
+
+    return Task.CompletedTask;
+}
+
 static Task TestAStandalonePipelinePromisesNoBranch()
 {
     // `fknrtd task show` prints "This is a standalone workspace: agents edit the project folder

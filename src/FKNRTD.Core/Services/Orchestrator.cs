@@ -801,28 +801,26 @@ public sealed class Orchestrator
     private static void ApplyQualityResult(QualitySnapshot quality, string command, CommandResult result)
     {
         var state = result.Success ? StageState.Passed : StageState.Failed;
-        if (command.Contains("build", StringComparison.OrdinalIgnoreCase) ||
-            command.Contains("compile", StringComparison.OrdinalIgnoreCase))
+
+        // Classified through QualityCategories so that what a screen predicts a task will check
+        // and what this records having checked cannot disagree.
+        switch (QualityCategories.Classify(command))
         {
-            quality.Build = MergeQualityState(quality.Build, state);
-        }
-        else if (command.Contains("lint", StringComparison.OrdinalIgnoreCase) ||
-                 command.Contains("format", StringComparison.OrdinalIgnoreCase))
-        {
-            quality.Lint = MergeQualityState(quality.Lint, state);
-        }
-        else if (command.Contains("type", StringComparison.OrdinalIgnoreCase))
-        {
-            quality.Types = MergeQualityState(quality.Types, state);
-        }
-        else if (command.Contains("security", StringComparison.OrdinalIgnoreCase) ||
-                 command.Contains("audit", StringComparison.OrdinalIgnoreCase))
-        {
-            quality.Security = MergeQualityState(quality.Security, state);
-        }
-        else
-        {
-            quality.Tests = MergeQualityState(quality.Tests, state);
+            case QualityCategory.Build:
+                quality.Build = MergeQualityState(quality.Build, state);
+                break;
+            case QualityCategory.Lint:
+                quality.Lint = MergeQualityState(quality.Lint, state);
+                break;
+            case QualityCategory.Types:
+                quality.Types = MergeQualityState(quality.Types, state);
+                break;
+            case QualityCategory.Security:
+                quality.Security = MergeQualityState(quality.Security, state);
+                break;
+            default:
+                quality.Tests = MergeQualityState(quality.Tests, state);
+                break;
         }
 
         ParseTestCounts(result.StandardOutput + Environment.NewLine + result.StandardError, quality);

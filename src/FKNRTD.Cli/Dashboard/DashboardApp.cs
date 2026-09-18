@@ -584,7 +584,20 @@ internal sealed class DashboardApp
         if (task is not null)
         {
             var quality = task.Quality;
-            canvas.DrawText(inner.X, row++, $"BUILD {StageIcon(quality.Build)}  TEST {StageIcon(quality.Tests)}  LINT {StageIcon(quality.Lint)}", Theme.Foreground,
+
+            // Only the checks this task actually has. All three labels were drawn for every task,
+            // so a workspace with no verification commands - which doctor reports, on the same
+            // screen, as nothing checking the work - showed "BUILD o  TEST o  LINT o": three named
+            // checks that were never going to run, in the panel headed CHECKS.
+            var covered = QualityCategories.Covered(task.VerificationCommands);
+            canvas.DrawText(
+                inner.X,
+                row++,
+                covered.Count == 0
+                    ? "No checks configured"
+                    : string.Join("  ", covered.Select(category =>
+                        $"{QualityCategories.Label(category)} {StageIcon(QualityCategories.State(quality, category))}")),
+                covered.Count == 0 ? Theme.Amber : Theme.Foreground,
                 maxWidth: inner.Width);
             if (quality.TestsPassed + quality.TestsFailed > 0 && row < inner.Bottom)
             {
