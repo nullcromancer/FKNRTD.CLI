@@ -557,3 +557,103 @@ had never once been tested.
 
 Local suite: 86/86 passing, 11,660 renders across 53 scenes, and the command sweep reports every
 command behaving as the validation record says.
+
+## 2026-09-17 20:52 — The queue drained, and what eight reviews were worth
+
+The budget was reset by hand, ahead of the 19 September window. All eight reviews ran. This is
+the first time the queue has been emptied in one stretch, and the shape held: one file, one
+question, a short prompt, `--sandbox read-only`. Eight dispatches, roughly 320k tokens, and every
+finding checked before anything was changed.
+
+### The queue had never dispatched more than one review
+
+Worth stating first, because it invalidates the earlier reading of why nothing ran. The script
+reads the queue with `while read` from a pipe, and `codex exec` reads stdin — so the first
+dispatch swallowed every remaining entry and the loop ended after one review, reporting success
+and exiting 0. The budget refusal was real, but even without it the queue would have done an
+eighth of the work and looked like it had finished.
+
+`</dev/null` on the dispatch. Confirmed by draining the remaining seven with it in place. A
+failure that looks exactly like success is the kind this script was written to avoid, and it was
+in the script.
+
+### What the reviews found
+
+Every finding was checked against the code before anything moved. All of them held up; two were
+theoretical and are recorded below rather than acted on. Nine commits came out of it.
+
+**Two product defects that would have cost a run:**
+
+- **Doctor never asked whether Git could commit.** A task in Git mode ends by committing the
+  verified work, and Git refuses without `user.name` and `user.email`. A workspace could pass
+  every required check, spend a plan, an implement, a verification and an audit, and lose the run
+  at the last step. Doctor and the orchestrator now ask through one `GitService` method, because
+  the fault was not that their checks disagreed — doctor's did not exist.
+- **The diff could not see a new file.** Both `git diff <base>...HEAD` and `git diff HEAD` compare
+  against the index, so an implementer that created a source file — which is most of them —
+  produced an empty diff, and the reader was told the task had changed nothing on the screen whose
+  whole job is to be the last look before LAND. New files are rendered from the empty side with
+  `--no-index`, without writing to the index.
+
+**Three that lied on screen:**
+
+- **A failed run was drawn as a finished one.** Claude reports failure as
+  `{"type":"result","subtype":"error_during_execution","is_error":true,...}` — a type of plain
+  `result`, which fell past the error branch and drew the failure with a tick beside it. Also: a
+  nested `{"error":{"message":...}}` was read only as a string, so the sentence explaining why the
+  run stopped was dropped and the event name kept; and a `tool_result` flagged `is_error` was
+  folded into "returned" as noise.
+- **`LogLine.Read` could take the dashboard down.** Its own summary says it never throws. An
+  unpaired surrogate is valid JSON that cannot be read back as text: *"Cannot transcode invalid
+  UTF-16 string to UTF-8 JSON text"*. Verified by removing the guard and watching the suite fail
+  with it.
+- **Six sentences on the main screen described a workflow that had been guessed at.** C promised
+  "the current stage finishes first" when the agent is killed within half a second; "marks every
+  message on the bus as handled" acknowledged the fifty the snapshot holds, leaving the oldest
+  pending; "this task has never run" was shown for a task just retried; "verified and audited"
+  described a task with no verification commands, which skips the verify stage entirely.
+
+**Two that made the product act on what it was not showing:**
+
+- **The roster acted on an agent it was not drawing.** The list was drawn from index 0 until it
+  ran out of rows, so arrowing past the last visible row moved an invisible highlight — and Space,
+  E and Del went on acting on it. The list is windowed around the selection now.
+- **A flag ate the argument after it.** Every option took the next word as its value, documented
+  to take one or not, so `fknrtd task show -json FKN-...` read the ID as the value of `-json` and
+  then refused the line for having no task ID. The catalog already recorded which is which — an
+  option's value hint is empty exactly when it takes no value — so the parser reads it from there
+  rather than keeping a second list that could drift from the help page.
+
+**One that broke a promise printed under the question it broke:**
+
+- The verification step prints "leave empty to skip verification entirely". The field arrives
+  holding the workspace's defaults, and pressing Enter on an empty one put them straight back.
+
+### Two findings not acted on, and why
+
+The `infopanel` review found four ways `InfoPanel` can draw outside its own rectangle — all of
+them at panel widths around twelve columns. The dashboard refuses to render below 60 by 20 and
+says so, so those widths are not reachable. Recorded rather than fixed; if the minimum ever drops,
+they become real, and the review is in `docs/collab/reviews/infopanel.md`.
+
+The `settings` review found that `defaultBaseRef` is written back with no validation, so an
+invalid Git ref is accepted and fails later at task creation. That one is real and outstanding.
+
+### What this says about where the faults are
+
+Every product defect this round was in the gap between a surface and the service behind it, and
+every one was written by the seat that also wrote the code it described. The suite was green
+through all of them. The reviews are cheap — 320k tokens for nine defects, two of which would
+have cost a whole run — and the thing that makes them work is that they compare two files rather
+than reading one.
+
+Local suite: 99/99. `scripts/verify.sh` reports every command behaving as the record says, with
+two rows added in the order that hid the parser fault — every existing row wrote its options
+last, which is why none of them caught it.
+
+### For the other seat
+
+The eight reviews are drained and their outputs are in `docs/collab/reviews/`. What is left from
+them is listed above under "not acted on". The two briefs written earlier —
+`BRIEF-codex-01-command-catalog.md` and `BRIEF-codex-02-settings-and-errors.md` — are still
+unsent.
