@@ -6120,6 +6120,23 @@ static Task TestAFailureIsNotDrawnAsSuccess()
         "{\"message\":{\"content\":[{\"type\":\"tool_result\",\"content\":\"ok\"}]}}");
     Equal(LogKind.Noise, quiet.Kind, "A successful tool result is still noise");
 
+    // "wrote" is a claim about what happened to a file, and it was made for any item type with
+    // "file" in its name.
+    var opened = LogFormat.Read("{\"item\":{\"type\":\"file_read\",\"path\":\"README.md\"}}");
+    True(!opened.Text.Contains("wrote", StringComparison.Ordinal),
+        "A file the agent only opened is not reported as one it edited");
+    True(opened.Text.Contains("README.md", StringComparison.Ordinal), "and is still named");
+
+    var starting = LogFormat.Read(
+        "{\"type\":\"item.started\",\"item\":{\"type\":\"file_change\"," +
+        "\"path\":\"a.cs\",\"status\":\"in_progress\"}}");
+    True(!starting.Text.Contains("wrote", StringComparison.Ordinal),
+        "A write that has only started is not reported as finished");
+
+    var done = LogFormat.Read("{\"item\":{\"type\":\"file_change\",\"path\":\"a.cs\"}}");
+    True(done.Text.Contains("wrote a.cs", StringComparison.Ordinal),
+        "and a write that finished still reads as one");
+
     // "Never throws" is a claim in this file's own summary, and it was not true: a lone surrogate
     // is valid JSON that cannot be read back as text. This is the one screen that reads whatever
     // an agent wrote, so an exception here takes the dashboard down with it.

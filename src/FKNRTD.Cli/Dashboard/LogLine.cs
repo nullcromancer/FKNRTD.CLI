@@ -217,7 +217,21 @@ internal static class LogFormat
 
         if (kind.Contains("file", StringComparison.OrdinalIgnoreCase) && Subject(item) is { } path)
         {
-            return new LogLine("> wrote " + path, LogKind.Did);
+            // "wrote" is a claim about what happened to a file, and it was made for any item type
+            // with "file" in its name: a file_read was reported as a write, and a file_change that
+            // had only started - status in_progress, arriving on item.started - was reported as a
+            // finished one. Somebody reading this log to find out what an agent touched was being
+            // told it had edited files it had opened.
+            var status = Text(item, "status") ?? string.Empty;
+            var verb = kind.Contains("read", StringComparison.OrdinalIgnoreCase)
+                ? "read"
+                : status.Contains("progress", StringComparison.OrdinalIgnoreCase) ||
+                  status.Equals("started", StringComparison.OrdinalIgnoreCase)
+                    ? "is writing"
+                    : status.Contains("fail", StringComparison.OrdinalIgnoreCase)
+                        ? "could not write"
+                        : "wrote";
+            return new LogLine($"> {verb} {path}", LogKind.Did);
         }
 
         return null;
