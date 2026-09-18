@@ -179,7 +179,17 @@ internal sealed class AgentManager : IOverlay
 
         var idWidth = Math.Min(16, _agents.Max(agent => Text.DisplayWidth(agent.Id)) + 1);
         var columns = Columns();
-        for (var index = 0; index < _agents.Count && y <= lastRow; index++)
+
+        // The list is drawn from a window around the selection, not from the top. It used to start
+        // at index 0 and simply stop when it ran out of rows, so a selection below the last visible
+        // row was invisible while Space, E and Del went on acting on it: enabling, repointing or
+        // deleting an agent the operator cannot see. Two agents are configured out of the box and
+        // twelve fit in an 80 by 24 window, so this needed a roster somebody had grown themselves
+        // - which is exactly when the keys are least safe to guess at.
+        var listRows = Math.Max(1, lastRow - y + 1);
+        var (first, visible, overflowed) = Window(_selected, _agents.Count, listRows);
+
+        for (var index = first; index < first + visible && y <= lastRow; index++)
         {
             var agent = _agents[index];
             var selected = index == _selected;
@@ -204,6 +214,22 @@ internal sealed class AgentManager : IOverlay
             y++;
         }
 
+        // What is out of sight is stated rather than left to be discovered by arrowing into it.
+        if (overflowed && y <= lastRow)
+        {
+            var above = first;
+            var below = Math.Max(0, _agents.Count - (first + visible));
+            var marker = above > 0 && below > 0
+                ? $"↑ {above} more above    ↓ {below} more below"
+                : above > 0
+                    ? $"↑ {above} more above"
+                    : $"↓ {below} more below";
+            canvas.Fill(new Rect(x, y, width, 1), Theme.Surface);
+            canvas.DrawText(x + 2, y, Text.Truncate(marker, Math.Max(0, width - 2)), Theme.Muted,
+                maxWidth: Math.Max(0, width - 2), background: Theme.Surface);
+            y++;
+        }
+
         if (Selected is { } current && y + 2 <= lastRow)
         {
             canvas.DrawRule(panel.X + 1, y, Math.Max(0, panel.Width - 2),
@@ -221,6 +247,28 @@ internal sealed class AgentManager : IOverlay
             ("↑↓", "choose"), ("Space", Selected?.Enabled == true ? "disable" : "enable"),
             ("N", "add"), ("E", "change its command"), ("Del", "remove"), ("F1", "full detail"),
             ("Esc", "close"));
+    }
+
+    /// <summary>
+    /// Which slice of a list to draw so that <paramref name="selected"/> is always one of the rows
+    /// on screen, and whether anything was left out.
+    /// </summary>
+    /// <remarks>
+    /// When the list overflows, one row of the budget is spent on saying how much is out of sight,
+    /// which is why the window is one shorter than the space available. The selection is kept near
+    /// the middle so that arrowing through a long roster does not redraw the whole panel on every
+    /// keystroke once it reaches an edge.
+    /// </remarks>
+    internal static (int First, int Visible, bool Overflowed) Window(int selected, int count, int rows)
+    {
+        if (count <= rows)
+        {
+            return (0, count, false);
+        }
+
+        var window = Math.Max(1, rows - 1);
+        var first = Math.Clamp(selected - (window / 2), 0, Math.Max(0, count - window));
+        return (first, window, true);
     }
 
     private const int PreferredWidth = 100;

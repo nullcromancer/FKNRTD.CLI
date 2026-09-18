@@ -303,7 +303,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Doctor does not tick what is not there", TestDoctorDoesNotTickWhatIsNotThereAsync),
     ("An agent can be repointed from the command line", TestAnAgentCanBeRepointedFromTheCommandLineAsync),
     ("Doctor asks whether Git can commit", TestDoctorAsksWhetherGitCanCommitAsync),
-    ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync)
+    ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync),
+    ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen)
 };
 
 var failures = new List<string>();
@@ -5797,6 +5798,47 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestTheRosterKeepsTheSelectionOnScreen()
+{
+    // Every key the roster offers acts on the highlighted agent, so an agent that is highlighted
+    // and not drawn is an agent somebody can disable, repoint or delete without seeing which one
+    // it is. The window exists to make that impossible, and these are the cases it has to survive.
+
+    // A roster that fits is drawn whole, with nothing claimed to be out of sight.
+    var (first, visible, overflowed) = AgentManager.Window(selected: 0, count: 4, rows: 10);
+    Equal(0, first, "A short roster starts at the top");
+    Equal(4, visible, "and shows every agent");
+    Equal(false, overflowed, "and says nothing about rows that do not exist");
+
+    // The last agent of a long roster is on screen when it is the one selected.
+    (first, visible, overflowed) = AgentManager.Window(selected: 19, count: 20, rows: 10);
+    Equal(true, overflowed, "A roster of twenty in ten rows does not fit");
+    True(19 >= first && 19 < first + visible, "and the selected agent is still one of the rows drawn");
+    True(first + visible <= 20, "without running off the end of the list");
+
+    // So is the first, after arrowing back up to it.
+    (first, visible, overflowed) = AgentManager.Window(selected: 0, count: 20, rows: 10);
+    Equal(0, first, "Selecting the first agent scrolls back to the top");
+    True(visible < 10, "and a row is kept for saying how many are below");
+
+    // And every position in between: the invariant is the point, not any particular offset.
+    for (var selected = 0; selected < 20; selected++)
+    {
+        var window = AgentManager.Window(selected, 20, 10);
+        True(selected >= window.First && selected < window.First + window.Visible,
+            $"Agent {selected} of twenty is drawn when it is the selected one");
+        True(window.First >= 0 && window.First + window.Visible <= 20,
+            $"The window for agent {selected} stays inside the roster");
+    }
+
+    // A panel with a single usable row still draws the selected agent and nothing else.
+    var narrow = AgentManager.Window(selected: 7, count: 20, rows: 1);
+    Equal(1, narrow.Visible, "One row shows one agent");
+    Equal(7, narrow.First, "and it is the selected one");
+
+    return Task.CompletedTask;
+}
+
 static async Task TestANewFileIsInTheDiffAsync()
 {
     if (ExecutableLocator.Find("git") is null)
