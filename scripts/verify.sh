@@ -83,6 +83,16 @@ row "fknrtd task list"          0 "$FKNRTD" task list
 row "fknrtd task list -json"    0 "$FKNRTD" task list -json
 row "fknrtd task show <id>"     0 "$FKNRTD" task show "$TASK"
 row "fknrtd task show -json"    0 "$FKNRTD" task show "$TASK" -json
+# Flag first. Every row above writes the option last, which is why none of them caught a
+# parser that let -json eat the task ID and then refused the line for having no task ID.
+row "fknrtd task show -json <id>" 0 "$FKNRTD" task show -json "$TASK"
+# The folder is checked, not just the exit code: with a parser that let -standalone eat the path,
+# init succeeded - on the current directory - and a row testing only the exit code passed.
+row "fknrtd init -standalone <path>" 0 bash -c '
+  target="$(mktemp -d)/elsewhere"
+  mkdir -p "$target"
+  "$1" init -standalone "$target" -yes >/dev/null 2>&1 || exit 1
+  test -f "$target/.fknrtd/config.json"' _ "$FKNRTD"
 row "fknrtd task prompts <id>"  0 "$FKNRTD" task prompts "$TASK"
 row "fknrtd task diff <id>"     0 "$FKNRTD" task diff "$TASK"
 row "fknrtd task land <queued>" 1 "$FKNRTD" task land "$TASK" -confirm LAND

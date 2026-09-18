@@ -34,6 +34,8 @@ with no Git at all, had never once been tested.
 | `fknrtd task create` | Exit 0; task created with an `FKN-` identifier. |
 | `fknrtd task list` / `-json` | Exit 0 for both. |
 | `fknrtd task show <id>` / `-json` | Exit 0; brief, roles, verification, every stage and the next step. |
+| `fknrtd task show -json <id>` | Exit 0; the same JSON. A flag written before the identifier does not consume it. |
+| `fknrtd init -standalone <path>` | Exit 0; the workspace is created at `<path>`, not in the current folder. |
 | `fknrtd task prompts <id>` | Exit 0; all three prompts, with the placeholders named as placeholders. |
 | `fknrtd task diff <id>` | Exit 0; reported that the task has no worktree yet rather than printing nothing. |
 | `fknrtd task land <id> -confirm LAND` on a queued task | Exit 1; named the status and what it would need to be. |
