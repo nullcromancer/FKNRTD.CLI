@@ -309,7 +309,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A flag does not swallow the word after it", TestAFlagDoesNotSwallowTheNextWord),
     ("A retried task is not called one that never ran", TestTheDashboardSaysWhatActuallyHappened),
     ("Clearing a question means the empty answer", TestClearingAQuestionMeansEmpty),
-    ("A base branch nothing could resolve is refused", TestABaseBranchIsCheckedWhenItIsSet)
+    ("A base branch nothing could resolve is refused", TestABaseBranchIsCheckedWhenItIsSet),
+    ("A command the editor would split is reported", TestACommandWithALineBreakIsReported)
 };
 
 var failures = new List<string>();
@@ -5803,6 +5804,40 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestACommandWithALineBreakIsReported()
+{
+    // The settings screen reads verification commands as one per line, so a stored command holding
+    // a line break is two commands as far as the editor is concerned: opening settings and saving
+    // would split it and run both halves. These are trusted shell commands, so doing that quietly
+    // is the part that matters.
+
+    var split = Scenes.SampleConfig() with
+    {
+        DefaultVerificationCommands = ["dotnet build\ndotnet test"]
+    };
+
+    var problems = SettingsBrowser.Problems(split);
+    var reported = problems.FirstOrDefault(problem => problem.Key == "defaultVerificationCommands");
+    True(reported.Problem is not null, "A command the editor cannot represent is reported");
+    True(reported.Problem!.Contains("one command per line", StringComparison.Ordinal),
+        "and the reason says why the editor cannot hold it");
+    True(reported.Problem.Contains(".fknrtd/config.json", StringComparison.Ordinal),
+        "and where to fix it, since the screen that reports it is the screen that cannot");
+    True(!reported.Value.Contains('\n'),
+        "and the value is shown on one line, because a table row is one line");
+
+    // An ordinary list is not complained about.
+    var ordinary = Scenes.SampleConfig() with
+    {
+        DefaultVerificationCommands = ["dotnet build", "dotnet test"]
+    };
+    True(SettingsBrowser.Problems(ordinary)
+            .All(problem => problem.Key != "defaultVerificationCommands"),
+        "Two commands written as two commands are fine");
+
+    return Task.CompletedTask;
+}
+
 static Task TestABaseBranchIsCheckedWhenItIsSet()
 {
     // The settings catalog says of this field that "a name that does not resolve fails the task at

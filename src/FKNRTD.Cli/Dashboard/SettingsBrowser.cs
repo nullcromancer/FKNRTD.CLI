@@ -447,6 +447,27 @@ internal sealed class SettingsBrowser : IOverlay
     public static IReadOnlyList<(string Key, string Value, string Problem)> Problems(FknrtdConfig config)
     {
         var found = new List<(string, string, string)>();
+
+        // Asked of the list itself rather than through a validator, because the validator is handed
+        // the commands already joined with newlines and cannot tell one command holding a line
+        // break from two commands. That is the same blindness that makes this worth reporting: the
+        // settings screen reads the list as one line per command, so opening it and saving would
+        // quietly turn such a command into two, and these are trusted shell commands.
+        foreach (var command in config.DefaultVerificationCommands)
+        {
+            if (command.Contains('\n') || command.Contains('\r'))
+            {
+                found.Add((
+                    "defaultVerificationCommands",
+                    command.Replace('\n', ' ').Replace('\r', ' '),
+                    "A verification command contains a line break. The settings screen reads one " +
+                    "command per line, so editing settings would split this into two commands and " +
+                    "run both. Put it on one line in .fknrtd/config.json, or move it into a script " +
+                    "and call that."));
+                break;
+            }
+        }
+
         foreach (var setting in Editable)
         {
             if (setting.Validate is not { } validate)
