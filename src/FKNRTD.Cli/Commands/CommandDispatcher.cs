@@ -1731,9 +1731,17 @@ internal static class CommandDispatcher
         }
         else
         {
+            // Round-trip format is what -json is for. This listing was spending thirty-three
+            // columns on "2026-09-18T01:04:57.5271441+00:00" - seven digits of fractional second
+            // that no reader has ever wanted - before it got to what happened. UTC like every
+            // other surface, marked as UTC, and the age beside it, because "how long ago" is the
+            // question somebody reading an event log is actually asking.
+            var now = DateTimeOffset.UtcNow;
             foreach (var item in events)
             {
-                Console.WriteLine($"{item.Timestamp:O} {item.Severity,-11} {item.Type,-24} {item.Message}");
+                Console.WriteLine(
+                    $"{item.Timestamp.UtcDateTime:yyyy-MM-dd HH:mm:ss}Z {Text.Age(item.Timestamp, now),3} ago  " +
+                    $"{item.Severity,-11} {item.Type,-24} {item.Message}");
             }
         }
 

@@ -316,7 +316,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A narrow footer says it left keys out", TestANarrowFooterSaysItLeftKeysOut),
     ("A path too long for the line breaks where a path breaks", TestALongPathBreaksAtASeparator),
     ("A standalone pipeline promises no branch", TestAStandalonePipelinePromisesNoBranch),
-    ("The checks panel names only checks that exist", TestTheChecksPanelNamesOnlyChecksThatExist)
+    ("The checks panel names only checks that exist", TestTheChecksPanelNamesOnlyChecksThatExist),
+    ("An event reads as a time, not a round-trip string", TestAnEventReadsAsATimeAsync)
 };
 
 var failures = new List<string>();
@@ -5829,6 +5830,39 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestAnEventReadsAsATimeAsync()
+{
+    // The event listing spent thirty-three columns on a round-trip timestamp - seven digits of
+    // fractional second - before reaching what had happened. -json is what a machine reads; this
+    // listing is what a person reads, and the question they are asking is how long ago.
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "A workspace to record an event in");
+
+        var text = await CapturedAsync(["events", "-root", root, "-no-color"]).ConfigureAwait(false);
+        var line = text.Split('\n').Select(item => item.TrimEnd('\r'))
+            .FirstOrDefault(item => item.Contains("project.initialized", StringComparison.Ordinal));
+        True(line is not null, "Initializing a workspace is recorded as an event");
+
+        True(!line!.Contains("+00:00", StringComparison.Ordinal),
+            "The round-trip offset is gone from the human listing");
+        // Asked of the timestamp rather than the whole line: an event message has sentences in it.
+        var stamp = line[..Math.Min(21, line.Length)];
+        True(!stamp.Contains('.'), "and so are its seven digits of fractional second");
+        True(line.Contains(" ago", StringComparison.Ordinal),
+            "How long ago it happened is on the line");
+        True(line.Contains('Z'), "and the time it happened is marked as the UTC it is");
+
+        // The machine-readable form keeps everything, which is the reason the other one can stop
+        // carrying it.
+        var json = await CapturedAsync(["events", "-root", root, "-json"]).ConfigureAwait(false);
+        True(json.Contains("+00:00", StringComparison.Ordinal) || json.Contains('T'),
+            "-json still emits a full round-trip timestamp");
+    }).ConfigureAwait(false);
+}
+
 static Task TestTheChecksPanelNamesOnlyChecksThatExist()
 {
     // The panel headed CHECKS drew "BUILD, TEST, LINT" for every task, whatever the task actually
