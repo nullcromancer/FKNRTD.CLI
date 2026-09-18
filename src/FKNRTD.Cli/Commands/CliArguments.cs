@@ -15,8 +15,10 @@ internal sealed class CliArguments
         for (var index = 0; index < input.Length; index++)
         {
             var token = input[index];
-            if (token == "--")
+            if (token == "--" && !positionalOnly)
             {
+                // Only the first one ends the options. A later `--` is an argument like any other,
+                // and discarding it left `fknrtd init -- --` with no folder to act on.
                 positionalOnly = true;
                 continue;
             }
@@ -95,13 +97,32 @@ internal sealed class CliArguments
         var flags = new HashSet<string>(AlwaysValueless, StringComparer.OrdinalIgnoreCase);
         var takesValue = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // The command words are the leading tokens before any option: "task", then "show".
+        // The command words are the first two tokens that are not options or option values:
+        // "task", then "show". Stopping at the first option instead meant that `fknrtd -root .
+        // task show -json <id>` found no command at all, so every option on it fell back to the
+        // greedy reading - the fault this method exists to fix, reappearing whenever somebody
+        // selected the workspace before naming the command.
         var words = new List<string>(2);
-        foreach (var token in input)
+        for (var index = 0; index < input.Count && words.Count < 2; index++)
         {
-            if (token == "--" || IsOption(token) || words.Count == 2)
+            var token = input[index];
+            if (token == "--")
             {
                 break;
+            }
+
+            if (IsOption(token))
+            {
+                // A global option that takes a value takes the token after it with it. Only the
+                // universal ones can be known here, which is the point: the rest are read against
+                // the command these words are being gathered to find.
+                if (!token.Contains('=', StringComparison.Ordinal) &&
+                    GlobalValueTaking.Contains(token.TrimStart('-')))
+                {
+                    index++;
+                }
+
+                continue;
             }
 
             words.Add(token.ToLowerInvariant());
@@ -131,6 +152,10 @@ internal sealed class CliArguments
             }
         }
 
+        // The command's own catalog entry wins over the universal list. -color forces ANSI
+        // everywhere and is also `agent add -color <colour>`, so treating it as a flag on every
+        // line made a documented option stop taking its value.
+        flags.ExceptWith(takesValue);
         return (flags, takesValue);
     }
 
@@ -141,6 +166,14 @@ internal sealed class CliArguments
     /// </summary>
     private static readonly string[] AlwaysValueless =
         ["no-color", "color", "help", "h", "version", "v", "json"];
+
+    /// <summary>
+    /// Options accepted before the command that take the word after them, so that the command can
+    /// still be found behind one. Only <c>-root</c> qualifies; every other option is read against
+    /// the command rather than before it.
+    /// </summary>
+    private static readonly HashSet<string> GlobalValueTaking =
+        new(["root"], StringComparer.OrdinalIgnoreCase);
 
     public List<string> Positionals { get; } = [];
 

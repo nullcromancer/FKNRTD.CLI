@@ -6019,6 +6019,31 @@ static Task TestAFlagDoesNotSwallowTheNextWord()
     Equal("value", unknown.Get("whatever"),
         "An undocumented option on an unknown command still takes the word after it");
 
+    // -color forces ANSI everywhere and is also `agent add -color <colour>`. Reading it as a flag
+    // on every line, which the first version of this check did, stopped a documented option
+    // taking its value - so the command's own entry has to win over the universal list.
+    var colour = new CliArguments(["agent", "add", "-id", "local", "-exe", "mytool", "-color", "cyan"]);
+    Equal("cyan", colour.Get("color"), "agent add -color takes the colour after it");
+    Equal("mytool", colour.Get("exe"), "and the options around it are unaffected");
+
+    var forced = new CliArguments(["task", "list", "-color"]);
+    Equal(true, forced.Has("color"), "while -color on a command that does not define it is still a flag");
+
+    // Selecting the workspace before naming the command must not hide the command. The command
+    // words are what the catalog is looked up by, and -root takes the word after it.
+    var rooted = new CliArguments(["-root", ".", "task", "show", "-json", "FKN-20260101-000000-abcdef01"]);
+    Equal(".", rooted.Get("root"), "-root still takes its path");
+    Equal("FKN-20260101-000000-abcdef01", rooted.Positional(2),
+        "and the task ID survives a flag written after a command that was found behind -root");
+
+    var rootedInit = new CliArguments(["-root", ".", "init", "-standalone", "./notes"]);
+    Equal("./notes", rootedInit.Positional(1),
+        "and so does the folder on an init written the same way");
+
+    // Only the first -- ends the options; a later one is an argument like any other.
+    var literal = new CliArguments(["init", "--", "--"]);
+    Equal("--", literal.Positional(1), "The second -- is a folder argument, not a second delimiter");
+
     return Task.CompletedTask;
 }
 
