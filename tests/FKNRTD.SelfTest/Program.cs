@@ -314,7 +314,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A narrow panel keeps its words and its way out", TestANarrowPanelKeepsItsWordsAndItsWayOut),
     ("Every command on the help page is readable", TestEveryCommandOnTheHelpPageIsReadableAsync),
     ("A narrow footer says it left keys out", TestANarrowFooterSaysItLeftKeysOut),
-    ("A path too long for the line breaks where a path breaks", TestALongPathBreaksAtASeparator)
+    ("A path too long for the line breaks where a path breaks", TestALongPathBreaksAtASeparator),
+    ("A standalone pipeline promises no branch", TestAStandalonePipelinePromisesNoBranch)
 };
 
 var failures = new List<string>();
@@ -5808,6 +5809,45 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestAStandalonePipelinePromisesNoBranch()
+{
+    // `fknrtd task show` prints "This is a standalone workspace: agents edit the project folder
+    // directly" and then, four lines later, listed a stage promising "a branch and an isolated
+    // checkout are created for this task". The stage summaries were written for Git mode and read
+    // by both, which is the same fault that once had three surfaces telling a standalone operator
+    // to clean up a worktree they never had.
+
+    var stages = Glossary.All
+        .Where(entry => entry.Term.StartsWith("stage.", StringComparison.Ordinal))
+        .ToArray();
+    True(stages.Length > 0, "The stages are explained in the glossary");
+
+    string[] gitOnly = ["branch", "worktree", "merge", "checkout", "commit"];
+
+    foreach (var entry in stages)
+    {
+        var standalone = entry.SummaryFor(standalone: true);
+        foreach (var word in gitOnly)
+        {
+            True(!standalone.Contains(word, StringComparison.OrdinalIgnoreCase),
+                $"'{entry.Term}' does not promise a {word} to a workspace that has none: \"{standalone}\"");
+        }
+    }
+
+    // Git mode still reads as it did: the point is two accurate answers, not one vague one.
+    var worktree = Glossary.Find("stage.worktree");
+    True(worktree is not null, "The worktree stage is still explained");
+    True(worktree!.SummaryFor(standalone: false).Contains("branch", StringComparison.OrdinalIgnoreCase),
+        "and a Git workspace is still told a branch is cut for it");
+
+    // An entry with nothing mode-specific to say reads the same either way, which is most of them.
+    var audit = Glossary.Find("stage.audit");
+    Equal(audit!.Summary, audit.SummaryFor(standalone: true),
+        "A stage that works the same in both modes is described the same in both");
+
+    return Task.CompletedTask;
+}
+
 static Task TestALongPathBreaksAtASeparator()
 {
     // A word longer than the line was chopped at the column, which gives the worst possible

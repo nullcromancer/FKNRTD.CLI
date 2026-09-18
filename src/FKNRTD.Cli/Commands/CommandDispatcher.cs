@@ -896,8 +896,11 @@ internal static class CommandDispatcher
         Console.WriteLine("PIPELINE");
         foreach (var stage in task.Stages)
         {
+            // The stage summaries describe Git machinery, and three of them are wrong in a
+            // standalone workspace - which this very screen has just said it is, four lines above.
             var entry = Glossary.Find("stage." + stage.Stage.ToString().ToLowerInvariant());
-            var summary = string.IsNullOrWhiteSpace(stage.Summary) ? entry?.Summary ?? string.Empty : stage.Summary;
+            var explained = entry?.SummaryFor(config.Mode == WorkspaceMode.Standalone) ?? string.Empty;
+            var summary = string.IsNullOrWhiteSpace(stage.Summary) ? explained : stage.Summary;
             Console.WriteLine($"  {StageIcon(stage.State)} {stage.Stage,-13} {Text.Truncate(summary, Math.Max(20, width - 18))}");
         }
 

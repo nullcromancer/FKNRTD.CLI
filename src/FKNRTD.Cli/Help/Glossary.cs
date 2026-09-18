@@ -11,13 +11,26 @@ namespace FKNRTD.Help;
 /// <param name="Summary">One line, short enough to sit under a form field on an 80-column terminal.</param>
 /// <param name="Detail">Full explanation. Sentences, no markup; the renderer wraps it.</param>
 /// <param name="Example">A concrete example, or the empty string when one would be noise.</param>
+/// <param name="StandaloneSummary">
+/// The summary to use in a standalone workspace, where it differs. Empty means the entry reads
+/// the same in both modes, which is true of all but a handful. A standalone workspace has no
+/// branch, no worktree and nothing to merge, and the summaries describing those were written for
+/// Git mode - so `fknrtd task show` told a standalone operator, two lines under "agents edit the
+/// project folder directly", that a branch and an isolated checkout would be created.
+/// </param>
 public sealed record GlossaryEntry(
     string Term,
     string Title,
     string Category,
     string Summary,
     string Detail,
-    string Example = "");
+    string Example = "",
+    string StandaloneSummary = "")
+{
+    /// <summary>The summary that applies in this workspace, which is not always the same one.</summary>
+    public string SummaryFor(bool standalone) =>
+        standalone && StandaloneSummary.Length > 0 ? StandaloneSummary : Summary;
+}
 
 /// <summary>The explanation table. Ordered by category, then by the order an operator meets them.</summary>
 public static class Glossary
@@ -287,7 +300,8 @@ public static class Glossary
             "In Git mode the task's branch is cut from the base branch and a worktree directory is " +
             "created for it, so every later stage operates on files that are not yours. In " +
             "standalone mode there is nothing to isolate and the stage is skipped, which is why a " +
-            "standalone task shows a skip marker here rather than a failure."),
+            "standalone task shows a skip marker here rather than a failure.",
+            StandaloneSummary: "Skipped: a standalone workspace has nothing to isolate."),
 
         new("stage.plan", "Stage 3 — Plan", Stages,
             "The lead agent reads the code and the brief, and writes the plan.",
@@ -304,7 +318,8 @@ public static class Glossary
             "verification commands run there too, and a build or a test writes whatever a build or " +
             "a test writes. Its work is not committed here: if the workspace commits " +
             "agent changes automatically, that happens once verification and the audit have both " +
-            "passed, immediately before the task becomes landable."),
+            "passed, immediately before the task becomes landable.",
+            StandaloneSummary: "The implementer edits the project folder. The only agent asked to write files."),
 
         new("stage.verify", "Stage 5 — Verify", Stages,
             "Your verification commands run. Every one must exit 0.",
@@ -322,12 +337,14 @@ public static class Glossary
             "Verified and audited. Waiting for you, and only you, to merge it.",
             "The task has done everything it can do on its own. It will sit here indefinitely; " +
             "nothing progresses without your typed confirmation. Read the diff in the worktree " +
-            "before you land it — this stage exists so that you can."),
+            "before you land it — this stage exists so that you can.",
+            StandaloneSummary: "Verified and audited. Waiting for you, and only you, to accept it."),
 
         new("stage.land", "Stage 8 — Land", Stages,
             "The task branch is merged into the base branch.",
             "The final stage merges the task branch back. In standalone mode there is no merge and " +
-            "the stage records that the verified work is already in place in the folder."),
+            "the stage records that the verified work is already in place in the folder.",
+            StandaloneSummary: "The verified work is recorded as accepted; it is already in the folder."),
 
         new("pipeline", "The pipeline panel", Concepts,
             "Every task in the workspace, and the one you have highlighted in detail.",
