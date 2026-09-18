@@ -6171,6 +6171,24 @@ static async Task TestANewFileIsInTheDiffAsync()
             "The tracked edit is still shown");
         True(both.Any(line => line.Contains("+public sealed class Feature;", StringComparison.Ordinal)),
             "alongside the new file");
+
+        // Past a point new files are named rather than opened, because rendering each one costs a
+        // Git process and an untracked directory nothing has ignored yet can hold thousands. That
+        // is content left out, so it has to be reported as left out: a diff that says it is whole
+        // while withholding part of itself is the fault this whole test exists to prevent.
+        for (var index = 0; index < 60; index++)
+        {
+            await File.WriteAllTextAsync(
+                    Path.Combine(root, $"bulk{index}.txt"),
+                    $"file {index}" + "\n",
+                    new UTF8Encoding(false))
+                .ConfigureAwait(false);
+        }
+
+        var (many, manyTruncated) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
+        Equal(true, manyTruncated, "Sixty new files do not all fit, and the caller is told so");
+        True(many.Any(line => line.Contains("bulk59.txt", StringComparison.Ordinal)),
+            "Every new file is still named, even the ones not opened");
     }).ConfigureAwait(false);
 }
 

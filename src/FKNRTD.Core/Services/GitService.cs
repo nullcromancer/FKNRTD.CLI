@@ -222,8 +222,10 @@ public sealed class GitService
         // A file the agent created is invisible to both diffs above: `git diff` compares against
         // the index, and an untracked file is in neither. An implementer that adds a new source
         // file - which is most of them - produced an empty diff, and the reader was told the task
-        // had changed nothing. Nothing here writes to the index to make them visible; --no-index
-        // against an empty path renders each one as the new file it is.
+        // had changed nothing. Nothing here stages anything to make them visible: --no-index
+        // against an empty path renders each one as the new file it is, and the status that finds
+        // them passes --no-optional-locks so that reading cannot write the index either.
+        var contentWithheld = false;
         if (lines.Count <= maximumLines)
         {
             var untracked = await GetUntrackedPathsAsync(directory, cancellationToken).ConfigureAwait(false);
@@ -249,6 +251,11 @@ public sealed class GitService
 
                     if (rendered >= MaximumRenderedNewFiles)
                     {
+                        // Named, not opened - and that is content left out, so the caller is told
+                        // the same way it is told about the line budget. Reporting a diff as whole
+                        // when part of it was withheld is the fault this whole change set exists
+                        // to remove, and returning false here would have reintroduced it.
+                        contentWithheld = true;
                         lines.Add("+++ b/" + path);
                         continue;
                     }
@@ -280,7 +287,7 @@ public sealed class GitService
 
         return lines.Count > maximumLines
             ? (lines.Take(maximumLines).ToArray(), true)
-            : (lines, false);
+            : (lines, contentWithheld);
     }
 
     /// <summary>
@@ -290,9 +297,13 @@ public sealed class GitService
         string directory,
         CancellationToken cancellationToken = default)
     {
+        // --no-optional-locks because this is called from a read. `git status` may refresh the
+        // index's cached stat data and write it back, which is a write to the repository being
+        // read and can contend with an agent working in the same worktree. It is not staging
+        // anything either way, but "nothing here writes" was not true without this.
         var result = await GitAsync(
                 directory,
-                ["status", "--porcelain=v1", "-z", "-uall"],
+                ["--no-optional-locks", "status", "--porcelain=v1", "-z", "-uall"],
                 cancellationToken)
             .ConfigureAwait(false);
         if (!result.Success)
