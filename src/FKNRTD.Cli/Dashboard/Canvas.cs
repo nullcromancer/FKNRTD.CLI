@@ -486,28 +486,75 @@ internal static class Text
     }
 
     /// <summary>Hard-splits a word too long to wrap, never breaking a grapheme cluster.</summary>
+    /// <summary>
+    /// Breaks a word too long for the line into pieces, at a separator inside it where there is a
+    /// usable one.
+    /// </summary>
+    /// <remarks>
+    /// A blind break at the column gives the worst possible result for the thing most likely to be
+    /// too long, which is a path: doctor reported its config file as
+    /// "...\.fknrtd\config.jso" followed by a line holding the single letter "n". Breaking after
+    /// a separator keeps each piece a readable fragment of the path and the last one a whole
+    /// filename. Only a break that leaves a substantial first piece is worth taking - otherwise
+    /// the pieces get so short that the word takes more lines than it needs.
+    /// </remarks>
     private static IEnumerable<string> Split(string word, int width)
+    {
+        var remaining = word;
+        while (DisplayWidth(remaining) > width)
+        {
+            var head = Take(remaining, width);
+
+            // A path separator is preferred over any other, so that a filename stays whole: at the
+            // dot instead, the config file above broke into "config." and "json".
+            var breakAt = head.LastIndexOfAny(PathSeparators);
+            if (breakAt < width / 2)
+            {
+                breakAt = head.LastIndexOfAny(SeparatorCharacters);
+            }
+
+            // Past the halfway mark, so that a separator near the start of a long path does not
+            // produce a column of stubs.
+            if (breakAt >= width / 2 && breakAt < head.Length - 1)
+            {
+                head = head[..(breakAt + 1)];
+            }
+
+            yield return head;
+            remaining = remaining[head.Length..];
+        }
+
+        if (remaining.Length > 0)
+        {
+            yield return remaining;
+        }
+    }
+
+    /// <summary>Preferred break points: a piece of a path reads as a piece of a path.</summary>
+    private static readonly char[] PathSeparators = ['\\', '/'];
+
+    /// <summary>Where else a word may be broken when it is too long to fit on one line.</summary>
+    private static readonly char[] SeparatorCharacters = ['\\', '/', '-', '_', '.', ',', ';', ':'];
+
+    /// <summary>As many whole elements of <paramref name="word"/> as fit in <paramref name="width"/>.</summary>
+    private static string Take(string word, int width)
     {
         var piece = new StringBuilder();
         var pieceWidth = 0;
         foreach (var element in Elements(word))
         {
             var elementWidth = DisplayWidth(element);
-            if (pieceWidth + elementWidth > width && pieceWidth > 0)
+            if (pieceWidth + elementWidth > width)
             {
-                yield return piece.ToString();
-                piece.Clear();
-                pieceWidth = 0;
+                break;
             }
 
             piece.Append(element);
             pieceWidth += elementWidth;
         }
 
-        if (pieceWidth > 0)
-        {
-            yield return piece.ToString();
-        }
+        // A single element wider than the whole line still has to make progress, or this loops.
+        return piece.Length > 0 ? piece.ToString() : Elements(word).First();
     }
 
     public static int DisplayWidth(string? value)

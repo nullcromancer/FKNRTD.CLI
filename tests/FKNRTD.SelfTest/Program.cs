@@ -313,7 +313,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A command the editor would split is reported", TestACommandWithALineBreakIsReported),
     ("A narrow panel keeps its words and its way out", TestANarrowPanelKeepsItsWordsAndItsWayOut),
     ("Every command on the help page is readable", TestEveryCommandOnTheHelpPageIsReadableAsync),
-    ("A narrow footer says it left keys out", TestANarrowFooterSaysItLeftKeysOut)
+    ("A narrow footer says it left keys out", TestANarrowFooterSaysItLeftKeysOut),
+    ("A path too long for the line breaks where a path breaks", TestALongPathBreaksAtASeparator)
 };
 
 var failures = new List<string>();
@@ -5807,6 +5808,43 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestALongPathBreaksAtASeparator()
+{
+    // A word longer than the line was chopped at the column, which gives the worst possible
+    // result for the thing most likely to be too long. Doctor reported its own config file as
+    // "...\\config.jso" and then a line holding the single letter "n" - a path that cannot be
+    // read and cannot be copied.
+
+    var path = "C:\\Users\\ms\\AppData\\Local\\Temp\\fkn-trial\\.fknrtd\\config.json";
+    var lines = Text.Wrap(path, 50);
+
+    True(lines.Count >= 2, "A path longer than the line takes more than one line");
+    True(lines.All(line => Text.DisplayWidth(line) <= 50), "and no piece of it overruns the line");
+    Equal(path, string.Concat(lines), "and nothing is lost or added by breaking it");
+
+    // The filename survives whole, which is the part somebody is reading the path for.
+    True(lines[^1].Contains("config.json", StringComparison.Ordinal),
+        "The filename is not itself broken in half");
+    True(lines.All(line => line.Length > 1),
+        "and no line is a single orphaned character");
+
+    // The break is after a separator, so each piece reads as a piece of a path.
+    foreach (var line in lines.Take(lines.Count - 1))
+    {
+        True(line.EndsWith('\\') || line.EndsWith('/'),
+            $"'{line}' ends at a path separator");
+    }
+
+    // A word with nothing to break on still has to make progress rather than looping or
+    // overrunning: the pieces are just as wide as they can be.
+    var solid = new string('x', 120);
+    var chopped = Text.Wrap(solid, 40);
+    Equal(3, chopped.Count, "An unbreakable word is divided by width");
+    Equal(solid, string.Concat(chopped), "and survives the division intact");
+
+    return Task.CompletedTask;
+}
+
 static Task TestANarrowFooterSaysItLeftKeysOut()
 {
     // The footer keeps help and quit pinned to the right and drops the middle when it runs out of
