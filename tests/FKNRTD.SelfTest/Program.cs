@@ -305,7 +305,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Doctor asks whether Git can commit", TestDoctorAsksWhetherGitCanCommitAsync),
     ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync),
     ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen),
-    ("A failed agent line is not drawn as a finished one", TestAFailureIsNotDrawnAsSuccess)
+    ("A failed agent line is not drawn as a finished one", TestAFailureIsNotDrawnAsSuccess),
+    ("A flag does not swallow the word after it", TestAFlagDoesNotSwallowTheNextWord)
 };
 
 var failures = new List<string>();
@@ -5799,6 +5800,51 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestAFlagDoesNotSwallowTheNextWord()
+{
+    // Every option used to take the next word as its value, whether or not it was documented as
+    // taking one, so a flag written before a positional ate it. Both of the lines below are how
+    // the catalog's own examples and help text tell people to write them.
+
+    var show = new CliArguments(["task", "show", "-json", "FKN-20260101-000000-abcdef01"]);
+    Equal("FKN-20260101-000000-abcdef01", show.Positional(2),
+        "The task ID is an argument to task show, not the value of -json");
+    Equal(true, show.Has("json"), "and -json is still set");
+
+    var init = new CliArguments(["init", "-standalone", "./notes"]);
+    Equal("./notes", init.Positional(1),
+        "The folder is an argument to init, not the value of -standalone");
+    Equal(true, init.Has("standalone"), "and -standalone is still set");
+
+    // An option the catalog documents as taking a value still takes one, written either way.
+    var created = new CliArguments(["task", "create", "Fix parser", "-brief", "Accept quoted spaces"]);
+    Equal("Accept quoted spaces", created.Get("brief"), "-brief takes the word after it");
+    Equal("Fix parser", created.Positional(2), "and the title survives beside it");
+
+    var equals = new CliArguments(["task", "create", "Fix parser", "-brief=Accept quoted spaces"]);
+    Equal("Accept quoted spaces", equals.Get("brief"), "and -brief=value reads the same");
+
+    // The catalog says of -verify: "pass -verify with no value only if you mean to check nothing".
+    // It used to mean a task whose one acceptance command was a program called true.
+    var nothing = new CliArguments(["task", "create", "Title", "-brief", "b", "-verify"]);
+    Equal(true, nothing.Supplied.Contains("verify", StringComparer.OrdinalIgnoreCase),
+        "-verify was supplied");
+    True(nothing.GetMany("verify").All(string.IsNullOrWhiteSpace),
+        "and asking to check nothing does not invent a command to run");
+
+    // A value-taking option written last with nothing after it is not a command either.
+    var dangling = new CliArguments(["task", "create", "Title", "-brief"]);
+    True(string.IsNullOrWhiteSpace(dangling.Get("brief")),
+        "-brief with no text is empty rather than the word true");
+
+    // A command the catalog does not know keeps the old reading rather than refusing to parse.
+    var unknown = new CliArguments(["not-a-command", "-whatever", "value"]);
+    Equal("value", unknown.Get("whatever"),
+        "An undocumented option on an unknown command still takes the word after it");
+
+    return Task.CompletedTask;
+}
+
 static Task TestAFailureIsNotDrawnAsSuccess()
 {
     // The log view is what somebody watches while a task runs, so a line that reports a failure

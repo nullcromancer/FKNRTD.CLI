@@ -680,10 +680,16 @@ internal static class CommandDispatcher
         var lead = arguments.Get("lead") ?? PreferredAgent(config, "claude", 0);
         var implementer = arguments.Get("implementer") ?? PreferredAgent(config, "codex", 1);
         var auditor = arguments.Get("auditor") ?? lead;
-        var verification = arguments.GetMany("verify");
-        if (verification.Count == 0)
+        // Supplying -verify at all means "these are the commands", so supplying it with no value
+        // means there are none. Falling back to the workspace defaults on an empty list ignored
+        // the only way the catalog offers of asking for a task that checks nothing.
+        var verification = arguments.GetMany("verify")
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .ToList();
+        if (verification.Count == 0 &&
+            !arguments.Supplied.Contains("verify", StringComparer.OrdinalIgnoreCase))
         {
-            verification = config.DefaultVerificationCommands;
+            verification = config.DefaultVerificationCommands.ToList();
         }
 
         var task = await runtime.Tasks.CreateAsync(
