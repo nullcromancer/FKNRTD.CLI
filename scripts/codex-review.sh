@@ -94,7 +94,10 @@ printf '%s\n' "$QUEUE" | while IFS='|' read -r name file against question; do
     # Short, one file, one question. Long prompts stalled; this shape returned 53 findings.
     prompt="Read $file. Check it against $against. $question Give the line, the claim or code, and what is actually true. If you find nothing, say so."
 
-    if codex exec --sandbox read-only --skip-git-repo-check "$prompt" > "$OUT/$name.md" 2>&1; then
+    # </dev/null matters: the queue is being read by `while read` from a pipe, and codex exec
+    # reads stdin. Without it the first dispatch swallows every remaining entry and the loop
+    # ends after one review, having reported success. That is how seven of eight stayed queued.
+    if codex exec --sandbox read-only --skip-git-repo-check "$prompt" > "$OUT/$name.md" 2>&1 </dev/null; then
         echo "  wrote $OUT/$name.md"
         dispatched=$((dispatched + 1))
     else
