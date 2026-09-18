@@ -306,7 +306,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync),
     ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen),
     ("A failed agent line is not drawn as a finished one", TestAFailureIsNotDrawnAsSuccess),
-    ("A flag does not swallow the word after it", TestAFlagDoesNotSwallowTheNextWord)
+    ("A flag does not swallow the word after it", TestAFlagDoesNotSwallowTheNextWord),
+    ("A retried task is not called one that never ran", TestTheDashboardSaysWhatActuallyHappened)
 };
 
 var failures = new List<string>();
@@ -5800,6 +5801,62 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestTheDashboardSaysWhatActuallyHappened()
+{
+    // Three sentences the main screen draws about a task, each of which was true of the common
+    // case and wrong about a real one. They are asserted against the states the services actually
+    // produce, because the fault in every case was a screen describing a workflow it had guessed at.
+
+    var snapshot = Scenes.PopulatedSnapshot();
+
+    // Retrying resets the failed stages and queues the task again, keeping the ones that passed.
+    var retried = new WorkflowTask
+    {
+        Id = "FKN-20260101-000000-retried",
+        Title = "Retried",
+        Status = WorkflowStatus.Queued
+    };
+    retried.Stage(WorkflowStage.Plan).State = StageState.Passed;
+    retried.Stage(WorkflowStage.Implement).State = StageState.Pending;
+
+    var hint = DashboardApp.TaskHint(retried, git: true);
+    True(hint is not null, "A queued task says what pressing Enter would do");
+    True(!hint!.Contains("never run", StringComparison.Ordinal),
+        "A task with a stage behind it has run, whatever its status says");
+
+    var fresh = new WorkflowTask { Id = "FKN-20260101-000000-fresh", Title = "Fresh" };
+    True(DashboardApp.TaskHint(fresh, git: true)?.Contains("never run", StringComparison.Ordinal) == true,
+        "A task with no stage behind it has genuinely never run");
+
+    // A task with no verification commands skips verification and still reaches ReadyToLand.
+    var unverified = new WorkflowTask
+    {
+        Id = "FKN-20260101-000000-skipped",
+        Title = "Nothing to verify",
+        Status = WorkflowStatus.ReadyToLand,
+        Quality = new QualitySnapshot { Tests = StageState.Skipped }
+    };
+    var unverifiedHint = DashboardApp.TaskHint(unverified, git: true);
+    True(unverifiedHint is not null && !unverifiedHint.Contains("Verified and audited", StringComparison.Ordinal),
+        "Work that nothing checked is not described as verified");
+    True(unverifiedHint!.Contains("Audited", StringComparison.Ordinal),
+        "and what did happen to it is still stated");
+
+    var verified = new WorkflowTask
+    {
+        Id = "FKN-20260101-000000-verified",
+        Title = "Verified",
+        Status = WorkflowStatus.ReadyToLand,
+        Quality = new QualitySnapshot { Tests = StageState.Passed }
+    };
+    True(DashboardApp.TaskHint(verified, git: true)?
+            .Contains("Verified and audited", StringComparison.Ordinal) == true,
+        "A task whose commands passed is still verified and audited");
+
+    True(snapshot.Config.Agents.Count > 0, "The scene this reads from has agents configured");
+    return Task.CompletedTask;
+}
+
 static Task TestAFlagDoesNotSwallowTheNextWord()
 {
     // Every option used to take the next word as its value, whether or not it was documented as

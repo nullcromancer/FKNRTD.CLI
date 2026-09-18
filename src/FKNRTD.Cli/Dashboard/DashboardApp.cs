@@ -789,8 +789,9 @@ internal sealed class DashboardApp
         if (lines.Length == 0)
         {
             canvas.DrawWrapped(inner.X, row, inner.Width, 2,
-                "The log exists but is still empty. The agent has been launched and has not written " +
-                "anything yet.", Theme.Muted);
+                "The log exists but is still empty. Its file is opened before the agent starts, so " +
+                "this is either an agent that has not written anything yet or one that finished " +
+                "without saying anything.", Theme.Muted);
             return;
         }
 
@@ -1137,7 +1138,11 @@ internal sealed class DashboardApp
     {
         if (snapshot.Conflicts.Any(conflict => conflict.Kind == ConflictKind.Collision))
         {
-            return "Two agents are writing the same file — press C to cancel one of them";
+            // A collision is two agents having claimed the same path with at least one of them
+            // meaning to write it. Nothing here observes a write in progress, and saying so sent
+            // somebody looking for an edit that had not happened yet.
+            return "Two agents have claimed the same file and one means to write it — " +
+                   "press C to cancel one of them";
         }
 
         if (snapshot.Config.Agents.Count == 0)
@@ -1169,22 +1174,41 @@ internal sealed class DashboardApp
         // no worktree to reclaim, so the same two hints would be pointing at things that are not
         // there - and X is refused outright in that mode.
         var git = snapshot.Config.Mode == WorkspaceMode.Git;
-        return task?.Status switch
+        return task is null ? null : TaskHint(task, git);
+    }
+
+    /// <summary>
+    /// What to do next with one task, given its state. Separated from the screen so that a test can
+    /// ask what a task would be told without rendering a frame to read it back out of.
+    /// </summary>
+    internal static string? TaskHint(WorkflowTask task, bool git) =>
+        task.Status switch
         {
-            WorkflowStatus.Queued => "This task has never run — press Enter to start it",
+            // Retrying resets the failed stages and puts the task back to Queued, keeping the ones
+            // that passed - so "never run" was wrong for exactly the task somebody had just
+            // retried, and told them their completed stages were about to be done again.
+            WorkflowStatus.Queued => task.Stages.Any(stage => stage.State == StageState.Passed)
+                ? "Queued again — press Enter to carry on from the first stage that has not passed"
+                : "This task has never run — press Enter to start it",
             WorkflowStatus.Running => "Press L to watch the live log for this task",
             WorkflowStatus.Failed => "Press L to read why it failed, then R to retry from the failed stage",
-            WorkflowStatus.ReadyToLand => git
-                ? "Verified and audited — press V to read the change, then G to merge it into " +
-                  (string.IsNullOrWhiteSpace(task.BaseRef) ? "your base branch" : task.BaseRef)
-                : "Verified and audited — press V to read the change, then G to record it as final",
+            // A task with no verification commands skips the verify stage and still reaches
+            // ReadyToLand, so "verified and audited" described work that nothing had checked but
+            // the auditor. That is a defensible way to run a task and an indefensible thing to be
+            // told about one.
+            WorkflowStatus.ReadyToLand => (task.Quality.Tests == StageState.Skipped
+                    ? "Audited, with no verification commands to run"
+                    : "Verified and audited") +
+                (git
+                    ? " — press V to read the change, then G to merge it into " +
+                      (string.IsNullOrWhiteSpace(task.BaseRef) ? "your base branch" : task.BaseRef)
+                    : " — press V to read the change, then G to record it as final"),
             WorkflowStatus.Cancelled => "Cancelled — press R to retry it",
             WorkflowStatus.Landed => git
                 ? "Landed — press X to remove its worktree and reclaim the disk space"
                 : "Landed — the verified work is this folder, and there is nothing to clean up",
             _ => null
         };
-    }
 
     /// <summary>The most recent footer message. The test seam for the action guard.</summary>
     internal string Toast => _toast;
@@ -1355,7 +1379,11 @@ internal sealed class DashboardApp
                 if (SelectedTask(snapshot) is { } cancelTask)
                 {
                     await _tasks.RequestCancellationAsync(cancelTask.Id, cancellationToken).ConfigureAwait(false);
-                    _toast = $"Cancellation requested for {cancelTask.Id}. The current stage finishes first.";
+                    // Not "the current stage finishes first": the workflow notices the request
+                    // within half a second and the agent it is running is killed where it stands.
+                    // Somebody deciding whether to wait or to cancel is deciding on this sentence.
+                    _toast = $"Cancellation requested for {cancelTask.Id}. The agent it is running " +
+                             "stops within a second; work already written stays where it is.";
                 }
                 else
                 {
@@ -1640,7 +1668,8 @@ internal sealed class DashboardApp
 
         if (task.Status != WorkflowStatus.ReadyToLand)
         {
-            _toast = $"{task.Id} is {task.Status}. Only a verified and audited task can be landed.";
+            _toast = $"{task.Id} is {task.Status}. Only a task that has passed its audit can be " +
+                     "landed; verification runs first when the task has commands to run.";
             return;
         }
 
@@ -1961,9 +1990,15 @@ internal sealed class DashboardApp
     /// the bus is listed on the coordination screen, and reading it is exactly when somebody knows
     /// which notes they have dealt with.
     /// </summary>
+    /// <remarks>
+    /// The pending list is loaded here rather than taken from the snapshot, which holds the fifty
+    /// most recent messages because that is all a panel can draw. Acknowledging only those left
+    /// older notes pending while reporting that every message had been handled - and the ones left
+    /// behind were the oldest, which is where an unhandled hand-off does the most damage.
+    /// </remarks>
     private async Task AcknowledgeMessagesAsync(DashboardSnapshot snapshot, CancellationToken cancellationToken)
     {
-        var pending = snapshot.Messages
+        var pending = (await _messages.GetCurrentAsync(1000, cancellationToken).ConfigureAwait(false))
             .Where(message => message.Delivery != MessageDelivery.Acknowledged)
             .ToArray();
 
