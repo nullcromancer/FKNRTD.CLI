@@ -657,3 +657,86 @@ The eight reviews are drained and their outputs are in `docs/collab/reviews/`. W
 them is listed above under "not acted on". The two briefs written earlier —
 `BRIEF-codex-01-command-catalog.md` and `BRIEF-codex-02-settings-and-errors.md` — are still
 unsent.
+
+## 2026-09-17 21:40 — Round two: the other seat reading this seat's work
+
+Six reviews, dispatched against the files the first round caused to change. The premise was that
+this is where a new defect would be, since every fault round one found was in the gap between a
+surface and the service behind it — and the seat that closed those gaps is the seat least able to
+see what it left behind. That premise paid.
+
+### It found two faults introduced hours earlier
+
+- **The new-file cap reported a whole diff while withholding part of it.** Files past the
+  fiftieth were named rather than opened, and `Truncated` came back false anyway. The commit that
+  introduced it was called *Show the file the agent created*, and its whole subject was telling
+  the truth about a diff.
+- **Its comment said "nothing here writes to the index", which was not true.** The `git status`
+  that finds untracked files may refresh the index's cached stat data and write it back,
+  contending with an agent working in the same worktree. `--no-optional-locks`, and the comment
+  now describes the code rather than the intention.
+
+The second is the more useful of the two to have found. A confident comment is how a false claim
+survives a reading, and this one was written in the same breath as a fix for false claims.
+
+### And a regression in the parser fix, in the same session that made it
+
+`-color` forces ANSI on every command and is also `agent add -color <colour>`. The universal list
+was consulted before the command's own catalog entry, so `fknrtd agent add -id local -exe mytool
+-color cyan` set the flag and left `cyan` stranded as a positional. The entry wins now.
+
+Two more from the same review: command discovery stopped at the first option, so `fknrtd -root .
+task show -json <id>` found no command at all and fell back to the greedy reading — the original
+fault reappearing for anyone who selects the workspace before naming the command. And every `--`
+was treated as the delimiter, so `fknrtd init -- --` had no folder left to act on.
+
+**The lesson worth keeping: a fix wants reviewing more than the code it fixed.** Three of the four
+faults above were introduced by this session, two of them inside the commits that were repairing
+the very class of fault they reintroduced. The suite was green after each one.
+
+### Two more from the reviews, fixed
+
+- The roster's intro was capped at two rows. Three are needed at 60 columns, which is the
+  narrowest window the dashboard agrees to draw, and the sentence that disappeared was "Only
+  enabled agents are offered" — the one a reader needs to understand why an agent they configured
+  is not on the task builder's list.
+- The footer drew hints until it ran out of room and stopped. Hints are written most-used first
+  with the way out written last, so the first thing a narrow panel dropped was `Esc close`, in the
+  panel where a reader is least sure how to leave. The last hint is reserved before the others are
+  drawn now, and omissions are marked.
+- The log called any item type with "file" in its name a write, so a `file_read` was reported as
+  an edit and a `file_change` that had only started as a finished one.
+
+### Outstanding, for whoever picks this up
+
+Checked and real, not yet acted on. The full text is in `docs/collab/reviews/`.
+
+- **`LogLine.FromContent` returns on the first recognised block**, so a message whose second block
+  holds the warning shows only the first. The observer visits every block.
+- **A `system` event is answered before the failure checks**, so `{"type":"system","is_error":true,
+  "message":"Authentication failed"}` reads as "session started", noise.
+- **Property lookup is case-sensitive** where the observer's is not: `IS_ERROR` is ignored.
+- **`command_execution` drops its exit code and output**, so a failed build reads as `> dotnet build`.
+- **Status column padding uses UTF-16 length, not display columns** — `AgentManager.cs:209`. This
+  is the assumption `AGENTS.md` names outright, and a CJK executable name breaks the alignment the
+  panel exists to provide.
+- **Explanations are cut mid-sentence** when the roster runs out of height; the panel promises they
+  finish their sentences.
+- **`Wizard.Store` trims a multiline brief** on every navigation, removing indentation the reader
+  typed. **Back stores answers without validating them**, so an invalid answer can survive by being
+  backed out of. **`Reopen(wizard.Values, problem)` clears the dictionary it is about to read**,
+  which works today only because the caller passes a different instance.
+- **Doctor and the orchestrator still diverge** on: a base branch that does not resolve, stage
+  profiles for `plan` and `implement` (only `audit` and `default` are checked), agents assigned to
+  existing tasks versus agents enabled, and `autoCommitAgentChanges` being off with a dirty
+  worktree.
+- **`GetDiffAsync` treats a failed Git command as no changes**, so a deleted base branch or a
+  timeout returns empty with `Truncated` false. It also concatenates the committed and pending
+  diffs, which describes intermediate states rather than the net change, and reads them in three
+  separate observations that a commit landing between them can fall through.
+
+### Cost
+
+Round one: eight reviews, about 320k tokens, nine commits. Round two: six reviews, about 210k
+tokens, five commits. Local suite 102/102 throughout; `scripts/verify.sh` reports every command
+behaving as the record says.
