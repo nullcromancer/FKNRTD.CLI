@@ -1510,9 +1510,23 @@ internal static class CommandDispatcher
                 }
                 else
                 {
+                    // A table, like every other listing. The id came last, in brackets after a
+                    // message of any length, so the one column a reader needs in order to
+                    // acknowledge anything was the one column that never lined up.
+                    var readAt = DateTimeOffset.UtcNow;
+                    var handOffColumn = Math.Max(
+                        7,
+                        messages.Max(message =>
+                            Text.DisplayWidth(message.FromAgentId + " > " + message.ToAgentId)));
+                    Console.WriteLine(
+                        $"{"ID",-32}  {Pad("AGE", 8)}  {Pad("HAND-OFF", handOffColumn)}  " +
+                        $"{Pad("STATE", 12)}  MESSAGE");
                     foreach (var message in messages)
                     {
-                        Console.WriteLine($"{message.CreatedAt:O} {message.FromAgentId}>{message.ToAgentId} [{message.Delivery}] {message.Text} ({message.Id})");
+                        Console.WriteLine(
+                            $"{message.Id,-32}  {Pad(Text.Age(message.CreatedAt, readAt) + " ago", 8)}  " +
+                            $"{Pad(message.FromAgentId + " > " + message.ToAgentId, handOffColumn)}  " +
+                            $"{Pad(message.Delivery.ToString().ToLowerInvariant(), 12)}  {message.Text}");
                     }
                 }
 

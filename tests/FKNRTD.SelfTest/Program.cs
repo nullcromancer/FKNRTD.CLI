@@ -5870,6 +5870,30 @@ static async Task TestReservationsAreListedAsATableAsync()
         True(agentColumn > 0 && row.Length > agentColumn &&
              row.Substring(agentColumn).StartsWith("claude", StringComparison.Ordinal),
             "and the agent column starts where its heading says it does");
+
+        // The message bus had the same two faults and gets the same treatment: its id came last,
+        // in brackets after a message of any length, so the one column a reader needs in order to
+        // acknowledge anything was the one that never lined up.
+        Equal(0, await QuietlyAsync(
+                ["message", "send", "-root", root, "-from", "claude", "-to", "codex", "-text", "Over to you"])
+            .ConfigureAwait(false), "A hand-off is recorded");
+
+        var bus = (await CapturedAsync(["message", "list", "-root", root, "-no-color"]).ConfigureAwait(false))
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => line.Length > 0)
+            .ToArray();
+
+        True(bus.Length >= 2, "The bus lists a header and the hand-off");
+        True(bus[0].StartsWith("ID", StringComparison.Ordinal) &&
+             bus[0].Contains("HAND-OFF", StringComparison.Ordinal),
+            "with its columns named");
+        True(!bus[1].Contains("+00:00", StringComparison.Ordinal),
+            "and no round-trip timestamp on the row");
+        True(bus[1].Contains("claude > codex", StringComparison.Ordinal),
+            "The hand-off says who it is between");
+        True(bus[1].EndsWith("Over to you", StringComparison.Ordinal),
+            "and the message itself is last, where a line of any length can end");
     }).ConfigureAwait(false);
 }
 
