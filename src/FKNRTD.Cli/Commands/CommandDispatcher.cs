@@ -854,9 +854,16 @@ internal static class CommandDispatcher
 
         Console.WriteLine();
         Console.WriteLine("WHO IS ON IT");
-        Console.WriteLine($"  Lead         {task.LeadAgentId}  —  {RoleNotes.LeadShort}");
-        Console.WriteLine($"  Implementer  {task.ImplementerAgentId}  —  {RoleNotes.ImplementerShort}");
-        Console.WriteLine($"  Auditor      {task.AuditorAgentId}  —  {RoleNotes.AuditorShort}");
+
+        // The agent name is padded to the widest of the three so the notes start in one column.
+        // Unpadded, "claude", "codex" and "claude" put the dashes in three different places and
+        // the block read as three unrelated lines rather than one table.
+        var roleColumn = new[] { task.LeadAgentId, task.ImplementerAgentId, task.AuditorAgentId }
+            .Max(Text.DisplayWidth);
+        string Role(string id) => id + new string(' ', roleColumn - Text.DisplayWidth(id));
+        Console.WriteLine($"  Lead         {Role(task.LeadAgentId)}  —  {RoleNotes.LeadShort}");
+        Console.WriteLine($"  Implementer  {Role(task.ImplementerAgentId)}  —  {RoleNotes.ImplementerShort}");
+        Console.WriteLine($"  Auditor      {Role(task.AuditorAgentId)}  —  {RoleNotes.AuditorShort}");
 
         Console.WriteLine();
         Console.WriteLine("WHERE THE WORK HAPPENS");
