@@ -317,7 +317,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A path too long for the line breaks where a path breaks", TestALongPathBreaksAtASeparator),
     ("A standalone pipeline promises no branch", TestAStandalonePipelinePromisesNoBranch),
     ("The checks panel names only checks that exist", TestTheChecksPanelNamesOnlyChecksThatExist),
-    ("An event reads as a time, not a round-trip string", TestAnEventReadsAsATimeAsync)
+    ("An event reads as a time, not a round-trip string", TestAnEventReadsAsATimeAsync),
+    ("Reservations are listed as a table", TestReservationsAreListedAsATableAsync)
 };
 
 var failures = new List<string>();
@@ -5830,6 +5831,48 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestReservationsAreListedAsATableAsync()
+{
+    // The reservation listing ran the id, the agent, the mode, the paths and a round-trip
+    // timestamp together in one unpunctuated line - directly below an empty-state message that
+    // had been written with real care. Every other listing this product prints is a table.
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "A workspace to reserve paths in");
+        Equal(0, await QuietlyAsync(
+                ["claim", "add", "-root", root, "-agent", "claude", "-path", "src/foo.cs", "-mode", "write"])
+            .ConfigureAwait(false), "A reservation is registered");
+
+        var text = await CapturedAsync(["claim", "list", "-root", root, "-no-color"]).ConfigureAwait(false);
+        var lines = text.Split('\n').Select(line => line.TrimEnd('\r'))
+            .Where(line => line.Length > 0)
+            .ToArray();
+
+        True(lines.Length >= 2, "A header and a row");
+        True(lines[0].StartsWith("ID", StringComparison.Ordinal) &&
+             lines[0].Contains("AGENT", StringComparison.Ordinal) &&
+             lines[0].Contains("EXPIRES", StringComparison.Ordinal) &&
+             lines[0].Contains("PATHS", StringComparison.Ordinal),
+            "The columns are named, so a reader knows what they are looking at");
+
+        var row = lines[1];
+        True(row.Contains("claude", StringComparison.Ordinal), "The row names the agent");
+        True(row.Contains("src/foo.cs", StringComparison.Ordinal), "and the path it reserved");
+        True(!row.Contains("+00:00", StringComparison.Ordinal),
+            "and does not spend a third of the line on a round-trip timestamp");
+        True(row.Contains("in ", StringComparison.Ordinal),
+            "It says how long the reservation has left, which is what somebody holding one asks");
+
+        // The columns line up, which is the only reason a table beats the sentence it replaced.
+        var agentColumn = lines[0].IndexOf("AGENT", StringComparison.Ordinal);
+        True(agentColumn > 0 && row.Length > agentColumn &&
+             row.Substring(agentColumn).StartsWith("claude", StringComparison.Ordinal),
+            "and the agent column starts where its heading says it does");
+    }).ConfigureAwait(false);
+}
+
 static async Task TestAnEventReadsAsATimeAsync()
 {
     // The event listing spent thirty-three columns on a round-trip timestamp - seven digits of

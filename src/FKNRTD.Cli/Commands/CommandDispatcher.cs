@@ -1548,7 +1548,8 @@ internal static class CommandDispatcher
                         TimeSpan.FromSeconds(ttl),
                         cancellationToken)
                     .ConfigureAwait(false);
-                Console.WriteLine($"√ Claim {claim.Id} registered until {claim.ExpiresAt:O}");
+                Console.WriteLine(
+                    $"√ Claim {claim.Id} registered. It expires {Expiry(claim.ExpiresAt)}.");
                 return 0;
             }
             case "renew":
@@ -1564,7 +1565,7 @@ internal static class CommandDispatcher
                         TimeSpan.FromSeconds(ttl),
                         cancellationToken)
                     .ConfigureAwait(false);
-                Console.WriteLine($"√ Claim renewed until {claim.ExpiresAt:O}");
+                Console.WriteLine($"√ Claim renewed. It expires {Expiry(claim.ExpiresAt)}.");
                 return 0;
             }
             case "release":
@@ -1594,9 +1595,22 @@ internal static class CommandDispatcher
                 }
                 else
                 {
+                    // A table, because every other listing this product prints is one. This row
+                    // used to run the id, the agent, the mode, the paths and a round-trip
+                    // timestamp together in a single unpunctuated line, immediately below an
+                    // empty-state message that had been written with some care.
+                    var agentColumn = Math.Max(5, claims.Max(claim => Text.DisplayWidth(claim.AgentId)));
+                    var expiryColumn = Math.Max(7, claims.Max(claim => Text.DisplayWidth(Expiry(claim.ExpiresAt))));
+                    Console.WriteLine(
+                        $"{"ID",-32}  {Pad("AGENT", agentColumn)}  {Pad("MODE", 5)}  " +
+                        $"{Pad("EXPIRES", expiryColumn)}  PATHS");
                     foreach (var claim in claims)
                     {
-                        Console.WriteLine($"{claim.Id} {claim.AgentId} {claim.Mode} {string.Join(", ", claim.Paths)} until {claim.ExpiresAt:O}");
+                        Console.WriteLine(
+                            $"{claim.Id,-32}  {Pad(claim.AgentId, agentColumn)}  " +
+                            $"{Pad(claim.Mode.ToString().ToLowerInvariant(), 5)}  " +
+                            $"{Pad(Expiry(claim.ExpiresAt), expiryColumn)}  " +
+                            $"{string.Join(", ", claim.Paths)}");
                     }
 
                     foreach (var conflict in conflicts)
@@ -1611,6 +1625,23 @@ internal static class CommandDispatcher
                 return Unknown("claim " + arguments.Subcommand);
         }
     }
+
+    /// <summary>
+    /// When a reservation runs out, phrased the way somebody holding one would ask. A claim is
+    /// advisory and short-lived, so "in 55m" is the answer; the wall-clock time is there for a
+    /// reader comparing two of them, and is UTC like every other time this product prints.
+    /// </summary>
+    private static string Expiry(DateTimeOffset expires)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return expires <= now
+            ? $"expired {Text.Age(expires, now)} ago"
+            : $"in {Text.Age(now, expires)}";
+    }
+
+    /// <summary>Pads to a column measured in terminal columns rather than characters.</summary>
+    private static string Pad(string value, int columns) =>
+        value + new string(' ', Math.Max(0, columns - Text.DisplayWidth(value)));
 
     private static async Task<int> UsageCommandAsync(
         FknrtdRuntime runtime,
