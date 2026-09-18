@@ -174,7 +174,13 @@ internal sealed class AgentManager : IOverlay
             return;
         }
 
-        y = canvas.DrawWrapped(x, y, width, IntroRows, Intro, Theme.Muted, background: Theme.Surface);
+        // The intro is given the rows it actually needs at this width, not a fixed two. Two is
+        // enough at 100 columns and not at 60, which is the narrowest window the dashboard agrees
+        // to draw - and DrawWrapped drops what does not fit without saying so, so the sentence
+        // that disappeared was "Only enabled agents are offered": the one a reader needs to
+        // understand why an agent they configured is not on a task.
+        y = canvas.DrawWrapped(x, y, width, IntroRows(width), Intro, Theme.Muted,
+            background: Theme.Surface);
         y++;
 
         var idWidth = Math.Min(16, _agents.Max(agent => Text.DisplayWidth(agent.Id)) + 1);
@@ -277,7 +283,12 @@ internal sealed class AgentManager : IOverlay
         "Every task names three agents: one to plan, one to implement, and one to judge the result. " +
         "Only enabled agents are offered.";
 
-    private const int IntroRows = 2;
+    /// <summary>
+    /// How many rows the intro needs at this width, capped so that a narrow panel cannot spend
+    /// itself entirely on prose and leave no room for the roster it introduces.
+    /// </summary>
+    private static int IntroRows(int width) =>
+        Math.Clamp(Text.Wrap(Intro, Math.Max(1, width)).Count, 1, 4);
 
     private const string EmptyMessage =
         "No agents are configured, so there is nobody to give work to. Press N to describe one: " +
@@ -304,7 +315,7 @@ internal sealed class AgentManager : IOverlay
         // Top border, the intro, a gap, the roster, a rule, the footer's own rule, the footer, and
         // the bottom border. Each explanation adds its caption and its wrapped body, and the second
         // one is preceded by a blank row.
-        var height = 1 + Math.Min(IntroRows, Text.Wrap(Intro, inner).Count) + 1 + _agents.Count + 1 + 3;
+        var height = 1 + IntroRows(inner) + 1 + _agents.Count + 1 + 3;
         if (Selected is { } current)
         {
             height += 1 + Text.Wrap(Describe(current), inner).Count;

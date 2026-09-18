@@ -62,21 +62,65 @@ internal static class Overlays
         canvas.DrawRule(panel.X + 1, y - 1, Math.Max(0, panel.Width - 2), accent.Blend(Theme.Surface, 0.55),
             Theme.Surface);
 
-        var x = inner.X;
-        foreach (var (key, meaning) in keys)
+        if (keys.Length == 0)
         {
-            var keyWidth = Text.DisplayWidth(key);
-            var meaningWidth = Text.DisplayWidth(meaning);
-            if (x + keyWidth + meaningWidth + 3 > inner.Right)
+            return;
+        }
+
+        // The last hint is reserved before any of the others are drawn. Hints are written
+        // most-used first and the way out is written last, so a footer that simply stopped when it
+        // ran out of room dropped Esc first - leaving a panel with no stated way to close it, at
+        // the narrow widths where a reader is most likely to need telling. The roster's seven
+        // hints lose F1 and Esc at 80 columns, which is a supported size.
+        var lastIndex = keys.Length - 1;
+        var reserved = Width(keys[lastIndex]);
+
+        var x = inner.X;
+        var skipped = false;
+        for (var index = 0; index < lastIndex; index++)
+        {
+            var width = Width(keys[index]);
+            // The omission marker is not reserved here: charging three columns for a marker that
+            // is only drawn when something is actually left out would drop a hint that fits.
+            if (x + width + reserved > inner.Right)
             {
-                break;
+                skipped = true;
+                continue;
             }
 
-            canvas.DrawText(x, y, key, accent, bold: true, maxWidth: keyWidth, background: Theme.SurfaceSunken);
-            x += keyWidth + 1;
-            canvas.DrawText(x, y, meaning, Theme.Muted, maxWidth: meaningWidth, background: Theme.SurfaceSunken);
-            x += meaningWidth + 2;
+            x = Draw(canvas, x, y, keys[index], accent);
         }
+
+        if (skipped && x + Ellipsis + reserved <= inner.Right)
+        {
+            canvas.DrawText(x, y, "...", Theme.Muted, maxWidth: Ellipsis,
+                background: Theme.SurfaceSunken);
+            x += Ellipsis + 1;
+        }
+
+        if (x + reserved <= inner.Right)
+        {
+            Draw(canvas, x, y, keys[lastIndex], accent);
+        }
+    }
+
+    /// <summary>The columns one footer hint occupies, including the gap that follows it.</summary>
+    private static int Width((string Key, string Meaning) hint) =>
+        Text.DisplayWidth(hint.Key) + Text.DisplayWidth(hint.Meaning) + 3;
+
+    /// <summary>The columns the omission marker occupies.</summary>
+    private const int Ellipsis = 3;
+
+    private static int Draw(Canvas canvas, int x, int y, (string Key, string Meaning) hint, Rgb accent)
+    {
+        var keyWidth = Text.DisplayWidth(hint.Key);
+        var meaningWidth = Text.DisplayWidth(hint.Meaning);
+        canvas.DrawText(x, y, hint.Key, accent, bold: true, maxWidth: keyWidth,
+            background: Theme.SurfaceSunken);
+        x += keyWidth + 1;
+        canvas.DrawText(x, y, hint.Meaning, Theme.Muted, maxWidth: meaningWidth,
+            background: Theme.SurfaceSunken);
+        return x + meaningWidth + 2;
     }
 
     /// <summary>

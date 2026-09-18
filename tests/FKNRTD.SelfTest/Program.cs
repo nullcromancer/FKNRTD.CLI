@@ -310,7 +310,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A retried task is not called one that never ran", TestTheDashboardSaysWhatActuallyHappened),
     ("Clearing a question means the empty answer", TestClearingAQuestionMeansEmpty),
     ("A base branch nothing could resolve is refused", TestABaseBranchIsCheckedWhenItIsSet),
-    ("A command the editor would split is reported", TestACommandWithALineBreakIsReported)
+    ("A command the editor would split is reported", TestACommandWithALineBreakIsReported),
+    ("A narrow panel keeps its words and its way out", TestANarrowPanelKeepsItsWordsAndItsWayOut)
 };
 
 var failures = new List<string>();
@@ -5804,6 +5805,35 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestANarrowPanelKeepsItsWordsAndItsWayOut()
+{
+    // 60 by 20 is the narrowest window the dashboard agrees to draw, so everything it draws there
+    // is something a supported terminal shows. Two things were being dropped silently at that end
+    // of the range, both of them the kind a reader cannot recover from: an explanation that stops
+    // mid-thought, and a footer with no way out on it.
+
+    var narrow = Scenes.Render("agents", 60, 24, colour: false);
+
+    // The intro was capped at two rows, which is enough at 100 columns and not at 60.
+    // Checked as the fragment it ends on rather than the whole sentence: it wraps at this width,
+    // and the row it lands on is the row the old two-row cap threw away.
+    True(narrow.Contains("enabled agents are offered.", StringComparison.Ordinal),
+        "The sentence explaining why a configured agent is missing from a task survives at 60 columns");
+
+    // The footer writes its hints most-used first and the way out last, so running out of room
+    // dropped Esc - in the panel where a reader is least sure how to leave.
+    True(narrow.Contains("Esc", StringComparison.Ordinal),
+        "and the panel still says how to close itself");
+
+    // Nothing was gained by dropping hints at a width where they all fit.
+    var wide = Scenes.Render("agents", 120, 40, colour: false);
+    True(wide.Contains("F1 full detail", StringComparison.Ordinal) &&
+         wide.Contains("Esc", StringComparison.Ordinal),
+        "and a wide panel still shows every hint it has");
+
+    return Task.CompletedTask;
+}
+
 static Task TestACommandWithALineBreakIsReported()
 {
     // The settings screen reads verification commands as one per line, so a stored command holding
