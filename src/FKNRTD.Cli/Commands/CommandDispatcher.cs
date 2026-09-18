@@ -817,10 +817,18 @@ internal static class CommandDispatcher
             return 0;
         }
 
-        Console.WriteLine("ID                           STATUS         STAGE          AGENTS                 TITLE");
+        // Header and row from the same widths. The header was a hand-written string of spaces and
+        // the row padded the implementer alone rather than the pair, so "claude>codex" occupied a
+        // column whose width depended on how long the lead's name was: TITLE was advertised at one
+        // column and printed at another, and any two tasks with differently named leads did not
+        // line up with each other either.
+        Console.WriteLine(
+            $"{Pad("ID", 28)} {Pad("STATUS", 14)} {Pad("STAGE", 14)} {Pad("LEAD>IMPLEMENTER", 22)} TITLE");
         foreach (var task in tasks)
         {
-            Console.WriteLine($"{task.Id,-28} {task.Status,-14} {task.CurrentStage,-14} {task.LeadAgentId}>{task.ImplementerAgentId,-14} {TaskText.Title(task)}");
+            Console.WriteLine(
+                $"{Pad(task.Id, 28)} {Pad(task.Status.ToString(), 14)} {Pad(task.CurrentStage.ToString(), 14)} " +
+                $"{Pad(task.LeadAgentId + ">" + task.ImplementerAgentId, 22)} {TaskText.Title(task)}");
         }
 
         return 0;

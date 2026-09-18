@@ -318,7 +318,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A standalone pipeline promises no branch", TestAStandalonePipelinePromisesNoBranch),
     ("The checks panel names only checks that exist", TestTheChecksPanelNamesOnlyChecksThatExist),
     ("An event reads as a time, not a round-trip string", TestAnEventReadsAsATimeAsync),
-    ("Reservations are listed as a table", TestReservationsAreListedAsATableAsync)
+    ("Reservations are listed as a table", TestReservationsAreListedAsATableAsync),
+    ("Task list columns start where the header says", TestTaskListColumnsLineUpAsync)
 };
 
 var failures = new List<string>();
@@ -5831,6 +5832,55 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestTaskListColumnsLineUpAsync()
+{
+    // The header was a hand-written run of spaces and the row padded the implementer alone rather
+    // than the pair, so the agents column was as wide as the lead's name happened to make it.
+    // TITLE was advertised at one column and printed at another, and two tasks whose leads were
+    // named differently did not line up with each other.
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "A workspace to hold the tasks");
+
+        // Two tasks whose leads are named differently, which is what made the column move.
+        Equal(0, await QuietlyAsync(
+                ["task", "create", "Short lead", "-root", root, "-brief", "b",
+                 "-lead", "codex", "-implementer", "claude"]).ConfigureAwait(false),
+            "One task led by the shorter name");
+        Equal(0, await QuietlyAsync(
+                ["task", "create", "Long lead", "-root", root, "-brief", "b",
+                 "-lead", "claude", "-implementer", "codex"]).ConfigureAwait(false),
+            "and one led by the longer");
+
+        var lines = (await CapturedAsync(["task", "list", "-root", root, "-no-color"]).ConfigureAwait(false))
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => line.Length > 0)
+            .ToArray();
+
+        True(lines.Length >= 3, "A header and both tasks");
+        var titleColumn = lines[0].IndexOf("TITLE", StringComparison.Ordinal);
+        True(titleColumn > 0, "The header names a title column");
+
+        foreach (var row in lines.Skip(1))
+        {
+            True(Text.DisplayWidth(row) > titleColumn, $"'{row}' reaches the title column");
+            True(row[titleColumn - 1] == ' ',
+                "and the cell before it ends before the column, rather than running into it");
+            True(row.Substring(titleColumn).StartsWith("Short lead", StringComparison.Ordinal) ||
+                 row.Substring(titleColumn).StartsWith("Long lead", StringComparison.Ordinal),
+                "and the title starts exactly where the header says it does");
+        }
+
+        // The column shows the lead and the implementer, and now says so rather than claiming to
+        // be every agent on the task: the auditor is not in it.
+        True(lines[0].Contains("LEAD>IMPLEMENTER", StringComparison.Ordinal),
+            "The column is headed with what it actually holds");
+    }).ConfigureAwait(false);
+}
+
 static async Task TestReservationsAreListedAsATableAsync()
 {
     // The reservation listing ran the id, the agent, the mode, the paths and a round-trip
