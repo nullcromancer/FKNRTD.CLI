@@ -1064,12 +1064,24 @@ internal static class CommandDispatcher
         string id,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine($"► Running {id}");
+        // Loaded before the announcement, not after it. Running a task that does not exist printed
+        // "► Running FKN-does-not-exist" and then the refusal, so the first thing a reader saw was
+        // the product claiming to do something it was about to say it could not. The title comes
+        // free with the check, and an identifier alone is not something anybody recognises.
+        var named = await runtime.Store.LoadTaskAsync(id, cancellationToken).ConfigureAwait(false);
+        Console.WriteLine($"► Running {named.Id}: {TaskText.Title(named)}");
         var task = await runtime.Orchestrator.RunAsync(id, cancellationToken).ConfigureAwait(false);
         Console.WriteLine($"{(task.Status == WorkflowStatus.ReadyToLand ? "√" : "×")} {task.Id}: {task.Status}");
         if (task.Status == WorkflowStatus.ReadyToLand)
         {
-            Console.WriteLine($"  Verified and audited. Land with: fknrtd task land {task.Id} -confirm LAND");
+            // "Verified and audited" is not true of a task with no verification commands, which
+            // skips the verify stage entirely and reaches this point on the auditor's word alone.
+            // The dashboard was corrected for this; the shell said it too.
+            Console.WriteLine(
+                (task.Quality.Tests == StageState.Skipped
+                    ? "  Audited, with no verification commands to run."
+                    : "  Verified and audited.") +
+                $" Land with: fknrtd task land {task.Id} -confirm LAND");
             return 0;
         }
 

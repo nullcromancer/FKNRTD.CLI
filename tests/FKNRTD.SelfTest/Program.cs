@@ -321,7 +321,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Reservations are listed as a table", TestReservationsAreListedAsATableAsync),
     ("Task list columns start where the header says", TestTaskListColumnsLineUpAsync),
     ("Prose wraps to the window it assumes", TestProseWrapsToTheWindowAsync),
-    ("A budget cannot be recorded against a typo", TestABudgetCannotBeRecordedAgainstATypoAsync)
+    ("A budget cannot be recorded against a typo", TestABudgetCannotBeRecordedAgainstATypoAsync),
+    ("Nothing announces a run it cannot start", TestNothingAnnouncesARunItCannotStartAsync)
 };
 
 var failures = new List<string>();
@@ -5834,6 +5835,62 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestNothingAnnouncesARunItCannotStartAsync()
+{
+    // Running a task that does not exist printed "► Running FKN-does-not-exist" and then the
+    // refusal, so the first thing a reader saw was the product claiming to do something it was
+    // about to say it could not do.
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "A workspace to run nothing in");
+
+        // The writer lives outside the try, because what the command printed before it threw is
+        // exactly what this test is about and a buffer declared inside would be read too late.
+        using var missing = new StringWriter();
+        try
+        {
+            await QuietlyAsync(["task", "run", "FKN-does-not-exist", "-root", root], missing)
+                .ConfigureAwait(false);
+            throw new InvalidDataException("A task that does not exist was run rather than refused.");
+        }
+        catch (FileNotFoundException)
+        {
+            // Expected: the refusal that names the missing task.
+        }
+
+        var announced = missing.ToString();
+        True(!announced.Contains("Running", StringComparison.Ordinal),
+            "Nothing announces a run before it knows there is a task to run");
+
+        // A task that does exist is announced, and by its title: an identifier on its own is not
+        // something anybody recognises.
+        Equal(0, await QuietlyAsync(["task", "create", "Nameable work", "-root", root, "-brief", "b"])
+            .ConfigureAwait(false), "A task to name");
+
+        var listed = await CapturedAsync(["task", "list", "-root", root, "-no-color"]).ConfigureAwait(false);
+        var id = listed.Split('\n')
+            .Select(line => line.TrimEnd('\r').Split(' ')[0])
+            .First(first => first.StartsWith("FKN-", StringComparison.Ordinal));
+
+        using var real = new StringWriter();
+        try
+        {
+            await QuietlyAsync(["task", "run", id, "-root", root], real).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not InvalidDataException)
+        {
+            // The shipped agents are not installed here, so the run itself fails. The announcement
+            // has already been made by then, which is the whole point of this check.
+        }
+
+        var started = real.ToString();
+        True(started.Contains("Nameable work", StringComparison.Ordinal),
+            "A run that does start says which task by name");
+    }).ConfigureAwait(false);
+}
+
 static async Task TestABudgetCannotBeRecordedAgainstATypoAsync()
 {
     // `fknrtd usage set claud -five-hour 20` succeeded, exited 0, wrote a budget against an agent
