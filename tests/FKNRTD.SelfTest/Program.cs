@@ -302,7 +302,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A too-small window says so", TestATooSmallWindowSaysSoAsync),
     ("Doctor does not tick what is not there", TestDoctorDoesNotTickWhatIsNotThereAsync),
     ("An agent can be repointed from the command line", TestAnAgentCanBeRepointedFromTheCommandLineAsync),
-    ("Doctor asks whether Git can commit", TestDoctorAsksWhetherGitCanCommitAsync)
+    ("Doctor asks whether Git can commit", TestDoctorAsksWhetherGitCanCommitAsync),
+    ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync)
 };
 
 var failures = new List<string>();
@@ -5796,6 +5797,65 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestANewFileIsInTheDiffAsync()
+{
+    if (ExecutableLocator.Find("git") is null)
+    {
+        throw new InvalidOperationException("Git is required for the new-file diff self-test.");
+    }
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var git = new GitService(new ProcessRunner());
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]).ConfigureAwait(false), "git init");
+        await File.WriteAllTextAsync(
+                Path.Combine(root, "existing.txt"),
+                "first" + "\n",
+                new UTF8Encoding(false))
+            .ConfigureAwait(false);
+        MustSucceed(await git.GitAsync(root, ["add", "-A"]).ConfigureAwait(false), "git add");
+        MustSucceed(await git.GitAsync(
+                root,
+                ["-c", "user.email=a@b.invalid", "-c", "user.name=n", "commit", "-m", "init"])
+            .ConfigureAwait(false), "git commit");
+
+        // What an implementer most often does: write a file that did not exist before. Git tracks
+        // neither the file nor its contents until something adds it, so both `git diff HEAD` and
+        // `git diff base...HEAD` are empty while the work sits in plain sight.
+        await File.WriteAllTextAsync(
+                Path.Combine(root, "feature.cs"),
+                "public sealed class Feature;" + "\n",
+                new UTF8Encoding(false))
+            .ConfigureAwait(false);
+
+        var pending = await git.GitAsync(root, ["diff", "--no-color", "HEAD"]).ConfigureAwait(false);
+        Equal(string.Empty, pending.StandardOutput.Trim(),
+            "Git itself still shows nothing, which is the whole reason this test exists");
+
+        var (lines, truncated) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
+        Equal(false, truncated, "One new file does not fill the line budget");
+        True(lines.Count > 0, "A task that added a file has not changed nothing");
+        True(lines.Any(line => line.Contains("new files, not yet added to Git (1)", StringComparison.Ordinal)),
+            "The new file is announced as new, not folded in with edits to tracked files");
+        True(lines.Any(line => line.Contains("feature.cs", StringComparison.Ordinal)),
+            "and named");
+        True(lines.Any(line => line.Contains("+public sealed class Feature;", StringComparison.Ordinal)),
+            "and its contents are there to read, which is what landing a change depends on");
+
+        // An edit to a tracked file still reads as an edit, beside the addition.
+        await File.WriteAllTextAsync(
+                Path.Combine(root, "existing.txt"),
+                "second" + "\n",
+                new UTF8Encoding(false))
+            .ConfigureAwait(false);
+        var (both, _) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
+        True(both.Any(line => line.Contains("-first", StringComparison.Ordinal)),
+            "The tracked edit is still shown");
+        True(both.Any(line => line.Contains("+public sealed class Feature;", StringComparison.Ordinal)),
+            "alongside the new file");
+    }).ConfigureAwait(false);
+}
+
 static async Task TestDoctorAsksWhetherGitCanCommitAsync()
 {
     if (ExecutableLocator.Find("git") is null)

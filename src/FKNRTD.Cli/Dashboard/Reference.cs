@@ -603,9 +603,10 @@ internal static class Reference
             if (lines.Count == 0)
             {
                 blocks.Add(new InfoParagraph(
-                    $"Nothing has changed against {Blank(task.BaseRef)}. Either the task has not " +
-                    "reached its implement stage yet, or the implementer finished without editing " +
-                    "anything — which is itself worth knowing before you land it.", Theme.Amber));
+                    $"Nothing has changed against {Blank(task.BaseRef)}, and nothing new has been " +
+                    "written into the worktree. Either the task has not reached its implement stage " +
+                    "yet, or the implementer finished without editing anything — which is itself " +
+                    "worth knowing before you land it.", Theme.Amber));
                 return blocks;
             }
 

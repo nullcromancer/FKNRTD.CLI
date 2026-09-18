@@ -219,9 +219,115 @@ public sealed class GitService
             }
         }
 
+        // A file the agent created is invisible to both diffs above: `git diff` compares against
+        // the index, and an untracked file is in neither. An implementer that adds a new source
+        // file - which is most of them - produced an empty diff, and the reader was told the task
+        // had changed nothing. Nothing here writes to the index to make them visible; --no-index
+        // against an empty path renders each one as the new file it is.
+        if (lines.Count <= maximumLines)
+        {
+            var untracked = await GetUntrackedPathsAsync(directory, cancellationToken).ConfigureAwait(false);
+            if (untracked.Count > 0)
+            {
+                if (lines.Count > 0)
+                {
+                    lines.Add(string.Empty);
+                }
+
+                lines.Add($"--- new files, not yet added to Git ({untracked.Count}) ---");
+
+                // Rendering every one costs a Git process per file, and an untracked directory
+                // that nothing has ignored yet can hold thousands. Past a point the contents stop
+                // being reviewable anyway, so the rest are named rather than opened.
+                var rendered = 0;
+                foreach (var path in untracked)
+                {
+                    if (lines.Count > maximumLines)
+                    {
+                        break;
+                    }
+
+                    if (rendered >= MaximumRenderedNewFiles)
+                    {
+                        lines.Add("+++ b/" + path);
+                        continue;
+                    }
+
+                    rendered++;
+                    var added = await GitAsync(
+                            directory,
+                            ["diff", "--no-color", "--no-index", "--", NullDevice, path],
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // --no-index reports a difference by exiting 1, so Success is the wrong
+                    // question: an exit of 0 here means the file was identical to nothing.
+                    var body = SplitLines(added.StandardOutput);
+                    if (body.Count > 0)
+                    {
+                        lines.AddRange(body);
+                    }
+                    else
+                    {
+                        // Unreadable, or a path Git will not render. Naming it is still better
+                        // than dropping it: the reader learns the file exists.
+                        lines.Add("+++ b/" + path);
+                        lines.Add("(new file; Git could not render its contents)");
+                    }
+                }
+            }
+        }
+
         return lines.Count > maximumLines
             ? (lines.Take(maximumLines).ToArray(), true)
             : (lines, false);
+    }
+
+    /// <summary>
+    /// Paths Git is not tracking at all, which is what makes them absent from every diff.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetUntrackedPathsAsync(
+        string directory,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await GitAsync(
+                directory,
+                ["status", "--porcelain=v1", "-z", "-uall"],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.Success)
+        {
+            return [];
+        }
+
+        return ParseUntrackedPaths(result.StandardOutput);
+    }
+
+    /// <summary>
+    /// How many new files are rendered with their contents before the rest are only named.
+    /// </summary>
+    private const int MaximumRenderedNewFiles = 50;
+
+    /// <summary>
+    /// The empty side of an added-file diff. Git reads /dev/null as "nothing" on Windows too, and
+    /// NUL is not a path Git accepts here.
+    /// </summary>
+    private const string NullDevice = "/dev/null";
+
+    private static IReadOnlyList<string> ParseUntrackedPaths(string output)
+    {
+        var paths = new List<string>();
+        foreach (var record in ParseNullTerminated(output))
+        {
+            // "?? path". Untracked is the only status with a question mark in either column, and
+            // it never has the second record a rename carries.
+            if (record.Length > 3 && record[0] == '?' && record[1] == '?')
+            {
+                paths.Add(record[3..]);
+            }
+        }
+
+        return paths;
     }
 
     private static List<string> SplitLines(string output) =>
