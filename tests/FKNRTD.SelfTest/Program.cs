@@ -319,7 +319,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The checks panel names only checks that exist", TestTheChecksPanelNamesOnlyChecksThatExist),
     ("An event reads as a time, not a round-trip string", TestAnEventReadsAsATimeAsync),
     ("Reservations are listed as a table", TestReservationsAreListedAsATableAsync),
-    ("Task list columns start where the header says", TestTaskListColumnsLineUpAsync)
+    ("Task list columns start where the header says", TestTaskListColumnsLineUpAsync),
+    ("Prose wraps to the window it assumes", TestProseWrapsToTheWindowAsync)
 };
 
 var failures = new List<string>();
@@ -5832,6 +5833,42 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestProseWrapsToTheWindowAsync()
+{
+    // Redirected output is rendered for an 88-column window, and every paragraph this product
+    // prints wraps to it - except one, which went out as a single 162-column line because it was
+    // written with Console.WriteLine instead of the paragraph writer beside it.
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "A standalone workspace, which is the one with no diff to show");
+        Equal(0, await QuietlyAsync(["task", "create", "Nothing to diff", "-root", root, "-brief", "b"])
+            .ConfigureAwait(false), "and a task in it");
+
+        var listed = await CapturedAsync(["task", "list", "-root", root, "-no-color"]).ConfigureAwait(false);
+        var id = listed.Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Select(line => line.Split(' ')[0])
+            .FirstOrDefault(first => first.StartsWith("FKN-", StringComparison.Ordinal));
+        True(id is not null, "The task can be found by id");
+
+        var text = await CapturedAsync(["task", "diff", "-root", root, id!, "-no-color"]).ConfigureAwait(false);
+        var lines = text.Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
+
+        True(lines.Any(line => line.Contains("standalone workspace", StringComparison.Ordinal)),
+            "A standalone workspace is told why there is no diff");
+        foreach (var line in lines)
+        {
+            True(Text.DisplayWidth(line) <= 100,
+                $"No line of the explanation runs past the window: \"{line}\"");
+        }
+
+        True(lines.Count(line => line.Length > 0) > 1,
+            "and the explanation is wrapped across lines rather than being one long one");
+    }).ConfigureAwait(false);
+}
+
 static async Task TestTaskListColumnsLineUpAsync()
 {
     // The header was a hand-written run of spaces and the row padded the implementer alone rather

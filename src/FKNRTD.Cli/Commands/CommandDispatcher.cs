@@ -1001,9 +1001,12 @@ internal static class CommandDispatcher
 
         if (config.Mode == WorkspaceMode.Standalone)
         {
-            Console.WriteLine(
+            // WriteParagraph, not WriteLine: this is prose, and every other paragraph this product
+            // prints wraps to the window. Printed raw it was one 162-column line.
+            WriteParagraph(
                 "This is a standalone workspace, so there is no branch to compare against. Agents " +
-                "edited the project folder directly; whatever changed is simply what is there now.");
+                "edited the project folder directly; whatever changed is simply what is there now.",
+                string.Empty);
             return 0;
         }
 
