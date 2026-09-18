@@ -5846,6 +5846,18 @@ static async Task TestNothingAnnouncesARunItCannotStartAsync()
         Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
             "A workspace to run nothing in");
 
+        // Every agent is pointed at a name nothing on any machine resolves, before anything here
+        // runs a task. The first version of this test did not, and `task run` launched the real
+        // Codex on this machine - a live agent, with a live budget, against a one-hour timeout.
+        // No self-test may start a real agent: the suite's own workflow test supplies a fake one
+        // by re-executing this binary, and everything else points executables at nothing.
+        foreach (var agentId in new[] { "claude", "codex" })
+        {
+            Equal(0, await QuietlyAsync(
+                    ["agent", "set", agentId, "-root", root, "-exe", "fknrtd-no-such-agent-" + agentId])
+                .ConfigureAwait(false), $"{agentId} is pointed at nothing before any task runs");
+        }
+
         // The writer lives outside the try, because what the command printed before it threw is
         // exactly what this test is about and a buffer declared inside would be read too late.
         using var missing = new StringWriter();
@@ -5865,7 +5877,8 @@ static async Task TestNothingAnnouncesARunItCannotStartAsync()
             "Nothing announces a run before it knows there is a task to run");
 
         // A task that does exist is announced, and by its title: an identifier on its own is not
-        // something anybody recognises.
+        // something anybody recognises. The run itself fails at once, because no agent it names
+        // can be started.
         Equal(0, await QuietlyAsync(["task", "create", "Nameable work", "-root", root, "-brief", "b"])
             .ConfigureAwait(false), "A task to name");
 
@@ -5881,8 +5894,8 @@ static async Task TestNothingAnnouncesARunItCannotStartAsync()
         }
         catch (Exception exception) when (exception is not InvalidDataException)
         {
-            // The shipped agents are not installed here, so the run itself fails. The announcement
-            // has already been made by then, which is the whole point of this check.
+            // The agents cannot be started, so the run fails. The announcement has already been
+            // made by then, which is the whole point of this check.
         }
 
         var started = real.ToString();
