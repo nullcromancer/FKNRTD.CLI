@@ -118,8 +118,7 @@ internal static class ExplainCommand
             Console.WriteLine();
             foreach (var entry in Glossary.InCategory(category))
             {
-                Write($"  {entry.Term,-22}", Theme.Cyan, useColor);
-                Console.WriteLine(Text.Truncate(entry.Summary, Math.Max(20, width - 24)));
+                NamedRow.Write(entry.Term, entry.Summary, 22, width, Theme.Cyan, useColor, Write);
             }
         }
 
@@ -130,8 +129,7 @@ internal static class ExplainCommand
         Console.WriteLine();
         foreach (var setting in SettingsCatalog.All)
         {
-            Write($"  {setting.Key,-38}", Theme.Cyan, useColor);
-            Console.WriteLine(Text.Truncate(setting.Summary, Math.Max(20, width - 40)));
+            NamedRow.Write(setting.Key, setting.Summary, 38, width, Theme.Cyan, useColor, Write);
         }
 
         return 0;

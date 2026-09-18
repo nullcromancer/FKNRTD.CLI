@@ -103,22 +103,7 @@ internal static class HelpCommand
             Console.WriteLine();
             foreach (var entry in CommandCatalog.InGroup(group))
             {
-                // A name wider than the column takes the row to itself, and its summary follows
-                // on the next line indented to where every other summary starts. Padding to a
-                // fixed width does nothing when the name is already wider than it, so
-                // "integration install-claude-statusline" ran straight into its own description -
-                // on the first page anybody reads.
-                var summary = Text.Truncate(entry.Summary, Math.Max(20, width - NameColumn - 2));
-                if (Text.DisplayWidth(entry.Name) >= NameColumn)
-                {
-                    Write($"  {entry.Name}", Theme.Cyan, useColor);
-                    Console.WriteLine();
-                    Console.WriteLine(new string(' ', NameColumn + 2) + summary);
-                    continue;
-                }
-
-                Write("  " + entry.Name + new string(' ', NameColumn - Text.DisplayWidth(entry.Name)), Theme.Cyan, useColor);
-                Console.WriteLine(summary);
+                NamedRow.Write(entry.Name, entry.Summary, NameColumn, width, Theme.Cyan, useColor, Write);
             }
         }
 
@@ -227,8 +212,9 @@ internal static class HelpCommand
             Console.WriteLine();
             foreach (var term in terms)
             {
-                Write($"  {term.Term,-20}", Theme.Cyan, useColor);
-                Console.WriteLine(Text.Truncate(term.Summary, Math.Max(20, width - 22)));
+                // 20 is exactly the length of the longest terms there are, which is how a fixed
+                // column fails: it works until the day somebody adds a word one character longer.
+                NamedRow.Write(term.Term, term.Summary, 20, width, Theme.Cyan, useColor, Write);
             }
 
             Console.WriteLine();

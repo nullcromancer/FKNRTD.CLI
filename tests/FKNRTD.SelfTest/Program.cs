@@ -2873,6 +2873,25 @@ static Stream Streamed(string text) => new MemoryStream(new UTF8Encoding(false).
 
 static ConsoleKeyInfo Key(ConsoleKey key) => new((char)0, key, false, false, false);
 
+/// <summary>Runs a command and returns everything it printed.</summary>
+static async Task<string> CapturedAsync(string[] arguments)
+{
+    var originalOutput = Console.Out;
+    using var output = new StringWriter();
+    try
+    {
+        Console.SetOut(output);
+        await CommandDispatcher.ExecuteAsync(new CliArguments(arguments), CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+    finally
+    {
+        Console.SetOut(originalOutput);
+    }
+
+    return output.ToString();
+}
+
 static Task TestAgentManagerAsync()
 {
     var snapshot = Scenes.PopulatedSnapshot();
@@ -6011,6 +6030,35 @@ static async Task TestEveryCommandOnTheHelpPageIsReadableAsync()
         var rest = row.Substring(2 + entry.Name.Length);
         True(rest.Length == 0 || rest[0] == ' ',
             $"'{entry.Name}' is separated from its summary rather than run into it");
+    }
+
+    // The same shape is printed by every other reference listing, and each one used to do its own
+    // padding to its own fixed width. They share one row now, so this asks the same question of
+    // all of them: a glossary term is 20 characters at its longest and was printed in a column of
+    // exactly 20.
+    var listing = await CapturedAsync(["explain", "-no-color"]).ConfigureAwait(false);
+    var listingLines = listing.Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
+
+    // Matched longest-first, because one name can be the start of another: "agents" is a term
+    // and so is "agentstate.reviewing", and asking about the shorter one against the longer one's
+    // row would be asking the wrong question.
+    var names = Glossary.All.Select(entry => entry.Term)
+        .Concat(SettingsCatalog.All.Select(setting => setting.Key))
+        .OrderByDescending(name => name.Length)
+        .ToArray();
+
+    foreach (var row in listingLines.Where(line => line.StartsWith("  ", StringComparison.Ordinal)))
+    {
+        var name = names.FirstOrDefault(candidate =>
+            row.StartsWith("  " + candidate, StringComparison.Ordinal));
+        if (name is null)
+        {
+            continue;
+        }
+
+        var tail = row.Substring(2 + name.Length);
+        True(tail.Length == 0 || tail[0] == ' ',
+            $"'{name}' is separated from what it means rather than run into it");
     }
 
     // And the summary of the long one is still on the page, under its name.
