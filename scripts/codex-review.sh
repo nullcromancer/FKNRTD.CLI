@@ -18,6 +18,12 @@
 # question worth asking. Running the queue is the probe: it fails safely, leaves every entry
 # queued, and prints when to try again.
 #
+# This is the second round. The first eight reviews were dispatched on 2026-09-17 and their
+# answers are still in docs/collab/reviews/ under their own names; what came of them is in
+# docs/collab/LOG.md. This round asks about the code that changed as a result, which is where a
+# new defect would be - every fault the first round found was in the gap between a surface and the
+# service behind it, and this round was written by the seat that closed those gaps.
+#
 # Output lands in docs/collab/reviews/. Nothing here writes to the repository except that
 # directory: every dispatch is --sandbox read-only, which is the only shape that has ever worked.
 
@@ -28,14 +34,12 @@ OUT="$ROOT/docs/collab/reviews"
 
 # name|file to read|what to check it against|the one question
 QUEUE=$(cat <<'ENTRIES'
-reference|src/FKNRTD.Cli/Dashboard/Reference.cs|src/FKNRTD.Core/Services/|Report ONLY statements about what this product does that the services do not do.
-dashboard|src/FKNRTD.Cli/Dashboard/DashboardApp.cs|src/FKNRTD.Core/Services/|Report ONLY statements about what this product does that the services do not do.
-roster|src/FKNRTD.Cli/Dashboard/AgentManager.cs|src/FKNRTD.Core/Domain/Configuration.cs|Report ONLY defects: an index that can go out of range, a panel that can draw outside its rectangle or clip its own text, a key that does nothing or the wrong thing, or code that contradicts its own comment.
-settings|src/FKNRTD.Cli/Dashboard/SettingsBrowser.cs|src/FKNRTD.Core/Domain/Configuration.cs|Report ONLY defects: a value written back that could be invalid or lose data, a panel that can clip its own text, or code that contradicts its own comment.
-infopanel|src/FKNRTD.Cli/Dashboard/InfoPanel.cs|src/FKNRTD.Cli/Dashboard/Canvas.cs|Report ONLY defects: an index or size that can go out of range, or content drawn outside the panel's rectangle.
-options|src/FKNRTD.Cli/Commands/CliArguments.cs|src/FKNRTD.Cli/Help/CommandCatalog.cs|Report ONLY command lines that this parser would read differently from how the catalog documents them, or option spellings a user could reasonably write that it would mis-parse.
-wizard|src/FKNRTD.Cli/Dashboard/Wizard.cs|src/FKNRTD.Cli/Dashboard/TaskWizard.cs|Report ONLY defects: an index that can go out of range, a step that can be skipped or repeated wrongly, an answer that can be lost, or code that contradicts its own comment.
-logformat|src/FKNRTD.Cli/Dashboard/LogLine.cs|src/FKNRTD.Core/Services/AgentOutputObserver.cs|Report ONLY input that would make this throw, return something misleading, or lose the agent's message.
+identity|src/FKNRTD.Core/Services/DoctorService.cs|src/FKNRTD.Core/Services/Orchestrator.cs|Report ONLY prerequisites the orchestrator enforces during a run that doctor does not check, or checks differently.
+newfiles|src/FKNRTD.Core/Services/GitService.cs|src/FKNRTD.Core/Services/Orchestrator.cs|Report ONLY ways GetDiffAsync could miss a change a task made, report one that is not there, or write to the repository it is reading.
+logread|src/FKNRTD.Cli/Dashboard/LogLine.cs|src/FKNRTD.Core/Services/AgentOutputObserver.cs|Report ONLY input that would make this throw, return something misleading, or lose the agent's message.
+parser|src/FKNRTD.Cli/Commands/CliArguments.cs|src/FKNRTD.Cli/Help/CommandCatalog.cs|Report ONLY command lines that this parser would read differently from how the catalog documents them, or option spellings a user could reasonably write that it would mis-parse.
+window|src/FKNRTD.Cli/Dashboard/AgentManager.cs|src/FKNRTD.Cli/Dashboard/Canvas.cs|Report ONLY defects: an index that can go out of range, a panel that can draw outside its rectangle or clip its own text, a key that does nothing or the wrong thing, or code that contradicts its own comment.
+wizardempty|src/FKNRTD.Cli/Dashboard/Wizard.cs|src/FKNRTD.Cli/Dashboard/TaskWizard.cs|Report ONLY defects: an answer that can be lost or replaced by one the user did not give, a step that can be skipped or repeated wrongly, or code that contradicts its own comment.
 ENTRIES
 )
 
