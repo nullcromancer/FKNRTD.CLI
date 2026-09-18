@@ -11,6 +11,12 @@ namespace FKNRTD.Commands;
 /// </summary>
 internal static class HelpCommand
 {
+    /// <summary>
+    /// How wide the command column is on the quick reference. Named rather than repeated so the
+    /// row and the summary that follows it cannot disagree about where the second column starts.
+    /// </summary>
+    private const int NameColumn = 26;
+
     public static int Execute(CliArguments arguments, bool useColor)
     {
         var width = Math.Clamp(Screen.Width(88) - 2, 40, 96);
@@ -97,8 +103,22 @@ internal static class HelpCommand
             Console.WriteLine();
             foreach (var entry in CommandCatalog.InGroup(group))
             {
-                Write($"  {entry.Name,-26}", Theme.Cyan, useColor);
-                Console.WriteLine(Text.Truncate(entry.Summary, Math.Max(20, width - 28)));
+                // A name wider than the column takes the row to itself, and its summary follows
+                // on the next line indented to where every other summary starts. Padding to a
+                // fixed width does nothing when the name is already wider than it, so
+                // "integration install-claude-statusline" ran straight into its own description -
+                // on the first page anybody reads.
+                var summary = Text.Truncate(entry.Summary, Math.Max(20, width - NameColumn - 2));
+                if (Text.DisplayWidth(entry.Name) >= NameColumn)
+                {
+                    Write($"  {entry.Name}", Theme.Cyan, useColor);
+                    Console.WriteLine();
+                    Console.WriteLine(new string(' ', NameColumn + 2) + summary);
+                    continue;
+                }
+
+                Write("  " + entry.Name + new string(' ', NameColumn - Text.DisplayWidth(entry.Name)), Theme.Cyan, useColor);
+                Console.WriteLine(summary);
             }
         }
 

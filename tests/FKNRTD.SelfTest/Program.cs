@@ -311,7 +311,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Clearing a question means the empty answer", TestClearingAQuestionMeansEmpty),
     ("A base branch nothing could resolve is refused", TestABaseBranchIsCheckedWhenItIsSet),
     ("A command the editor would split is reported", TestACommandWithALineBreakIsReported),
-    ("A narrow panel keeps its words and its way out", TestANarrowPanelKeepsItsWordsAndItsWayOut)
+    ("A narrow panel keeps its words and its way out", TestANarrowPanelKeepsItsWordsAndItsWayOut),
+    ("Every command on the help page is readable", TestEveryCommandOnTheHelpPageIsReadableAsync)
 };
 
 var failures = new List<string>();
@@ -5805,6 +5806,59 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestEveryCommandOnTheHelpPageIsReadableAsync()
+{
+    // `fknrtd help` is the first page anybody reads, and its command column was a fixed width that
+    // one command was wider than: "integration install-claude-statusline" ran straight into its
+    // own description with no space between them. Padding does nothing to a name already wider
+    // than the column it is being padded to.
+
+    var originalOutput = Console.Out;
+    using var output = new StringWriter();
+    try
+    {
+        Console.SetOut(output);
+        var exitCode = await CommandDispatcher.ExecuteAsync(
+                new CliArguments(["help", "-no-color"]),
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        Equal(0, exitCode, "help exits 0");
+    }
+    finally
+    {
+        Console.SetOut(originalOutput);
+    }
+
+    var text = output.ToString();
+    var lines = text.Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
+
+    // Asked of every command rather than of the one that was found broken: a name is added to the
+    // catalog by writing a row, and nothing about that row says how wide the column is.
+    foreach (var entry in CommandCatalog.All)
+    {
+        var row = lines.FirstOrDefault(line =>
+            line.StartsWith("  " + entry.Name, StringComparison.Ordinal));
+        if (row is null)
+        {
+            continue;
+        }
+
+        var rest = row.Substring(2 + entry.Name.Length);
+        True(rest.Length == 0 || rest[0] == ' ',
+            $"'{entry.Name}' is separated from its summary rather than run into it");
+    }
+
+    // And the summary of the long one is still on the page, under its name.
+    var index = Array.FindIndex(lines, line =>
+        line.StartsWith("  integration install-claude-statusline", StringComparison.Ordinal));
+    True(index >= 0, "The longest command name is listed");
+    True(index + 1 < lines.Length &&
+         lines[index + 1].Contains("statusline to workspace usage", StringComparison.Ordinal),
+        "and its description follows on the next line rather than being lost or jammed against it");
+    True(lines[index + 1].StartsWith("                            ", StringComparison.Ordinal),
+        "indented to where every other summary on the page starts");
+}
+
 static Task TestANarrowPanelKeepsItsWordsAndItsWayOut()
 {
     // 60 by 20 is the narrowest window the dashboard agrees to draw, so everything it draws there
