@@ -308,7 +308,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A failed agent line is not drawn as a finished one", TestAFailureIsNotDrawnAsSuccess),
     ("A flag does not swallow the word after it", TestAFlagDoesNotSwallowTheNextWord),
     ("A retried task is not called one that never ran", TestTheDashboardSaysWhatActuallyHappened),
-    ("Clearing a question means the empty answer", TestClearingAQuestionMeansEmpty)
+    ("Clearing a question means the empty answer", TestClearingAQuestionMeansEmpty),
+    ("A base branch nothing could resolve is refused", TestABaseBranchIsCheckedWhenItIsSet)
 };
 
 var failures = new List<string>();
@@ -5802,6 +5803,40 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestABaseBranchIsCheckedWhenItIsSet()
+{
+    // The settings catalog says of this field that "a name that does not resolve fails the task at
+    // creation rather than silently picking another". Nothing checked it, so a name Git could
+    // never accept was written to the config file and every Git-mode task created afterwards
+    // failed one at a time, each blaming the task rather than the setting that broke them all.
+
+    True(SettingsBrowser.BranchNameProblem("bad ref") is not null, "A space is not a branch name");
+    True(SettingsBrowser.BranchNameProblem("feature/thing~1") is not null, "Nor is a reserved character");
+    True(SettingsBrowser.BranchNameProblem("a..b") is not null, "Nor is range syntax");
+    True(SettingsBrowser.BranchNameProblem("main.lock") is not null, "Nor is a lock file's name");
+    True(SettingsBrowser.BranchNameProblem("/main") is not null, "Nor a leading slash");
+
+    // The refusal says why it matters and where, rather than only that it was refused.
+    var problem = SettingsBrowser.BranchNameProblem("bad ref");
+    True(problem!.Contains("fail", StringComparison.OrdinalIgnoreCase),
+        "and the reason names the consequence the reader would otherwise meet one task at a time");
+
+    Equal(null, SettingsBrowser.BranchNameProblem("main"), "An ordinary branch name is accepted");
+    Equal(null, SettingsBrowser.BranchNameProblem("feature/standalone-workspaces"), "So is a path-like one");
+    Equal(null, SettingsBrowser.BranchNameProblem("release-1.0"), "So is one with a dot inside it");
+
+    // Empty is valid: a standalone workspace has no branch to start from, which is what the
+    // field's own catalog entry says.
+    Equal(null, SettingsBrowser.BranchNameProblem(string.Empty), "Empty is how a standalone workspace leaves it");
+
+    // And the whole point of putting it in the shared table: config validate reads the same rule.
+    var broken = Scenes.SampleConfig() with { DefaultBaseRef = "bad ref" };
+    True(SettingsBrowser.Problems(broken).Count > 0,
+        "config validate and doctor refuse the same value the editor refuses");
+
+    return Task.CompletedTask;
+}
+
 static Task TestClearingAQuestionMeansEmpty()
 {
     // The verification question tells the reader "leave empty to skip verification entirely". The

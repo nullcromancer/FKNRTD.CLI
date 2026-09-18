@@ -32,6 +32,60 @@ internal sealed record EditableSetting(
 internal sealed class SettingsBrowser : IOverlay
 {
     /// <summary>
+    /// Why Git could never accept this as a branch name, or null when it could.
+    /// </summary>
+    /// <remarks>
+    /// Whether the branch <em>exists</em> is deliberately not asked here: the answer changes, and
+    /// the settings catalog already says that "a name that does not resolve fails the task at
+    /// creation rather than silently picking another". What this rejects is a string no repository
+    /// could ever have - a name with a space in it was accepted and written to the config file,
+    /// and every Git-mode task created afterwards failed at creation, one at a time, each blaming
+    /// the task rather than the setting that broke them all.
+    /// <para>
+    /// Empty is allowed. A standalone workspace has no branch to start from, which is why the
+    /// field's own entry says it is empty there.
+    /// </para>
+    /// </remarks>
+    internal static string? BranchNameProblem(string value)
+    {
+        var name = value.Trim();
+        if (name.Length == 0)
+        {
+            return null;
+        }
+
+        foreach (var character in name)
+        {
+            if (char.IsWhiteSpace(character) || char.IsControl(character))
+            {
+                return "A branch name cannot contain spaces or control characters. Git would " +
+                       "refuse it, so every task starting from it would fail at creation.";
+            }
+
+            if (character is '~' or '^' or ':' or '?' or '*' or '[' or '\\')
+            {
+                return $"A branch name cannot contain '{character}'. Git reserves it, so every " +
+                       "task starting from this branch would fail at creation.";
+            }
+        }
+
+        if (name.Contains("..", StringComparison.Ordinal) ||
+            name.Contains("@{", StringComparison.Ordinal))
+        {
+            return "A branch name cannot contain '..' or '@{'. Git reads both as range syntax.";
+        }
+
+        if (name.StartsWith('/') || name.EndsWith('/') ||
+            name.StartsWith('.') || name.EndsWith('.') ||
+            name.EndsWith(".lock", StringComparison.OrdinalIgnoreCase))
+        {
+            return "A branch name cannot begin or end with '/' or '.', or end with '.lock'.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The fields this screen can change. Anything in <see cref="SettingsCatalog"/> and not here is
     /// shown with the reason it is not editable, rather than silently omitted — a setting missing
     /// from the list reads as a setting that does not exist.
@@ -47,7 +101,7 @@ internal sealed class SettingsBrowser : IOverlay
         new("defaultBaseRef", WizardInput.Text,
             config => config.DefaultBaseRef,
             (config, value) => config with { DefaultBaseRef = value.Trim() },
-            null,
+            BranchNameProblem,
             "main"),
 
         new("defaultVerificationCommands", WizardInput.Commands,
