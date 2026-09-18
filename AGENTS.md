@@ -37,6 +37,14 @@ The self-test must print `N/N self-tests passed` and exit 0. Add a self-test for
 behavior change; `tests/FKNRTD.SelfTest/Program.cs` is a hand-rolled harness, not a
 framework — follow its existing `Check(...)` style.
 
+**No self-test may start a real agent.** A workspace created by `fknrtd init` is configured
+for Claude and Codex, and a developer's machine is likely to have both — so a test that runs a
+task will launch them for real, with a live budget and a one-hour timeout. One did: it spent
+ten minutes of real Codex time before it was killed. A test that needs a task to run either
+supplies a fake agent by re-executing the self-test binary, as `TestWorkflowAsync` does, or
+points every agent's executable at a name nothing resolves first. Never leave the shipped
+executables in place in a test that reaches the implement stage.
+
 **GitHub Actions results are not evidence.** Never gate on, wait for, or report CI status.
 
 ## Architecture rules
