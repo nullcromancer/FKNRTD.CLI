@@ -1066,6 +1066,12 @@ internal sealed class DashboardApp
         }
     }
 
+    /// <summary>
+    /// What a strip of hints shows in place of the ones it had no room for. One column, and the
+    /// same character the rest of the product truncates with.
+    /// </summary>
+    internal const string OmissionMarker = "…";
+
     private static void RenderFooter(
         Canvas canvas,
         Rect rect,
@@ -1089,12 +1095,14 @@ internal sealed class DashboardApp
             : Math.Max(rect.X, rect.Right - Span(Keymap.EssentialFooter));
 
         var x = rect.X;
+        var omitted = false;
         foreach (var (key, meaning) in Keymap.OptionalFooter)
         {
             var keyWidth = Text.DisplayWidth(key);
             var meaningWidth = Text.DisplayWidth(meaning);
             if (x + keyWidth + meaningWidth + 3 > essentialX)
             {
+                omitted = true;
                 break;
             }
 
@@ -1102,6 +1110,15 @@ internal sealed class DashboardApp
             x += keyWidth + 1;
             canvas.DrawText(x, rect.Y, meaning, Theme.Muted, maxWidth: meaningWidth);
             x += meaningWidth + 2;
+        }
+
+        // Dropping the middle is the right thing to do and leaving no sign of it is not: at 60
+        // columns the strip loses "V view the change" and "/ commands" - the second of which is
+        // how somebody finds every other key - and the reader sees only a gap. One character says
+        // there is more here than fits, which is what the palette behind it is for.
+        if (omitted && x < essentialX)
+        {
+            canvas.DrawText(x, rect.Y, OmissionMarker, Theme.Muted, maxWidth: 1);
         }
 
         var pinned = essentialX == rect.Right

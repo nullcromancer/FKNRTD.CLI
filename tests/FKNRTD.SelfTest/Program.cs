@@ -312,7 +312,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A base branch nothing could resolve is refused", TestABaseBranchIsCheckedWhenItIsSet),
     ("A command the editor would split is reported", TestACommandWithALineBreakIsReported),
     ("A narrow panel keeps its words and its way out", TestANarrowPanelKeepsItsWordsAndItsWayOut),
-    ("Every command on the help page is readable", TestEveryCommandOnTheHelpPageIsReadableAsync)
+    ("Every command on the help page is readable", TestEveryCommandOnTheHelpPageIsReadableAsync),
+    ("A narrow footer says it left keys out", TestANarrowFooterSaysItLeftKeysOut)
 };
 
 var failures = new List<string>();
@@ -5806,6 +5807,44 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestANarrowFooterSaysItLeftKeysOut()
+{
+    // The footer keeps help and quit pinned to the right and drops the middle when it runs out of
+    // room, which is the right thing to do: those two are what somebody needs at the moment they
+    // cannot find anything. What it did not do was say that anything had gone. At 60 columns the
+    // strip silently loses "/ commands" - the palette, which is how every other key is found -
+    // and the reader sees a gap where it used to be.
+
+    static string Footer(string frame) => FrameLines(frame)
+        .FirstOrDefault(line => line.Contains("? help", StringComparison.Ordinal)) ?? string.Empty;
+
+    var snapshot = Scenes.PopulatedSnapshot();
+
+    var wide = Footer(Scenes.RenderWith(snapshot, 120, 24));
+    True(wide.Contains("/ commands", StringComparison.Ordinal),
+        "A wide window shows the palette key");
+    True(!wide.Contains(DashboardApp.OmissionMarker, StringComparison.Ordinal),
+        "and claims nothing was left out, because nothing was");
+
+    foreach (var width in new[] { 60, 84 })
+    {
+        var footer = Footer(Scenes.RenderWith(snapshot, width, 24));
+        True(footer.Length > 0, $"The footer is drawn at {width} columns");
+        True(!footer.Contains("/ commands", StringComparison.Ordinal),
+            $"The palette key does not fit at {width} columns");
+        True(footer.Contains(DashboardApp.OmissionMarker, StringComparison.Ordinal),
+            $"so the footer says so at {width} columns rather than leaving a gap");
+
+        // The two that are pinned are pinned at every width. They are the way out and the way to
+        // everything else, and truncating from the end used to take exactly them.
+        True(footer.Contains("? help", StringComparison.Ordinal) &&
+             footer.Contains("Q quit", StringComparison.Ordinal),
+            $"and help and quit survive at {width} columns");
+    }
+
+    return Task.CompletedTask;
+}
+
 static async Task TestEveryCommandOnTheHelpPageIsReadableAsync()
 {
     // `fknrtd help` is the first page anybody reads, and its command column was a fixed width that

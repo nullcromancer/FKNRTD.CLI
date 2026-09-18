@@ -93,7 +93,7 @@ internal static class Overlays
 
         if (skipped && x + Ellipsis + reserved <= inner.Right)
         {
-            canvas.DrawText(x, y, "...", Theme.Muted, maxWidth: Ellipsis,
+            canvas.DrawText(x, y, DashboardApp.OmissionMarker, Theme.Muted, maxWidth: Ellipsis,
                 background: Theme.SurfaceSunken);
             x += Ellipsis + 1;
         }
@@ -109,7 +109,7 @@ internal static class Overlays
         Text.DisplayWidth(hint.Key) + Text.DisplayWidth(hint.Meaning) + 3;
 
     /// <summary>The columns the omission marker occupies.</summary>
-    private const int Ellipsis = 3;
+    private const int Ellipsis = 1;
 
     private static int Draw(Canvas canvas, int x, int y, (string Key, string Meaning) hint, Rgb accent)
     {
