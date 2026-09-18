@@ -273,13 +273,13 @@ internal sealed class Wizard : IOverlay
 
         if (key.Key == ConsoleKey.Enter)
         {
-            var answer = _field.Value.Trim();
-            if (answer.Length == 0)
-            {
-                answer = step.Default(_values);
-            }
-
-            return Advance(step, answer);
+            // The box arrives holding the step's default, so an empty one is somebody having
+            // cleared it on purpose. Putting the default back made that impossible: the
+            // verification step says "leave empty to skip verification entirely" and handed back
+            // the workspace's default commands instead, which is the opposite of what was asked.
+            // A step that must be answered refuses an empty answer through Validate, which is
+            // where that decision belongs.
+            return Advance(step, _field.Value.Trim());
         }
 
         return OverlayResult.Continue;
@@ -375,7 +375,10 @@ internal sealed class Wizard : IOverlay
             return;
         }
 
-        var existing = _values.TryGetValue(step.Key, out var value) && value.Length > 0
+        // An answer that was given is used even when it is empty. Testing the length as well as
+        // the presence meant that going back to a question you had deliberately cleared showed the
+        // default again, and leaving it alone silently restored it.
+        var existing = _values.TryGetValue(step.Key, out var value)
             ? value
             : step.Default(_values);
         if (step.Input == WizardInput.Choice)

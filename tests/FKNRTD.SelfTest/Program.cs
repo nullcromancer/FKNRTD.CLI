@@ -307,7 +307,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen),
     ("A failed agent line is not drawn as a finished one", TestAFailureIsNotDrawnAsSuccess),
     ("A flag does not swallow the word after it", TestAFlagDoesNotSwallowTheNextWord),
-    ("A retried task is not called one that never ran", TestTheDashboardSaysWhatActuallyHappened)
+    ("A retried task is not called one that never ran", TestTheDashboardSaysWhatActuallyHappened),
+    ("Clearing a question means the empty answer", TestClearingAQuestionMeansEmpty)
 };
 
 var failures = new List<string>();
@@ -5801,6 +5802,55 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestClearingAQuestionMeansEmpty()
+{
+    // The verification question tells the reader "leave empty to skip verification entirely". The
+    // box arrives holding the workspace's default commands, and clearing it used to put them
+    // straight back - so the one instruction printed under the field was the one thing it would
+    // not do, and a task meant to check nothing was created checking whatever the workspace did.
+
+    var asked = new WizardStep
+    {
+        Key = "verify",
+        Question = "Which commands decide whether the work is correct?",
+        GlossaryTerm = "verification",
+        Input = WizardInput.Commands,
+        Default = _ => "dotnet build"
+    };
+
+    var wizard = new Wizard("TEST", Theme.Violet, [asked]);
+
+    // The field arrives holding the default, which is what makes an empty one deliberate.
+    wizard.HandleKey(new ConsoleKeyInfo('a', ConsoleKey.A, false, false, false));
+    Equal(OverlayResult.Submit, wizard.HandleKey(Key(ConsoleKey.Enter)), "The only question submits");
+    True(wizard.Values["verify"].Length > 0, "An answer that was typed is kept");
+
+    // Cleared, and submitted: the answer is the empty one that was given.
+    var cleared = new Wizard("TEST", Theme.Violet, [asked]);
+    for (var stroke = 0; stroke < 40; stroke++)
+    {
+        cleared.HandleKey(Key(ConsoleKey.Backspace));
+    }
+
+    Equal(OverlayResult.Submit, cleared.HandleKey(Key(ConsoleKey.Enter)), "An empty answer submits");
+    Equal(string.Empty, cleared.Values["verify"],
+        "Clearing the box means no commands, not the ones it was holding");
+
+    // And the real form still prints the promise this is keeping.
+    var step = TaskWizard.Create(Scenes.SampleConfig() with
+        {
+            DefaultVerificationCommands = ["dotnet build", "dotnet test"]
+        })
+        .Steps.FirstOrDefault(candidate => candidate.Key == "verify");
+    True(step is not null, "The guided form still asks which commands decide correctness");
+    True(step!.Placeholder.Contains("leave empty", StringComparison.OrdinalIgnoreCase),
+        "and still tells the reader that leaving it empty skips verification");
+    Equal(null, step.Validate(string.Empty, new Dictionary<string, string>()),
+        "which is only keepable if an empty answer is a valid one");
+
+    return Task.CompletedTask;
+}
+
 static Task TestTheDashboardSaysWhatActuallyHappened()
 {
     // Three sentences the main screen draws about a task, each of which was true of the common
