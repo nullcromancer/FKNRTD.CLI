@@ -320,7 +320,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("An event reads as a time, not a round-trip string", TestAnEventReadsAsATimeAsync),
     ("Reservations are listed as a table", TestReservationsAreListedAsATableAsync),
     ("Task list columns start where the header says", TestTaskListColumnsLineUpAsync),
-    ("Prose wraps to the window it assumes", TestProseWrapsToTheWindowAsync)
+    ("Prose wraps to the window it assumes", TestProseWrapsToTheWindowAsync),
+    ("A budget cannot be recorded against a typo", TestABudgetCannotBeRecordedAgainstATypoAsync)
 };
 
 var failures = new List<string>();
@@ -5833,6 +5834,56 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestABudgetCannotBeRecordedAgainstATypoAsync()
+{
+    // `fknrtd usage set claud -five-hour 20` succeeded, exited 0, wrote a budget against an agent
+    // that does not exist, and left the real one's figure untouched - and usage list then showed
+    // the phantom as though it were an agent. Every other command that names an agent refuses an
+    // id it does not know. This one wrote it down.
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, await QuietlyAsync(["init", "-root", root, "-yes"]).ConfigureAwait(false),
+            "A workspace with the shipped agents configured");
+
+        // Refused by throwing, which is how every refusal in this dispatcher reaches the exit
+        // code; scripts/verify.sh checks that a reader sees exit 1 for it.
+        var refusal = string.Empty;
+        try
+        {
+            await QuietlyAsync(["usage", "set", "claud", "-root", root, "-five-hour", "20"])
+                .ConfigureAwait(false);
+            throw new InvalidDataException("A misspelled agent was accepted rather than refused.");
+        }
+        catch (InvalidOperationException expected)
+        {
+            refusal = expected.Message;
+        }
+
+        True(refusal.Contains("not configured", StringComparison.Ordinal),
+            "The refusal says what is wrong");
+        True(refusal.Contains("claude", StringComparison.Ordinal),
+            "and names the agents this workspace does have, which is where the typo is visible");
+
+        // Nothing was written by the refused command.
+        var listed = await CapturedAsync(["usage", "list", "-root", root, "-no-color"]).ConfigureAwait(false);
+        True(!listed.Contains("claud:", StringComparison.Ordinal),
+            "and no phantom agent is left behind in the budget listing");
+
+        // The agent that does exist still records, and reads as how stale it is.
+        Equal(0, await QuietlyAsync(
+                ["usage", "set", "claude", "-root", root, "-five-hour", "20"]).ConfigureAwait(false),
+            "A configured agent still records its budget");
+
+        var real = await CapturedAsync(["usage", "list", "-root", root, "-no-color"]).ConfigureAwait(false);
+        True(real.Contains("claude", StringComparison.Ordinal), "which is then listed");
+        True(real.Contains(" ago]", StringComparison.Ordinal),
+            "saying how old the figure is, because that is what decides whether to believe it");
+        True(!real.Contains("+00:00", StringComparison.Ordinal),
+            "rather than the instant it was taken in round-trip format");
+    }).ConfigureAwait(false);
+}
+
 static async Task TestProseWrapsToTheWindowAsync()
 {
     // Redirected output is rendered for an 88-column window, and every paragraph this product

@@ -1692,6 +1692,25 @@ internal static class CommandDispatcher
             {
                 var agentId = Required(arguments.Get("agent") ?? arguments.Positional(2), "agent ID");
 
+                // An agent that is not configured is a typo, not a new agent. Without this,
+                // `fknrtd usage set claud -five-hour 20` succeeded, exited 0, recorded a budget
+                // against an agent that does not exist, and left the real one's figure untouched -
+                // while `usage list` then showed the phantom. Every other command that names an
+                // agent refuses an id it does not know; this one wrote it down.
+                var configured = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
+                if (!configured.Agents.Any(agent =>
+                        agent.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var known = string.Join(", ", configured.Agents.Select(agent => agent.Id));
+                    throw new InvalidOperationException(
+                        $"Agent '{agentId}' is not configured, so recording a budget against it " +
+                        "would describe an agent that cannot run. " +
+                        (known.Length > 0
+                            ? $"This workspace has: {known}. "
+                            : "This workspace has no agents configured. ") +
+                        "'fknrtd agent list' shows them, and 'fknrtd agent add' creates one.");
+                }
+
                 // The write replaces the whole snapshot, so anything not named on this command line
                 // is cleared. That is fine for the hooks that report everything they know each
                 // time, and a trap for somebody correcting one number by hand - so what it is about
@@ -2020,7 +2039,13 @@ internal static class CommandDispatcher
     };
 
     private static void PrintUsage(UsageSnapshot snapshot) => Console.WriteLine(
-        $"{snapshot.AgentId}: context {Percent(snapshot.ContextRemainingPercent)}, 5h {Percent(snapshot.FiveHourRemainingPercent)}, 7d {Percent(snapshot.WeeklyRemainingPercent)} [{snapshot.Source}, {snapshot.UpdatedAt:O}]");
+        $"{snapshot.AgentId}: context {Percent(snapshot.ContextRemainingPercent)}, " +
+        $"5h {Percent(snapshot.FiveHourRemainingPercent)}, " +
+        $"7d {Percent(snapshot.WeeklyRemainingPercent)} " +
+        // How stale the figure is, rather than the instant it was taken: a budget is read to find
+        // out whether it is still worth believing, and "3h ago" answers that where a round-trip
+        // timestamp leaves the reader subtracting.
+        $"[{snapshot.Source}, {Text.Age(snapshot.UpdatedAt, DateTimeOffset.UtcNow)} ago]");
 
     private static string Percent(double? value) => value is null ? "N/A" : $"{value:0}% left";
 

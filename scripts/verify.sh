@@ -118,6 +118,10 @@ row "fknrtd taks"             2 "$FKNRTD" taks
 # because a script that asked for JSON and got a table must not be told it succeeded.
 row "fknrtd task list -jsno"  2 "$FKNRTD" task list -jsno
 row "fknrtd agent list -verbose" 2 "$FKNRTD" agent list -verbose
+# A misspelled agent id used to be written down as a new agent, exit 0, leaving a phantom budget
+# in the listing while the real agent's figure went untouched.
+row "fknrtd usage set <typo>"  1 "$FKNRTD" usage set claud -five-hour 20
+row "fknrtd usage set claude"  0 "$FKNRTD" usage set claude -five-hour 20
 
 # A workspace that is not a Git repository has to work too, and is the case most easily
 # forgotten, because the developer's own checkout always is one. It has to sit outside the
