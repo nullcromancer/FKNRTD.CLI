@@ -101,6 +101,28 @@ public sealed class DoctorService
                       "every task its own branch and checkout"
         });
 
+        // Required in Git mode because the commit that ends a task needs it, and that commit is
+        // the last thing a run does: without this check the whole pipeline - plan, implement,
+        // verify, audit - could be paid for and then refused at the final step. Not required in a
+        // standalone workspace, which never commits anything.
+        var identity = await _git.GetCommitterIdentityAsync(_store.Paths.Root, cancellationToken)
+            .ConfigureAwait(false);
+        checks.Add(new DoctorCheck
+        {
+            Name = "Git committer identity",
+            Passed = identity.Configured || !gitRequired,
+            Required = gitRequired,
+            Detail = identity.Configured
+                ? identity.Display
+                : gitRequired
+                    ? "Git has no user.name and user.email here, so the commit that ends a task " +
+                      "would be refused after the work was done. Set them with " +
+                      "'git config --global user.name \"<name>\"' and " +
+                      "'git config --global user.email \"<email>\"'."
+                    : "Not required in a standalone workspace, which records work in place and " +
+                      "never commits."
+        });
+
         var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var agent in config?.Agents ?? [])
         {

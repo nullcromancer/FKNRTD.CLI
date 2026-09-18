@@ -43,6 +43,38 @@ public sealed class GitService
 
     private static bool _gitFound;
 
+    /// <summary>
+    /// Whether Git has a committer identity here, and what it is. Committing verified work needs
+    /// both <c>user.name</c> and <c>user.email</c>; without them Git refuses the commit.
+    /// </summary>
+    /// <remarks>
+    /// This exists so that the check doctor reports and the check the orchestrator enforces are
+    /// the same check. They were written separately, and doctor's did not exist at all, so a
+    /// workspace could pass every required check and then lose a whole run at the commit that
+    /// ends it. Ask the question in one place and the two surfaces cannot drift apart.
+    /// </remarks>
+    public async Task<CommitterIdentity> GetCommitterIdentityAsync(
+        string directory,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsInstalled())
+        {
+            return new CommitterIdentity(false, string.Empty, string.Empty);
+        }
+
+        // Two unrelated questions about the same directory, so they are asked at once - the same
+        // reason GetSnapshotAsync asks its four together.
+        var nameTask = GitAsync(directory, ["config", "--get", "user.name"], cancellationToken);
+        var emailTask = GitAsync(directory, ["config", "--get", "user.email"], cancellationToken);
+        await Task.WhenAll(nameTask, emailTask).ConfigureAwait(false);
+        var nameResult = await nameTask.ConfigureAwait(false);
+        var emailResult = await emailTask.ConfigureAwait(false);
+
+        var name = nameResult.Success ? nameResult.StandardOutput.Trim() : string.Empty;
+        var email = emailResult.Success ? emailResult.StandardOutput.Trim() : string.Empty;
+        return new CommitterIdentity(name.Length > 0 && email.Length > 0, name, email);
+    }
+
     public async Task<bool> IsRepositoryAsync(string directory, CancellationToken cancellationToken = default)
     {
         if (!IsInstalled())

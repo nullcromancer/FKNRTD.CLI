@@ -301,7 +301,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A wrapped list item stays inside its item", TestAWrappedListItemStaysInsideItsItemAsync),
     ("A too-small window says so", TestATooSmallWindowSaysSoAsync),
     ("Doctor does not tick what is not there", TestDoctorDoesNotTickWhatIsNotThereAsync),
-    ("An agent can be repointed from the command line", TestAnAgentCanBeRepointedFromTheCommandLineAsync)
+    ("An agent can be repointed from the command line", TestAnAgentCanBeRepointedFromTheCommandLineAsync),
+    ("Doctor asks whether Git can commit", TestDoctorAsksWhetherGitCanCommitAsync)
 };
 
 var failures = new List<string>();
@@ -5795,6 +5796,64 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static async Task TestDoctorAsksWhetherGitCanCommitAsync()
+{
+    if (ExecutableLocator.Find("git") is null)
+    {
+        throw new InvalidOperationException("Git is required for the committer identity self-test.");
+    }
+
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var process = new ProcessRunner();
+        var git = new GitService(process);
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]).ConfigureAwait(false), "git init");
+
+        // An empty local value is how a repository looks when nothing has set an identity, without
+        // depending on what this machine happens to have configured globally. Git refuses a commit
+        // on an empty ident for the same reason it refuses a missing one.
+        MustSucceed(await git.GitAsync(root, ["config", "user.name", ""]).ConfigureAwait(false),
+            "blank the name");
+        MustSucceed(await git.GitAsync(root, ["config", "user.email", ""]).ConfigureAwait(false),
+            "blank the email");
+
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(Scenes.SampleConfig() with
+        {
+            ProjectName = "no-identity",
+            Mode = WorkspaceMode.Git
+        }).ConfigureAwait(false);
+
+        var doctor = new DoctorService(store, git, process);
+        var check = (await doctor.RunAsync().ConfigureAwait(false))
+            .FirstOrDefault(candidate => candidate.Name == "Git committer identity");
+
+        True(check is not null, "Doctor reports on the identity a commit needs");
+        Equal(false, check!.Passed, "A repository with no identity cannot commit what a task produced");
+        Equal(true, check.Required, "and in a Git workspace that blocks a run rather than degrading it");
+        True(check.Detail.Contains("git config --global user.email", StringComparison.Ordinal),
+            "The reason says exactly what to run");
+
+        // The same question the orchestrator asks at the end of a run, asked here before it starts.
+        Equal(false, (await git.GetCommitterIdentityAsync(root).ConfigureAwait(false)).Configured,
+            "The shared check agrees with what doctor reported");
+
+        MustSucceed(await git.GitAsync(root, ["config", "user.name", "FKNRTD.CLI Self Test"])
+            .ConfigureAwait(false), "set the name");
+        MustSucceed(await git.GitAsync(root, ["config", "user.email", "fknrtd-self-test@example.invalid"])
+            .ConfigureAwait(false), "set the email");
+
+        var identity = await git.GetCommitterIdentityAsync(root).ConfigureAwait(false);
+        Equal(true, identity.Configured, "Setting both halves is what the check was asking for");
+        Equal("FKNRTD.CLI Self Test <fknrtd-self-test@example.invalid>", identity.Display,
+            "and doctor can then show whose name the commit will carry");
+
+        var repaired = (await doctor.RunAsync().ConfigureAwait(false))
+            .First(candidate => candidate.Name == "Git committer identity");
+        Equal(true, repaired.Passed, "Doctor stops reporting it once it is fixed");
+    }).ConfigureAwait(false);
+}
+
 static async Task TestAnAgentCanBeRepointedFromTheCommandLineAsync()
 {
     await WithTemporaryDirectoryAsync(async root =>

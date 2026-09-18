@@ -165,6 +165,17 @@ public sealed record GitSnapshot
     public bool IsClean => ChangedFiles == 0;
 }
 
+/// <summary>
+/// Git's committer identity for a directory. <see cref="Configured"/> is the only question worth
+/// asking before a run: Git refuses to commit without both halves, and that refusal would
+/// otherwise arrive after every agent on the task has already been paid for.
+/// </summary>
+public sealed record CommitterIdentity(bool Configured, string Name, string Email)
+{
+    /// <summary>"Ada Lovelace &lt;ada@example.com&gt;", or an empty string when unset.</summary>
+    public string Display => Configured ? $"{Name} <{Email}>" : string.Empty;
+}
+
 public sealed record ResourceSnapshot
 {
     public double ProcessCpuPercent { get; init; }

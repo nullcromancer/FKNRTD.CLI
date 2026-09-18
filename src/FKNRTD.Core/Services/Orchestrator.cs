@@ -512,23 +512,17 @@ public sealed class Orchestrator
                 "worktree yourself, or turn the setting on in .fknrtd/config.json and run the task again.");
         }
 
-        var userName = await _git.GitAsync(
-                task.WorktreePath,
-                ["config", "--get", "user.name"],
-                cancellationToken)
+        // Doctor asks this same question, through the same method, so the two cannot disagree
+        // about whether a workspace is ready to commit.
+        var identity = await _git.GetCommitterIdentityAsync(task.WorktreePath, cancellationToken)
             .ConfigureAwait(false);
-        var userEmail = await _git.GitAsync(
-                task.WorktreePath,
-                ["config", "--get", "user.email"],
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (!userName.Success || string.IsNullOrWhiteSpace(userName.StandardOutput) ||
-            !userEmail.Success || string.IsNullOrWhiteSpace(userEmail.StandardOutput))
+        if (!identity.Configured)
         {
             throw new InvalidOperationException(
                 "The verified changes cannot be committed because Git has no committer identity here. " +
                 "Set user.name and user.email — globally, or with 'git config' in this repository — and " +
-                "run the task again. The work itself is safe in the task's worktree.");
+                "run the task again. The work itself is safe in the task's worktree. 'fknrtd doctor' " +
+                "reports this before a run, so it need not cost a run twice.");
         }
 
         var add = await _git.GitAsync(task.WorktreePath, ["add", "-A"], cancellationToken).ConfigureAwait(false);
