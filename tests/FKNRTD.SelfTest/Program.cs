@@ -304,7 +304,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("An agent can be repointed from the command line", TestAnAgentCanBeRepointedFromTheCommandLineAsync),
     ("Doctor asks whether Git can commit", TestDoctorAsksWhetherGitCanCommitAsync),
     ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync),
-    ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen)
+    ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen),
+    ("A failed agent line is not drawn as a finished one", TestAFailureIsNotDrawnAsSuccess)
 };
 
 var failures = new List<string>();
@@ -5798,6 +5799,58 @@ static async Task TestDoctorDoesNotTickWhatIsNotThereAsync()
 /// in a script, over SSH, or to anybody automating a machine's setup — and 'agent list' told the
 /// reader to go and edit the JSON by hand, which was true and was the worst of the options.
 /// </remarks>
+static Task TestAFailureIsNotDrawnAsSuccess()
+{
+    // The log view is what somebody watches while a task runs, so a line that reports a failure
+    // as a success is the most expensive thing it can do: the run is abandoned or landed on the
+    // strength of it.
+
+    // Claude reports a failed run with a type of plain "result", which is also what a successful
+    // one carries. Only is_error and the subtype tell them apart, and neither was read.
+    var failed = LogFormat.Read(
+        "{\"type\":\"result\",\"subtype\":\"error_during_execution\"," +
+        "\"is_error\":true,\"result\":\"Permission denied\"}");
+    Equal(LogKind.Failed, failed.Kind, "A result flagged as an error is a failure");
+    True(failed.Text.Contains("Permission denied", StringComparison.Ordinal),
+        "and still says what went wrong");
+    True(!failed.Text.Contains("√", StringComparison.Ordinal),
+        "and carries no success marker");
+
+    // A genuine success is untouched by the above.
+    var finished = LogFormat.Read("{\"type\":\"result\",\"result\":\"All tests passed\"}");
+    Equal(LogKind.Finished, finished.Kind, "A result with no error flag is still the final answer");
+    True(finished.Text.Contains("All tests passed", StringComparison.Ordinal),
+        "and reads the same as it always did");
+
+    // The reason for a failure is as often nested as it is flat.
+    var nested = LogFormat.Read(
+        "{\"type\":\"turn.failed\",\"error\":{\"message\":\"Quota exhausted\"}}");
+    Equal(LogKind.Failed, nested.Kind, "A failed turn is a failure");
+    True(nested.Text.Contains("Quota exhausted", StringComparison.Ordinal),
+        "and the sentence explaining it is the part worth keeping, not the event name");
+
+    // A tool that failed is not housekeeping.
+    var tool = LogFormat.Read(
+        "{\"message\":{\"content\":[{\"type\":\"tool_result\",\"is_error\":true," +
+        "\"content\":\"Access denied\"}]}}");
+    Equal(LogKind.Failed, tool.Kind, "A tool result flagged as an error is a failure");
+    True(tool.Text.Contains("Access denied", StringComparison.Ordinal),
+        "and the diagnostic survives instead of being folded into 'returned'");
+
+    // A tool that worked stays quiet: there is one of these per tool call.
+    var quiet = LogFormat.Read(
+        "{\"message\":{\"content\":[{\"type\":\"tool_result\",\"content\":\"ok\"}]}}");
+    Equal(LogKind.Noise, quiet.Kind, "A successful tool result is still noise");
+
+    // "Never throws" is a claim in this file's own summary, and it was not true: a lone surrogate
+    // is valid JSON that cannot be read back as text. This is the one screen that reads whatever
+    // an agent wrote, so an exception here takes the dashboard down with it.
+    var surrogate = LogFormat.Read("{\"type\":\"\uD800\"}");
+    True(surrogate.Text.Length > 0, "A line that cannot be read back is shown as it arrived");
+
+    return Task.CompletedTask;
+}
+
 static Task TestTheRosterKeepsTheSelectionOnScreen()
 {
     // Every key the roster offers acts on the highlighted agent, so an agent that is highlighted

@@ -71,6 +71,14 @@ internal static class LogFormat
             // A partially written line, or output that merely starts with a brace.
             return new LogLine(AsIs(raw), LogKind.Plain);
         }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or ArgumentException)
+        {
+            // Well-formed JSON can still hold text that cannot be read back: an unpaired surrogate
+            // parses and then throws on the way out. This is the log view, which reads whatever an
+            // agent wrote - the one place that must not be able to take the dashboard down.
+            return new LogLine(AsIs(raw), LogKind.Plain);
+        }
     }
 
     private static LogLine? Read(JsonElement root)
@@ -84,19 +92,32 @@ internal static class LogFormat
 
         // Claude's session banner and its token accounting are the two things that repeat most and
         // tell an operator watching a task the least.
+        var subtype = Text(root, "subtype") ?? string.Empty;
         if (type.Equals("system", StringComparison.OrdinalIgnoreCase))
         {
-            var subtype = Text(root, "subtype");
             return new LogLine(
-                subtype is null ? "session started" : "session " + subtype,
+                subtype.Length == 0 ? "session started" : "session " + subtype,
                 LogKind.Noise);
         }
 
-        if (type.Contains("error", StringComparison.OrdinalIgnoreCase) ||
-            type.Contains("failed", StringComparison.OrdinalIgnoreCase))
+        // A run that failed says so in any of three places, and only one of them was read. Claude
+        // reports a failed result as {"type":"result","subtype":"error_during_execution",
+        // "is_error":true,...} - a type of plain "result", which fell through to the success path
+        // below and drew the failure with a tick beside it. A log that marks a failure as finished
+        // is worse than one that says nothing.
+        if (Flag(root, "is_error") ||
+            type.Contains("error", StringComparison.OrdinalIgnoreCase) ||
+            type.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+            subtype.Contains("error", StringComparison.OrdinalIgnoreCase) ||
+            subtype.Contains("failed", StringComparison.OrdinalIgnoreCase))
         {
-            var message = Text(root, "message") ?? Text(root, "error") ?? Text(root, "result");
-            return new LogLine("× " + Clip(message ?? type), LogKind.Failed);
+            // The reason is as often an object as a string: {"error":{"message":"Quota exhausted"}}
+            // read as a string gave nothing, and the line fell back to naming the event type - so
+            // the one sentence explaining why the run stopped was the part that was dropped.
+            var message = Detail(root, "message") ?? Detail(root, "error") ?? Detail(root, "result");
+            return new LogLine(
+                "× " + Clip(message ?? (subtype.Length > 0 ? subtype : type)),
+                LogKind.Failed);
         }
 
         // The final answer, which is the line most worth finding in a finished log.
@@ -154,6 +175,17 @@ internal static class LogFormat
 
             if (kind.Equals("tool_result", StringComparison.OrdinalIgnoreCase))
             {
+                // A tool result carries is_error, and folding a failed one into "returned" as
+                // noise hid the diagnostic on the screen somebody is watching to find out what
+                // went wrong. A successful result stays noise: there is one per tool call.
+                if (Flag(block, "is_error"))
+                {
+                    var reason = Detail(block, "content");
+                    return new LogLine(
+                        reason is null ? "  a tool failed" : "  a tool failed: " + Clip(reason),
+                        LogKind.Failed);
+                }
+
                 return new LogLine("  returned", LogKind.Noise);
             }
         }
@@ -226,6 +258,57 @@ internal static class LogFormat
     {
         var expanded = value.Replace("	", "    ", StringComparison.Ordinal).TrimEnd();
         return expanded.Length <= MaximumLength ? expanded : expanded[..MaximumLength] + "...";
+    }
+
+    /// <summary>Whether a JSON property is literally <c>true</c>. Absent or false reads as false.</summary>
+    private static bool Flag(JsonElement element, string property) =>
+        element.ValueKind == JsonValueKind.Object &&
+        element.TryGetProperty(property, out var value) &&
+        value.ValueKind == JsonValueKind.True;
+
+    /// <summary>
+    /// Reads a property that carries a human sentence, wherever the agent chose to put it: the
+    /// value itself, an object holding it, or the first block of a list of them.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Text"/> accepts a string and nothing else, which is right for a field like
+    /// "type" and wrong for a reason: every agent nests those differently, and reading only the
+    /// flat case dropped the sentence and kept the label.
+    /// </remarks>
+    private static string? Detail(JsonElement element, string property)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(property, out var value))
+        {
+            return null;
+        }
+
+        return Detail(value);
+    }
+
+    private static string? Detail(JsonElement value)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.String:
+                var text = value.GetString();
+                return string.IsNullOrWhiteSpace(text) ? null : text;
+            case JsonValueKind.Object:
+                return Text(value, "message") ?? Text(value, "text") ?? Text(value, "error")
+                    ?? Text(value, "content");
+            case JsonValueKind.Array:
+                foreach (var item in value.EnumerateArray())
+                {
+                    if (Detail(item) is { } found)
+                    {
+                        return found;
+                    }
+                }
+
+                return null;
+            default:
+                return null;
+        }
     }
 
     private static string? Text(JsonElement element, string property) =>
