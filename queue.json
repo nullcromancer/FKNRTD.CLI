@@ -747,10 +747,10 @@
     {
       "id": 9,
       "title": "One owner for configuration writes",
-      "state": "ready",
-      "phase": "worktree-ready",
+      "state": "claimed",
+      "phase": "implementing",
       "path": "briefs/0009-one-owner-for-configuration-writes.cvm",
-      "seat": null,
+      "seat": "codex",
       "created": "2026-09-19T02:28:11+00:00",
       "reports": [],
       "events": [
@@ -767,15 +767,30 @@
           "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0009-one-owner-for-configuration-writes",
           "branch": "codex/pair-9-one-owner-for-configuration-writes",
           "base": "6ddea0b24f51630bb375093f585e6f86bb90a004"
+        },
+        {
+          "type": "claim",
+          "at": "2026-09-19T02:28:12+00:00",
+          "seat": "codex",
+          "round": 1,
+          "lease_expires": "2026-09-19T03:13:12+00:00"
         }
       ],
-      "round": 0,
+      "round": 1,
       "protocol": "caveman-v1",
       "implementer": "codex",
       "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0009-one-owner-for-configuration-writes",
       "branch": "codex/pair-9-one-owner-for-configuration-writes",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
-      "base_oid": "6ddea0b24f51630bb375093f585e6f86bb90a004"
+      "base_oid": "6ddea0b24f51630bb375093f585e6f86bb90a004",
+      "claim": {
+        "seat": "codex",
+        "at": "2026-09-19T02:28:12+00:00",
+        "lease_expires": "2026-09-19T03:13:12+00:00",
+        "pid": null,
+        "host": "Tenebris",
+        "dispatch_id": "2ed2085d-b5cc-4d7b-b9d7-95049d2e3a57"
+      }
     }
   ]
 }
