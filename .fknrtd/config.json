@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "projectName": "nullcromancer/FKNRTD.CLI",
+  "mode": "git",
+  "defaultBaseRef": "feature/standalone-workspaces-and-tool-management",
+  "maxParallelAgents": 4,
+  "defaultMaxRepairRounds": 1,
+  "agentStaleAfterSeconds": 120,
+  "claimStaleAfterSeconds": 300,
+  "agentTimeoutSeconds": 3600,
+  "verificationTimeoutSeconds": 600,
+  "dashboardRefreshMilliseconds": 1000,
+  "requireCleanTreeForLanding": true,
+  "autoCommitAgentChanges": true,
+  "statuslineIcons": true,
+  "defaultVerificationCommands": [
+    "dotnet build FKNRTD.CLI.sln -c Release",
+    "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build"
+  ],
+  "agents": [
+    {
+      "id": "claude",
+      "displayName": "Claude",
+      "kind": "claude",
+      "executable": "claude",
+      "enabled": true,
+      "color": "orange",
+      "profiles": {
+        "plan": {
+          "arguments": [
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            "plan",
+            "--permission-prompts",
+            "none"
+          ],
+          "promptDelivery": "argument"
+        },
+        "implement": {
+          "arguments": [
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            "acceptEdits",
+            "--permission-prompts",
+            "none"
+          ],
+          "promptDelivery": "argument"
+        },
+        "audit": {
+          "arguments": [
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            "plan",
+            "--permission-prompts",
+            "none"
+          ],
+          "promptDelivery": "argument",
+          "successMarker": "FKNRTD_VERDICT: PASS",
+          "failureMarker": "FKNRTD_VERDICT: FAIL"
+        },
+        "default": {
+          "arguments": [
+            "-p",
+            "{prompt}"
+          ],
+          "promptDelivery": "argument"
+        }
+      },
+      "environment": {}
+    },
+    {
+      "id": "codex",
+      "displayName": "Codex",
+      "kind": "codex",
+      "executable": "codex",
+      "enabled": true,
+      "color": "violet",
+      "profiles": {
+        "plan": {
+          "arguments": [
+            "exec",
+            "--json",
+            "--sandbox",
+            "read-only",
+            "{prompt}"
+          ],
+          "promptDelivery": "argument"
+        },
+        "implement": {
+          "arguments": [
+            "exec",
+            "--json",
+            "--sandbox",
+            "workspace-write",
+            "{prompt}"
+          ],
+          "promptDelivery": "argument"
+        },
+        "audit": {
+          "arguments": [
+            "exec",
+            "--json",
+            "--sandbox",
+            "read-only",
+            "{prompt}"
+          ],
+          "promptDelivery": "argument",
+          "successMarker": "FKNRTD_VERDICT: PASS",
+          "failureMarker": "FKNRTD_VERDICT: FAIL"
+        },
+        "default": {
+          "arguments": [
+            "exec",
+            "{prompt}"
+          ],
+          "promptDelivery": "argument"
+        }
+      },
+      "environment": {}
+    }
+  ]
+}
