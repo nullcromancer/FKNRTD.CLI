@@ -10,6 +10,8 @@
   ],
   "constraints": [
     "ROUND 3 TARGETS A REFERENCE LAYOUT. Rounds 1 and 2 are accepted: the width budget, meters, N/A handling, Git and quality reads, colour surviving redirection and per-segment Paint all stay. This round changes arrangement and wording to match the reference, and adds a coloured meter fill.",
+    "CARRY TWO FIXES FROM ROUND 2. (a) The row separator must be the SAME byte sequence with and without colour: stripping the escapes from a coloured frame must leave exactly the -no-color frame, character for character, including line endings. Today the coloured frame has no carriage returns and the -no-color frame has two, diverging wherever the layout becomes two rows. (b) Extend the self-test so it compares what the COMMAND writes, not only what the renderer returns - the existing test passed while this was broken.",
+    "AMEND AGENTS.md LINE 84. It still says redirected output must emit no ANSI escapes, which the statusline now deliberately contradicts because Claude Code pipes it and renders the result. Carve out the statusline in that line. This was already an acceptance criterion and was not done.",
     "EXACT ROW CONTENT. Row 1, in order: the FKN badge; owner/repository truncated with a single-character ellipsis when it does not fit; the branch; CTX followed by a meter, the percentage and the word left; and the modified-file count as the warning glyph followed by the number, with no 'mod:' label. Row 2, in order: Claude 5h <pct> 7d <pct>; Codex 5h <pct> 7d <pct>; then one compact entry per agent of the form two-letter prefix, state glyph, space, intent - Cl for Claude, Cx for Codex - separated from each other by a single space rather than a pipe.",
     "THE METER FILL IS GREEN when the value is healthy, and follows the existing threshold colours as it falls; the unfilled remainder stays muted. The percentage keeps its own colour and is always present.",
     "PER-SEGMENT COLOUR MATCHING THE REFERENCE: badge cyan; owner/repository and branch blue; the CTX label amber with the percentage bright; the modified count amber; the word Claude and every Claude figure and activity entry orange; the word Codex and every Codex figure and activity entry purple. Never distinguish anything by colour alone - each keeps its glyph and its text.",
@@ -33,6 +35,8 @@
     "Do not touch provisioning, AgentRegistry, DoctorService, GetDiffAsync or the orchestrator. Separate briefs."
   ],
   "acceptance": [
+    "Stripping every escape from a coloured frame yields the -no-color frame byte for byte, INCLUDING line endings, at 60, 80, 100, 140 and 200 columns",
+    "A self-test compares the command's written output between colour modes, not only the renderer's return value",
     "The circled badge mark, framed square and branch mark from the reference appear nowhere in src",
     "No third row is emitted at any width",
     "The badge, repository, Claude's figures and Codex's figures each carry their own distinct colour in a coloured frame",
