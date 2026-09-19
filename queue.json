@@ -1080,10 +1080,10 @@
     {
       "id": 13,
       "title": "Statusline: bars, git health, code health, priority",
-      "state": "ready",
-      "phase": "repair-ready",
+      "state": "claimed",
+      "phase": "implementing",
       "path": "briefs/0013-statusline-bars-git-health-code-health-p.cvm",
-      "seat": null,
+      "seat": "codex",
       "created": "2026-09-19T20:54:44+00:00",
       "reports": [],
       "events": [
@@ -1121,15 +1121,30 @@
           "seat": "claude",
           "verdict": "fail",
           "wire": "CVM1|A|F\nE|Built and ran the suite in the worktree: 0 warnings, 0 errors, 136/136\nE|No width overflow at 60, 80, 100, 120, 140 and 200 columns, checked against rendered output\nE|Bars render and always carry the number; unmeasured counts render N/A, and the implementer correctly identified that a stored 0 is not evidence a runner measured anything\nE|Git health renders mod/ahead/behind and degrades to N/A with no upstream\nE|Quality segment is omitted rather than zeroed when no task has been verified\nE|No forbidden glyph introduced: the document's set is absent from src\nE|No forbidden name introduced: the only hits are AGENTS.md stating the rule and README recording the rename\nT|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors\nT|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 136/136\nT|Rendered a real workspace at four widths and compared against the landed binary\nB|COLOUR IS OFF IN ACTUAL USE. useColor now requires !Console.IsOutputRedirected. Claude Code always pipes the statusline command, so the bar emits zero ANSI escapes in its only real consumer: piping the landed binary yields 1 escape sequence, the new one yields 0. This followed AGENTS.md:84 and was a reasonable reading, but the user has decided the statusline is carved out of that rule, because its consumer renders ANSI rather than storing text.\nB|PER-SEGMENT PALETTE LOST. Paint call sites fell from 18 to 2, so the whole line is painted one colour instead of each segment carrying its own. The source design's palette - repository blue, Claude orange, Codex purple - cannot survive that, and neither can the landed appearance.\nQ|The width-budget logic that drops bars before telemetry is good and should be kept; restoring per-segment colour must not regress it, because Text.DisplayWidth must continue to measure the visible text rather than the escapes.\n"
+        },
+        {
+          "type": "claim",
+          "at": "2026-09-19T21:11:07+00:00",
+          "seat": "codex",
+          "round": 2,
+          "lease_expires": "2026-09-19T21:56:07+00:00"
         }
       ],
-      "round": 1,
+      "round": 2,
       "protocol": "caveman-v1",
       "implementer": "codex",
       "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0013-statusline-bars-git-health-code-health-p",
       "branch": "codex/pair-13-statusline-bars-git-health-code-health-p",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
-      "base_oid": "6d94e78529e2bbf3dc68512752b3cc973460f67b"
+      "base_oid": "6d94e78529e2bbf3dc68512752b3cc973460f67b",
+      "claim": {
+        "seat": "codex",
+        "at": "2026-09-19T21:11:07+00:00",
+        "lease_expires": "2026-09-19T21:56:07+00:00",
+        "pid": null,
+        "host": "Tenebris",
+        "dispatch_id": "612e6b67-41bf-416a-81e2-9afdebed988d"
+      }
     },
     {
       "id": 14,
