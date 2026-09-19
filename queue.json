@@ -588,10 +588,10 @@
     {
       "id": 7,
       "title": "Fix four agent-log parsing faults",
-      "state": "ready",
-      "phase": "worktree-ready",
+      "state": "claimed",
+      "phase": "implementing",
       "path": "briefs/0007-fix-four-agent-log-parsing-faults.cvm",
-      "seat": null,
+      "seat": "codex",
       "created": "2026-09-19T02:14:51+00:00",
       "reports": [],
       "events": [
@@ -608,15 +608,30 @@
           "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0007-fix-four-agent-log-parsing-faults",
           "branch": "codex/pair-7-fix-four-agent-log-parsing-faults",
           "base": "d6d71625149aed40f74d37ff0a7f83129c697ee5"
+        },
+        {
+          "type": "claim",
+          "at": "2026-09-19T02:14:51+00:00",
+          "seat": "codex",
+          "round": 1,
+          "lease_expires": "2026-09-19T02:59:51+00:00"
         }
       ],
-      "round": 0,
+      "round": 1,
       "protocol": "caveman-v1",
       "implementer": "codex",
       "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0007-fix-four-agent-log-parsing-faults",
       "branch": "codex/pair-7-fix-four-agent-log-parsing-faults",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
-      "base_oid": "d6d71625149aed40f74d37ff0a7f83129c697ee5"
+      "base_oid": "d6d71625149aed40f74d37ff0a7f83129c697ee5",
+      "claim": {
+        "seat": "codex",
+        "at": "2026-09-19T02:14:51+00:00",
+        "lease_expires": "2026-09-19T02:59:51+00:00",
+        "pid": null,
+        "host": "Tenebris",
+        "dispatch_id": "0a482233-e439-4b39-a1f9-4f6c79300f9f"
+      }
     }
   ]
 }
