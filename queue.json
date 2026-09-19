@@ -1307,6 +1307,26 @@
         "host": "Tenebris",
         "dispatch_id": "8d95dc80-0430-449d-a58c-3e128640f5bb"
       }
+    },
+    {
+      "id": 16,
+      "title": "Escape always confirms before leaving",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0016-escape-always-confirms-before-leaving.cvm",
+      "seat": null,
+      "created": "2026-09-19T22:46:08+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T22:46:08+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }
