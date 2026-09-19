@@ -584,6 +584,26 @@
         "host": "Tenebris",
         "dispatch_id": "4f9f7c14-3776-4448-922e-e25d8f7b8a57"
       }
+    },
+    {
+      "id": 7,
+      "title": "Fix four agent-log parsing faults",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0007-fix-four-agent-log-parsing-faults.cvm",
+      "seat": null,
+      "created": "2026-09-19T02:14:51+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T02:14:51+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }
