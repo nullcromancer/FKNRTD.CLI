@@ -1,0 +1,6 @@
+CVM1|A|B
+E|Queue #10 and queue #11 were created from the same spec, docs/collab/briefs/10-workspace-creation-belongs-in-core.json
+E|pairctl pair always creates a new brief rather than dispatching an existing one, so the 02:57 dispatch made #11 instead of running #10
+E|The work described by this brief was implemented, audited and landed as #11 (merge 5741b56, implementation 3ebd139)
+E|#10's worktree was never written to: it sat at e547712 with a clean status, and has been removed
+Q|Closed as a duplicate, not as work abandoned. Nothing in this brief is outstanding.
