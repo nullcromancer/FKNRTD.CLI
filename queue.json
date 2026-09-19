@@ -1256,8 +1256,8 @@
     {
       "id": 15,
       "title": "Escape always confirms before leaving",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "blocked",
+      "phase": "blocked",
       "path": "briefs/0015-escape-always-confirms-before-leaving.cvm",
       "seat": "codex",
       "created": "2026-09-19T21:26:01+00:00",
@@ -1290,6 +1290,13 @@
           "seat": "codex",
           "pid": 3628,
           "dispatch_id": "8d95dc80-0430-449d-a58c-3e128640f5bb"
+        },
+        {
+          "type": "audit",
+          "at": "2026-09-19T22:46:40+00:00",
+          "seat": "claude",
+          "verdict": "block",
+          "wire": "CVM1|A|B\nE|Died on a Codex usage limit 27,228 tokens in, having changed nothing: its worktree has zero modified paths\nE|A second entry, #16, carries the same brief and is the live one\nE|No work is lost and nothing needs unpicking\nQ|Two entries appeared for one brief. The likely cause is an earlier chained dispatch firing as it was being stopped, rather than a second pair invocation.\n"
         }
       ],
       "round": 1,

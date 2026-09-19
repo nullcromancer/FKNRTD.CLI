@@ -1,0 +1,5 @@
+CVM1|A|B
+E|Died on a Codex usage limit 27,228 tokens in, having changed nothing: its worktree has zero modified paths
+E|A second entry, #16, carries the same brief and is the live one
+E|No work is lost and nothing needs unpicking
+Q|Two entries appeared for one brief. The likely cause is an earlier chained dispatch firing as it was being stopped, rather than a second pair invocation.
