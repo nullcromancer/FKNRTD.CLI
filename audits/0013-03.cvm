@@ -1,0 +1,11 @@
+CVM1|A|F
+E|Round 3 fixed three of the four items. Built and ran the suite: 0 warnings, 0 errors, 138/138
+E|Line endings now match: stripping escapes from the coloured frame yields the -no-color frame byte for byte, both with 0 carriage returns
+E|The widened self-test is correct and well reasoned: it captures stdout BYTES to a file because ProcessRunner normalizes CRLF, which is exactly what hid the regression, and it says so in a comment
+E|AGENTS.md now carves out telemetry claude-statusline from the redirection rule, and states why
+E|owner/repository works: a workspace with a GitHub remote renders nullcromancer/FKNRTD.CLI rather than the folder name
+T|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 138/138
+T|Rendered a workspace with a GitHub remote at 100, 140 and 200 columns and compared against the reference layout
+B|THE REFERENCE ROW LAYOUT WAS NOT APPLIED. Rendering at 140 columns currently gives row 1 'FKN \p nullcromancer/FKNRTD.CLI \p master mod:3 ahead:N/A behind:N/A' and row 2 'CTX ....85% \p Claude 5h .. \p Codex 5h .. \p Claude o offline \p Codex o offline \p SAFE'. The reference wants CTX on row 1, the word 'left' after the percentage, the modified count and ahead/behind as compact glyph-plus-number rather than 'mod:' and 'ahead:' and 'behind:' labels, the branch beside the repository rather than after a pipe, and row 2's agent entries compact as a two-letter prefix and glyph.
+Q|This is round 4 of a max_rounds=4 profile, so the brief now carries a literal target string to remove any ambiguity about arrangement.

@@ -1080,10 +1080,10 @@
     {
       "id": 13,
       "title": "Statusline: bars, git health, code health, priority",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "ready",
+      "phase": "repair-ready",
       "path": "briefs/0013-statusline-bars-git-health-code-health-p.cvm",
-      "seat": "codex",
+      "seat": null,
       "created": "2026-09-19T20:54:44+00:00",
       "reports": [],
       "events": [
@@ -1156,6 +1156,13 @@
           "seat": "codex",
           "pid": 2308,
           "dispatch_id": "626a91c2-ab09-46e8-914a-c916f3d3c0e2"
+        },
+        {
+          "type": "audit",
+          "at": "2026-09-19T21:25:54+00:00",
+          "seat": "claude",
+          "verdict": "fail",
+          "wire": "CVM1|A|F\nE|Round 3 fixed three of the four items. Built and ran the suite: 0 warnings, 0 errors, 138/138\nE|Line endings now match: stripping escapes from the coloured frame yields the -no-color frame byte for byte, both with 0 carriage returns\nE|The widened self-test is correct and well reasoned: it captures stdout BYTES to a file because ProcessRunner normalizes CRLF, which is exactly what hid the regression, and it says so in a comment\nE|AGENTS.md now carves out telemetry claude-statusline from the redirection rule, and states why\nE|owner/repository works: a workspace with a GitHub remote renders nullcromancer/FKNRTD.CLI rather than the folder name\nT|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors\nT|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 138/138\nT|Rendered a workspace with a GitHub remote at 100, 140 and 200 columns and compared against the reference layout\nB|THE REFERENCE ROW LAYOUT WAS NOT APPLIED. Rendering at 140 columns currently gives row 1 'FKN \\p nullcromancer/FKNRTD.CLI \\p master mod:3 ahead:N/A behind:N/A' and row 2 'CTX ....85% \\p Claude 5h .. \\p Codex 5h .. \\p Claude o offline \\p Codex o offline \\p SAFE'. The reference wants CTX on row 1, the word 'left' after the percentage, the modified count and ahead/behind as compact glyph-plus-number rather than 'mod:' and 'ahead:' and 'behind:' labels, the branch beside the repository rather than after a pipe, and row 2's agent entries compact as a two-letter prefix and glyph.\nQ|This is round 4 of a max_rounds=4 profile, so the brief now carries a literal target string to remove any ambiguity about arrangement.\n"
         }
       ],
       "round": 3,
@@ -1164,15 +1171,7 @@
       "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0013-statusline-bars-git-health-code-health-p",
       "branch": "codex/pair-13-statusline-bars-git-health-code-health-p",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
-      "base_oid": "6d94e78529e2bbf3dc68512752b3cc973460f67b",
-      "claim": {
-        "seat": "codex",
-        "at": "2026-09-19T21:19:43+00:00",
-        "lease_expires": "2026-09-19T22:04:43+00:00",
-        "pid": 2308,
-        "host": "Tenebris",
-        "dispatch_id": "626a91c2-ab09-46e8-914a-c916f3d3c0e2"
-      }
+      "base_oid": "6d94e78529e2bbf3dc68512752b3cc973460f67b"
     },
     {
       "id": 14,
