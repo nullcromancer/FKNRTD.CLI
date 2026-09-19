@@ -12,5 +12,14 @@
 profile = "standard"
 implementer = "codex"
 
+# A linked Git worktree keeps its index under the MAIN repository's .git/worktrees/<name>/,
+# not inside the worktree directory. Codex runs under workspace-write, which makes the worktree
+# writable and nothing else, so every `git add` and `git commit` it attempted failed with
+# "Unable to create ... index.lock: Permission denied" - three rounds in a row, each time after
+# the work itself was finished and verified. The pairing runtime also stages through a temporary
+# index under TEMP. Both directories are granted explicitly rather than widening the sandbox to
+# danger-full-access, which would give away everything else with them.
+codex_extra_args = ["--add-dir", "C:\DEV\GIT\FKNRTD.CLI\.git", "--add-dir", "C:\Users\ms\AppData\Local\Temp"]
+
 [verification]
 commands = ["dotnet build FKNRTD.CLI.sln -c Release", "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build"]
