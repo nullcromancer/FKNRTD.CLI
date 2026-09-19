@@ -1205,6 +1205,26 @@
       "round": 0,
       "protocol": "caveman-v1",
       "worktree": null
+    },
+    {
+      "id": 15,
+      "title": "Escape always confirms before leaving",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0015-escape-always-confirms-before-leaving.cvm",
+      "seat": null,
+      "created": "2026-09-19T21:26:01+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T21:26:01+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }
