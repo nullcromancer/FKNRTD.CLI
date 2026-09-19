@@ -941,6 +941,19 @@ static Task TestCodexUsageAsync()
     using var missing = JsonDocument.Parse("{\"rateLimits\":{}}");
     var unavailable = UsageService.ParseCodexRateLimits(missing.RootElement);
     Equal<double?>(null, unavailable.FiveHourRemainingPercent, "Missing Codex bucket");
+
+    // The app server reads line-delimited JSON, so a byte-order mark ahead of the first line makes
+    // the opening message unparseable and it is dropped without a word. That cost the handshake its
+    // answer and made every later call fail as "Not initialized" - an error pointing at the wrong
+    // thing. Encoding.UTF8 carries a mark; this must not quietly become it again.
+    Equal(0, UsageService.AppServerEncoding.GetPreamble().Length, "App server stream carries no byte-order mark");
+    var probe = new MemoryStream();
+    using (var writer = new StreamWriter(probe, UsageService.AppServerEncoding, leaveOpen: true))
+    {
+        writer.WriteLine("{\"method\":\"initialize\",\"id\":1}");
+    }
+
+    Equal((byte)'{', probe.ToArray()[0], "The first byte the app server receives is the message itself");
     return Task.CompletedTask;
 }
 

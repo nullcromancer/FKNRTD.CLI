@@ -41,6 +41,15 @@ public sealed class UsageService
         UpdatedAt = DateTimeOffset.UtcNow
     };
 
+    /// <summary>
+    /// UTF-8 with no byte-order mark, for talking to the Codex app server. <see cref="Encoding.UTF8"/>
+    /// carries one, and the writer emits it ahead of the first line: the server reads line-delimited
+    /// JSON, so those three bytes made the opening message unparseable and it was dropped without a
+    /// word. The handshake was never answered, and every later call was refused as "Not initialized" -
+    /// an error that points at the wrong thing entirely.
+    /// </summary>
+    internal static readonly Encoding AppServerEncoding = new UTF8Encoding(false);
+
     public async Task<UsageSnapshot> RefreshCodexAsync(CancellationToken cancellationToken = default)
     {
         var executable = ExecutableLocator.Find("codex")
@@ -54,9 +63,9 @@ public sealed class UsageService
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
+            StandardInputEncoding = AppServerEncoding,
+            StandardOutputEncoding = AppServerEncoding,
+            StandardErrorEncoding = AppServerEncoding
         };
         startInfo.ArgumentList.Add("app-server");
 
@@ -81,6 +90,37 @@ public sealed class UsageService
                     clientInfo = new { name = "fknrtd", title = "FKNRTD.CLI", version = "1.0.0" }
                 }
             }, timeout.Token).ConfigureAwait(false);
+            // The handshake is a request, not a formality: the server answers "Not initialized" to
+            // anything that arrives before it has replied. Sending all three back to back raced it
+            // and lost, so the reply to id 1 is awaited before the session is declared ready.
+            while (!timeout.IsCancellationRequested)
+            {
+                var handshake = await process.StandardOutput.ReadLineAsync(timeout.Token).ConfigureAwait(false);
+                if (handshake is null)
+                {
+                    var failure = await errorTask.ConfigureAwait(false);
+                    throw new InvalidOperationException(
+                        "Codex app-server ended before completing its handshake, so no rate limits " +
+                        "could be read. Check that 'codex' runs and is signed in." +
+                        (failure.Length > 0 ? " " + failure.Trim() : string.Empty));
+                }
+
+                using var reply = JsonDocument.Parse(handshake);
+                if (!TryGetInt(reply.RootElement, "id", out var handshakeId) || handshakeId != 1)
+                {
+                    continue;
+                }
+
+                if (TryGetProperty(reply.RootElement, "error", out var handshakeError))
+                {
+                    throw new InvalidOperationException(
+                        "Codex refused the app-server handshake, so no rate limits could be read: " +
+                        handshakeError.GetRawText() + " Check that 'codex' runs and is signed in.");
+                }
+
+                break;
+            }
+
             await SendAsync(process, new { method = "initialized", @params = new { } }, timeout.Token)
                 .ConfigureAwait(false);
             await SendAsync(process, new { method = "account/rateLimits/read", id = 2 }, timeout.Token)
