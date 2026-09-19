@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>FKNRTD</RootNamespace>
+    <AssemblyName>FKNRTD.Content</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FKNRTD.Core\FKNRTD.Core.csproj" />
+  </ItemGroup>
+</Project>
