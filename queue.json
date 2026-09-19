@@ -935,8 +935,8 @@
     {
       "id": 12,
       "title": "Doctor parity and diff failure",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "audit-passed",
+      "phase": "audit-passed",
       "path": "briefs/0012-doctor-parity-and-diff-failure.cvm",
       "seat": "codex",
       "created": "2026-09-19T17:30:09+00:00",
@@ -969,6 +969,13 @@
           "seat": "codex",
           "pid": 18032,
           "dispatch_id": "b6f16313-9a6f-489d-a351-711dbac6070d"
+        },
+        {
+          "type": "audit",
+          "at": "2026-09-19T17:41:11+00:00",
+          "seat": "claude",
+          "verdict": "pass",
+          "wire": "CVM1|A|P\nE|Built and ran the suite in the worktree: 0 warnings, 0 errors, 125/125\nE|Both new Git checks gated behind gitRequired = mode == WorkspaceMode.Git; standalone skips them\nE|Core stays Console-free; portal regenerates deterministically; Content tables updated rather than prose in a screen\nE|GetDiffAsync returns a third Error member; both callers surface it; CLI exits 2 instead of printing no-changes\nE|Reproduced the one finding end to end with a detached-HEAD workspace, then reproduced the fix the same way\nT|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors\nT|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 125/125\nT|fknrtd doctor in a detached-HEAD workspace => names HEAD and says no defaultBaseRef is set\nT|fknrtd doctor with defaultBaseRef=main => 'main resolves to a commit.'\nB|FIXED IN THE AUDIT SEAT: the base-branch check interpolated an empty defaultBaseRef into its own message, printing a headless '\u221a Base branch resolves   resolves to a commit.' and naming something other than the ref it probed. It now names HEAD explicitly and tells the reader to set defaultBaseRef. A self-test covers the unset case and asserts the detail never opens headless.\nQ|The wording fix was made by the auditing seat rather than a repair round, at the user's explicit direction, so that one hunk had no independent reviewer.\n"
         }
       ],
       "round": 1,

@@ -1,0 +1,12 @@
+CVM1|A|P
+E|Built and ran the suite in the worktree: 0 warnings, 0 errors, 125/125
+E|Both new Git checks gated behind gitRequired = mode == WorkspaceMode.Git; standalone skips them
+E|Core stays Console-free; portal regenerates deterministically; Content tables updated rather than prose in a screen
+E|GetDiffAsync returns a third Error member; both callers surface it; CLI exits 2 instead of printing no-changes
+E|Reproduced the one finding end to end with a detached-HEAD workspace, then reproduced the fix the same way
+T|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 125/125
+T|fknrtd doctor in a detached-HEAD workspace => names HEAD and says no defaultBaseRef is set
+T|fknrtd doctor with defaultBaseRef=main => 'main resolves to a commit.'
+B|FIXED IN THE AUDIT SEAT: the base-branch check interpolated an empty defaultBaseRef into its own message, printing a headless '√ Base branch resolves   resolves to a commit.' and naming something other than the ref it probed. It now names HEAD explicitly and tells the reader to set defaultBaseRef. A self-test covers the unset case and asserts the detail never opens headless.
+Q|The wording fix was made by the auditing seat rather than a repair round, at the user's explicit direction, so that one hunk had no independent reviewer.
