@@ -1,5 +1,5 @@
 {
-  "goal": "Bring the Claude statusline up to the handoff document's information design, inside the existing C# renderer. The renderer already carries the badge, repository, branch, context, both agents' usage windows, agent activity and conflict state across three breakpoints. What it lacks is the document's graphical bars, Git health, code health, owner/repository naming, and an explicit priority rule that lets a critical condition displace telemetry.",
+  "goal": "Match a known-good two-row statusline layout the user runs elsewhere, keeping the FKN badge. Row 1: badge, owner/repository truncated with an ellipsis, branch, a CTX meter whose filled portion is green, the percentage with the word left, then a compact modified-file count. Row 2: Claude's two usage windows, Codex's two usage windows, then compact per-agent activity as a two-letter prefix, a state glyph and the intent. Colour is per segment throughout.",
   "scope": [
     "src/FKNRTD.Cli/Commands/StatusLineRenderer.cs is the only renderer. Extend it; do not add a second implementation.",
     "Graphical bars for context and for each usage window, drawn with the block glyphs already used at src/FKNRTD.Cli/Dashboard/Canvas.cs:129",
@@ -9,7 +9,12 @@
     "An explicit priority rule: a collision, a blocked agent or a failed verification is allowed to displace context and usage figures when width is short"
   ],
   "constraints": [
-    "REPAIR ROUND 2. The layout, width budget, bars, Git health, quality segment and N/A handling from round 1 are ACCEPTED - keep them. Two colour faults must be fixed and nothing else changed.",
+    "ROUND 3 TARGETS A REFERENCE LAYOUT. Rounds 1 and 2 are accepted: the width budget, meters, N/A handling, Git and quality reads, colour surviving redirection and per-segment Paint all stay. This round changes arrangement and wording to match the reference, and adds a coloured meter fill.",
+    "EXACT ROW CONTENT. Row 1, in order: the FKN badge; owner/repository truncated with a single-character ellipsis when it does not fit; the branch; CTX followed by a meter, the percentage and the word left; and the modified-file count as the warning glyph followed by the number, with no 'mod:' label. Row 2, in order: Claude 5h <pct> 7d <pct>; Codex 5h <pct> 7d <pct>; then one compact entry per agent of the form two-letter prefix, state glyph, space, intent - Cl for Claude, Cx for Codex - separated from each other by a single space rather than a pipe.",
+    "THE METER FILL IS GREEN when the value is healthy, and follows the existing threshold colours as it falls; the unfilled remainder stays muted. The percentage keeps its own colour and is always present.",
+    "PER-SEGMENT COLOUR MATCHING THE REFERENCE: badge cyan; owner/repository and branch blue; the CTX label amber with the percentage bright; the modified count amber; the word Claude and every Claude figure and activity entry orange; the word Codex and every Codex figure and activity entry purple. Never distinguish anything by colour alone - each keeps its glyph and its text.",
+    "GLYPHS: use only glyphs already drawn in this codebase. The reference image renders a circled badge mark, a framed square before the repository and a branch mark; none of those three appear anywhere in src and they are NOT to be introduced. Use the established equivalents that are already proven here for the running and warning marks, and give the badge, repository and branch no decorative prefix glyph at all.",
+    "DO NOT attempt a third row. The reference's third row is Claude Code's own footer - auto mode, the cycle hint and the agent count - and none of it is exposed to a statusline script. Emitting a third row would duplicate or contradict what Claude Code draws itself.",
     "COLOUR MUST SURVIVE REDIRECTION for this command only. Claude Code always pipes the statusline, so gating useColor on Console.IsOutputRedirected switches colour off in the only consumer there is. Remove that condition. Keep honouring -no-color and the NO_COLOR environment variable. AGENTS.md line 84 says redirected output must emit no ANSI escapes; amend that line to carve out the statusline, whose consumer renders ANSI rather than storing text, because a documented rule that contradicts the code is worse than one that is missing.",
     "RESTORE PER-SEGMENT COLOUR. Paint call sites fell from 18 to 2 and the whole line is now painted one colour. Each segment carries its own again: the FKN badge cyan, repository and branch blue, Claude's figures orange, Codex's figures purple, a healthy marker green, and any critical marker red and bold. Never distinguish anything by colour alone - every marker keeps its glyph and its text.",
     "DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.",
@@ -28,6 +33,13 @@
     "Do not touch provisioning, AgentRegistry, DoctorService, GetDiffAsync or the orchestrator. Separate briefs."
   ],
   "acceptance": [
+    "The circled badge mark, framed square and branch mark from the reference appear nowhere in src",
+    "No third row is emitted at any width",
+    "The badge, repository, Claude's figures and Codex's figures each carry their own distinct colour in a coloured frame",
+    "A healthy meter fills green and a falling one follows the existing threshold colours; the unfilled remainder is muted and the percentage is always present",
+    "owner/repository truncates with a single-character ellipsis rather than being dropped, and the branch survives the truncation",
+    "Row 2 renders Claude's two windows, Codex's two windows, then compact agent entries of the form Cl<glyph> <intent> and Cx<glyph> <intent>, space-separated",
+    "Row 1 renders badge, owner/repository, branch, a CTX meter with green fill, the percentage with the word left, and the modified count as a glyph plus a number with no 'mod:' label",
     "Piping this command to a file or another process still emits colour: the escape count is greater than zero, matching the landed binary's behaviour",
     "-no-color and NO_COLOR=1 each still emit exactly zero escapes",
     "Segments carry distinct colours: the badge, the repository, Claude's figures and Codex's figures are not all the same colour in a coloured frame",
