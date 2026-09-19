@@ -1312,7 +1312,7 @@
       "id": 16,
       "title": "Escape always confirms before leaving",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0016-escape-always-confirms-before-leaving.cvm",
       "seat": null,
       "created": "2026-09-19T22:46:08+00:00",
@@ -1323,10 +1323,23 @@
           "at": "2026-09-19T22:46:08+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T22:46:08+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0016-escape-always-confirms-before-leaving",
+          "branch": "codex/pair-16-escape-always-confirms-before-leaving",
+          "base": "74ec55efe658cc18a67967b89bc961815eed45ce"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0016-escape-always-confirms-before-leaving",
+      "branch": "codex/pair-16-escape-always-confirms-before-leaving",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "74ec55efe658cc18a67967b89bc961815eed45ce"
     }
   ]
 }
