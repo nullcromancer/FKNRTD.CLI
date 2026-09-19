@@ -681,6 +681,26 @@
         "host": "Tenebris",
         "dispatch_id": "d0547e97-23f9-4df3-9813-4ec85f40cfa2"
       }
+    },
+    {
+      "id": 8,
+      "title": "Keep a successful command line readable",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0008-keep-a-successful-command-line-readable.cvm",
+      "seat": null,
+      "created": "2026-09-19T02:23:11+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T02:23:11+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

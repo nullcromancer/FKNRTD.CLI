@@ -1,0 +1,20 @@
+CVM1|B
+G|Stop a successful command from being rendered worse than it was. In FKNRTD.Core/Services/LogLine.cs, FromItem's command_execution branch now annotates every successful command with its exit status and appends its whole output; restore the old success rendering and keep the new form for failures only.
+S|src/FKNRTD.Core/Services/LogLine.cs, FromItem, the command_execution branch only
+S|The self-test that asserts this behaviour in tests/FKNRTD.SelfTest/Program.cs
+C|The work is UNCOMMITTED in your worktree and that is expected - it is the previous round's output. Build on it. Do not revert the other three fixes (A, B and C) and do not touch them.
+C|DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the change, run the two verification commands, leave the work uncommitted, and describe it in your final message. The auditor commits.
+C|Do not introduce a new glyph. Do not add a using-alias.
+C|Change nothing else in the file.
+A|A command_execution with exit_code 0 renders exactly '> ' + Clip(command) - byte-identical to the behaviour before this work started, with no 'exit 0:' prefix and no aggregated_output appended - and LogKind.Did
+A|A command_execution with a non-zero exit_code keeps the new rendering: the × marker, the exit status, the command, and the output when present, as LogKind.Failed
+A|A command_execution with an absent or malformed exit_code still renders '> ' + Clip(command) as LogKind.Did, as it does now
+A|The self-test is updated to assert the success case matches the old rendering rather than the annotated one, and still covers the failure case
+A|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors
+A|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all pass
+F|src/FKNRTD.Core/Services/LogLine.cs:FromItem
+F|tests/FKNRTD.SelfTest/Program.cs
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+X|Fixes A, B and C from the previous round - they passed audit, leave them exactly as they are
+X|Any other file, any other behaviour
