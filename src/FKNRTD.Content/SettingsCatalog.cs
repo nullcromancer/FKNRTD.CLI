@@ -170,6 +170,19 @@ public static class SettingsCatalog
             "it there yourself and retry, or leave this on.",
             "auto-commit"),
 
+        new("statuslineIcons", "Statusline icons", Safety, "false",
+            "Whether the Claude Code statusline draws its badge, project and branch marks.",
+            "Off, the statusline names the badge, the repository and the branch in plain text. On, " +
+            "each gains a leading mark, and the running and modified markers use their rounder " +
+            "shapes. Nothing else changes: the same rows, the same figures, the same colours.",
+            "Turn it on only if your terminal font draws them. The marks were measured against the " +
+            "three fonts this product targets: Cascadia Mono has the badge and project marks, " +
+            "Consolas and Lucida Console have neither, and no stock Windows font has the branch " +
+            "mark at all — that one comes from a Nerd Font. On a font without them every mark is " +
+            "an empty box, which is worse than the plain text it replaced. The figures are never " +
+            "hidden behind a mark, so turning it on can cost you nothing but a glyph.",
+            "statusline"),
+
         new("agents", "Agents", AgentFields, "Claude and Codex",
             "The coding CLIs this workspace may assign work to.",
             "An array of agent definitions. Each carries an id, the executable to run, whether it is " +

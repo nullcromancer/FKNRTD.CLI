@@ -15,6 +15,7 @@ public sealed record FknrtdConfig
     public int DashboardRefreshMilliseconds { get; init; } = 1000;
     public bool RequireCleanTreeForLanding { get; init; } = true;
     public bool AutoCommitAgentChanges { get; init; } = true;
+    public bool StatuslineIcons { get; init; }
     public List<string> DefaultVerificationCommands { get; init; } = [];
     public List<AgentDefinition> Agents { get; init; } = [];
 }

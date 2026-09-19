@@ -2536,6 +2536,26 @@ static Task TestStatusLineBarsAsync()
     {
         True(line.Contains(window, StringComparison.Ordinal), "Usage window keeps its numbers: " + window);
     }
+
+    // Marks are opt-in because two of the three fonts this product targets cannot draw them, and
+    // no stock Windows font has the branch mark at all. Off is the shipped default, and a mark
+    // only ever precedes a label — so the row says the same things either way.
+    var health = new StatusLineRenderer.GitHealth("main", 3, 2, 0);
+    var plain = StatusLineRenderer.Render("owner/repo", "main", usage, usage, new(), [], [], 200, false, health);
+    var marked = StatusLineRenderer.Render("owner/repo", "main", usage, usage,
+        new() { StatuslineIcons = true }, [], [], 200, false, health);
+    foreach (var mark in new[] { "◉", "▣", "", "△" })
+    {
+        True(!plain.Contains(mark, StringComparison.Ordinal), "Default draws no mark: " + mark);
+        True(marked.Contains(mark, StringComparison.Ordinal), "Opt-in draws its mark: " + mark);
+    }
+
+    foreach (var label in new[] { "FKN", "owner/repo", "main", "50%" })
+    {
+        True(plain.Contains(label, StringComparison.Ordinal) && marked.Contains(label, StringComparison.Ordinal),
+            "A mark precedes its label rather than replacing it: " + label);
+    }
+
     return Task.CompletedTask;
 }
 

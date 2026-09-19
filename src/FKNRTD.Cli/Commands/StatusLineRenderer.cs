@@ -146,15 +146,20 @@ internal static class StatusLineRenderer
             if (Fits(row, candidate)) row.Add(candidate);
         }
 
-        var first = new List<Segment> { new("FKN", Tone.Badge) };
+        // Marks are opt-in because two of the three fonts this product targets cannot draw them,
+        // and a mark a font lacks is an empty box where a word used to be. They only ever precede
+        // a label, never replace one, so the row still reads without a single glyph.
+        var icons = config.StatuslineIcons;
+        var first = new List<Segment> { new(icons ? "◉ FKN" : "FKN", Tone.Badge) };
         if (critical) first.Add(new(string.Join(" ", alerts), Tone.Alert));
 
         // The branch belongs to the repository, so it rides inside the same field. Behind a
         // separator it would read as a different subject rather than as where this one is.
         var located = SingleLine(repository, width < 80 ? 14 : wide ? 40 : 24);
+        if (icons) located = "▣ " + located;
         if (twoRow && branch.Length > 0 && !branch.Equals("unknown", StringComparison.Ordinal))
         {
-            located += " " + SingleLine(branch, 20);
+            located += " " + (icons ? " " : string.Empty) + SingleLine(branch, 20);
         }
 
         Add(first, located, Tone.Repository);
@@ -180,7 +185,7 @@ internal static class StatusLineRenderer
         if (git is not null)
         {
             var state = new List<string>();
-            if (git.Modified is { } modified) state.Add("∆" + Number(modified));
+            if (git.Modified is { } modified) state.Add((icons ? "△" : "∆") + Number(modified));
             if (git.Ahead is { } ahead && git.Behind is { } behind)
             {
                 state.Add("↑" + Number(ahead) + "↓" + Number(behind));
@@ -208,7 +213,7 @@ internal static class StatusLineRenderer
         {
             var state = agents.FirstOrDefault(item =>
                 item.AgentId.Equals(definition.Id, StringComparison.OrdinalIgnoreCase));
-            var entry = Seat(definition.Id) + StateIcon(state?.State ?? AgentActivityState.Offline) +
+            var entry = Seat(definition.Id) + StateIcon(state?.State ?? AgentActivityState.Offline, icons) +
                         " " + SingleLine(state?.Intent ?? "offline", wide ? 24 : 16);
             var before = second.Count;
             Add(second, entry, SeatTone(definition.Id), listed == 0 ? " | " : " ");
@@ -415,10 +420,15 @@ internal static class StatusLineRenderer
                                                               left is not null && right is not null &&
                                                               Math.Abs(left.Value - right.Value) < 0.01;
 
-    private static string StateIcon(AgentActivityState? state) => state switch
+    /// <summary>
+    /// The running mark is the one that differs between the two sets. Every font this product
+    /// targets draws the pointer; only Cascadia Mono draws the rounder triangle, so it is reached
+    /// solely through the opt-in.
+    /// </summary>
+    private static string StateIcon(AgentActivityState? state, bool icons = false) => state switch
     {
         AgentActivityState.Planning => "◊",
-        AgentActivityState.Running => "►",
+        AgentActivityState.Running => icons ? "▶" : "►",
         AgentActivityState.Reviewing => "♦",
         AgentActivityState.Waiting => "▌",
         AgentActivityState.Blocked => "■",

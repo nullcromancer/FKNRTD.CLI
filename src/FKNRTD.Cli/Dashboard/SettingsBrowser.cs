@@ -158,7 +158,11 @@ internal sealed class SettingsBrowser : IOverlay
 
         new("autoCommitAgentChanges", WizardInput.Choice,
             config => config.AutoCommitAgentChanges ? "true" : "false",
-            (config, value) => config with { AutoCommitAgentChanges = value == "true" })
+            (config, value) => config with { AutoCommitAgentChanges = value == "true" }),
+
+        new("statuslineIcons", WizardInput.Choice,
+            config => config.StatuslineIcons ? "true" : "false",
+            (config, value) => config with { StatuslineIcons = value == "true" })
     ];
 
     /// <summary>
@@ -427,6 +431,9 @@ internal sealed class SettingsBrowser : IOverlay
         "autoCommitAgentChanges" => (
             "Commit what an agent wrote at the end of its stage, so the work survives",
             "Leave the changes uncommitted for you to handle yourself"),
+        "statuslineIcons" => (
+            "Draw the badge, project and branch marks — needs a font that has them",
+            "Name the badge, project and branch in plain text, which every font can draw"),
         _ => ("On", "Off")
     };
 
