@@ -1,0 +1,5 @@
+CVM1|A|B
+E|Dispatched into a fresh worktree that lacked #7's uncommitted work, so it re-implemented fix D alone against the moved file. Its correction - annotate only a non-zero exit - was the right one and was folded into #7, together with its stronger malformed-exit-code cases (1.5 and 2147483648 are JSON numbers that are not int32). Landed as part of c3e9bbd.
+T|dotnet build => 0 warnings 0 errors
+T|self-test => 117/117 (auditor, after consolidation)
+B|Superseded: its content is in #7, which has landed.
