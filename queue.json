@@ -913,6 +913,26 @@
         "host": "Tenebris",
         "dispatch_id": "b2b8673b-19d6-422a-913a-9be1fc7d0f06"
       }
+    },
+    {
+      "id": 12,
+      "title": "Doctor parity and diff failure",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0012-doctor-parity-and-diff-failure.cvm",
+      "seat": null,
+      "created": "2026-09-19T17:30:09+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T17:30:09+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

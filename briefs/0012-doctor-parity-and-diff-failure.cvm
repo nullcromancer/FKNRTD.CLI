@@ -1,0 +1,38 @@
+CVM1|B
+G|Stop the product reporting success where it has not checked, and stop it reporting 'no changes' where Git failed. Doctor passes prerequisites the orchestrator then enforces mid-run, and GetDiffAsync cannot tell a caller the difference between a task that changed nothing and a Git command that did not run.
+S|DoctorService: add the three checks it is missing, listed in acceptance
+S|GitService.GetDiffAsync: let a failed Git command be reported as one
+S|The two GetDiffAsync callers so the failure reaches the person reading the screen
+C|DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.
+C|A standalone workspace has no Git and no base branch. Every check added here must be mode-gated or degrade without throwing, and must not be reported as a failure in a standalone workspace where it does not apply. AGENTS.md is explicit about this.
+C|Do not make doctor run an agent, and no self-test may start a real agent: point every executable at a name nothing resolves, or supply a fake agent by re-executing the suite.
+C|A refusal states its reason: every new check's failure text must say what is wrong, why it matters, and what to do about it, in the voice the existing checks use. Read the existing checks before writing new ones.
+C|Every new check needs an entry wherever the existing checks are explained; do not write prose into a screen. If a check has no catalog entry the self-tests will tell you.
+C|FKNRTD.Core must not reference FKNRTD.Cli and must contain no Console or terminal code.
+C|TreatWarningsAsErrors is on; the build must be warning-free.
+C|Add a self-test per behaviour change, in the existing Check(...) style.
+C|Do not touch provisioning, AgentRegistry, the wizard, or change notification. Separate briefs.
+A|DOCTOR A - stage profiles: DoctorService checks only the 'audit' profile, falling back to 'default' (DoctorService.cs:176). Orchestrator.ResolveProfile resolves 'plan', 'implement' AND 'audit', each falling back to 'default', and THROWS InvalidOperationException mid-run when neither exists. So an agent with no 'plan' profile and no 'default' passes doctor and then fails the task at the plan stage. Doctor must check every stage profile the orchestrator will actually resolve.
+A|DOCTOR B - base branch: doctor has no check on DefaultBaseRef at all, while Orchestrator.RepairTaskBaseRefAsync deals with a base ref that does not resolve at run time. In a Git-mode workspace, doctor must check that the configured base branch resolves, and say so when it does not. In a standalone workspace there is no base branch and this must not be reported as a fault.
+A|DOCTOR C - autoCommitAgentChanges: doctor does not look at it; Orchestrator.cs:507 branches on it. When it is off and the worktree is dirty, agent changes are not committed and the run behaves differently from what an operator expects. Doctor must report that combination, and must not report it when the setting is on or the tree is clean.
+A|DIFF - a failed Git command is not 'no changes': GitService.GetDiffAsync ignores failure (the 'if (committed.Success)' at GitService.cs:199 and the same shape for the pending diff), so a deleted base branch or a timeout returns an empty diff with Truncated false, and both surfaces tell the reader the task changed nothing. Change the result so a caller can tell the two apart, and make 'fknrtd task diff' and the dashboard's diff view say Git failed and why, instead of reporting no changes.
+A|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors
+A|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all pass
+A|A self-test proves each of the four: an agent missing a stage profile is now reported; an unresolvable base ref is reported in Git mode and not in standalone; autoCommit off with a dirty tree is reported; a failed Git diff reads as a failure rather than as an empty diff
+A|fknrtd portal regenerates fknrtd-portal.html byte-identically
+F|src/FKNRTD.Core/Services/DoctorService.cs:176
+F|src/FKNRTD.Core/Services/Orchestrator.cs:ResolveProfile
+F|src/FKNRTD.Core/Services/Orchestrator.cs:RepairTaskBaseRefAsync
+F|src/FKNRTD.Core/Services/Orchestrator.cs:507
+F|src/FKNRTD.Core/Services/GitService.cs:GetDiffAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:1038
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:1582
+F|tests/FKNRTD.SelfTest/Program.cs:6899
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+X|Workspace provisioning
+X|AgentRegistry
+X|Wizard.Store, Back-without-validation, Reopen
+X|Change notification and file watching
+X|GetDiffAsync's other two known weaknesses - that it concatenates committed and pending diffs, and reads them in separate observations. Leave both alone; only the failure-is-not-emptiness fault is in scope.
+U|The right shape for GetDiffAsync's result. A tuple is returned today and three self-tests destructure it. Decide between extending the tuple and returning a record, and say which you chose and why.
