@@ -492,7 +492,7 @@
       "id": 6,
       "title": "Share and correct agent-log reading",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0006-share-and-correct-agent-log-reading.cvm",
       "seat": null,
       "created": "2026-09-19T02:06:33+00:00",
@@ -503,10 +503,23 @@
           "at": "2026-09-19T02:06:33+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T02:06:33+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0006-share-and-correct-agent-log-reading",
+          "branch": "codex/pair-6-share-and-correct-agent-log-reading",
+          "base": "1ad6b279dbc07d4f6d4ab1ad83ac20f0390cd8f2"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0006-share-and-correct-agent-log-reading",
+      "branch": "codex/pair-6-share-and-correct-agent-log-reading",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "1ad6b279dbc07d4f6d4ab1ad83ac20f0390cd8f2"
     }
   ]
 }
