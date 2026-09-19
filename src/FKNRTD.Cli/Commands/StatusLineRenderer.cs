@@ -17,7 +17,11 @@ internal static class StatusLineRenderer
             var input = await Console.In.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
             using var document = JsonDocument.Parse(input);
             var claude = UsageService.ParseClaudeStatusLine(document.RootElement);
-            var start = ReadString(document.RootElement, "workspace", "current_dir") ??
+            // -root wins over the payload, and the payload over the ambient directory. Without the
+            // first of those, a caller that passes -root is silently answered about wherever the
+            // process happens to be standing — which reads as isolation and is not.
+            var start = arguments.Get("root") ??
+                        ReadString(document.RootElement, "workspace", "current_dir") ??
                         ReadString(document.RootElement, "workspace", "project_dir") ??
                         Environment.CurrentDirectory;
 
