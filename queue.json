@@ -360,7 +360,7 @@
       "id": 5,
       "title": "Extract FKNRTD.Content from the CLI",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0005-extract-fknrtd-content-from-the-cli.cvm",
       "seat": null,
       "created": "2026-09-19T01:54:55+00:00",
@@ -371,10 +371,23 @@
           "at": "2026-09-19T01:54:55+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T01:54:55+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0005-extract-fknrtd-content-from-the-cli",
+          "branch": "codex/pair-5-extract-fknrtd-content-from-the-cli",
+          "base": "3c0fec1ef90a47d69ea2bb731a916aea9a68aec9"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0005-extract-fknrtd-content-from-the-cli",
+      "branch": "codex/pair-5-extract-fknrtd-content-from-the-cli",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "3c0fec1ef90a47d69ea2bb731a916aea9a68aec9"
     }
   ]
 }
