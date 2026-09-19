@@ -1,0 +1,66 @@
+{
+  "goal": "Bring the Claude statusline up to the handoff document's information design, inside the existing C# renderer. The renderer already carries the badge, repository, branch, context, both agents' usage windows, agent activity and conflict state across three breakpoints. What it lacks is the document's graphical bars, Git health, code health, owner/repository naming, and an explicit priority rule that lets a critical condition displace telemetry.",
+  "scope": [
+    "src/FKNRTD.Cli/Commands/StatusLineRenderer.cs is the only renderer. Extend it; do not add a second implementation.",
+    "Graphical bars for context and for each usage window, drawn with the block glyphs already used at src/FKNRTD.Cli/Dashboard/Canvas.cs:129",
+    "Git health beside the branch: count of modified paths, and ahead/behind against the upstream",
+    "Code health from the most recent task's QualitySnapshot: tests passed/failed and lint issues",
+    "owner/repository when a GitHub remote can be read; fall back to the current project name otherwise",
+    "An explicit priority rule: a collision, a blocked agent or a failed verification is allowed to displace context and usage figures when width is short"
+  ],
+  "constraints": [
+    "DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.",
+    "GLYPHS: use only glyphs this codebase already draws. The source design proposes a set that is NOT used anywhere here and must NOT be introduced. Forbidden new glyphs and their approved replacements, which are already in StatusLineRenderer.cs: use the existing state icons and markers rather than adding a circled bullet for the badge, a framed square for the project, a branch symbol, or tick/cross marks. AGENTS.md records that four glyphs were missing from all three measured fonts, including a failure marker that drew as an empty box on a default Windows Terminal. Block glyphs for bars are proven and allowed.",
+    "NAMING: the source design's worked examples use a former company and product name, and one example still carries the pre-rename three-letter badge. None of that may appear in code, comment, test, catalog entry or commit message. The badge is FKN. AGENTS.md forbids any reference to the former names.",
+    "Do not port the source design's Python implementation or its installer. FKNRTD.CLI ships as one dependency-free dotnet tool and already owns this surface through fknrtd telemetry claude-statusline.",
+    "Colour is only ever an enhancement: stripping the escapes from a coloured frame must leave exactly the colourless frame, character for character. A self-test asserts this.",
+    "Never assume one char is one terminal column. Bars and truncation must not shift a row's width.",
+    "The three breakpoints stay: narrow under 80, medium under 100, then under 140, then wide. A statusline must never wrap.",
+    "Never display fake precision. A figure with no measurable source renders N/A, as the Codex windows already do.",
+    "The renderer must stay cheap and must not block: no remote Git, no agent queries, no test runners on the render path. Read local state only.",
+    "Every new marker, field or concept needs its entry in src/FKNRTD.Content/ - Glossary, CommandCatalog, Keymap or SettingsCatalog as applicable. Self-tests fail if a marker the renderer can draw has no entry.",
+    "TreatWarningsAsErrors is on; the build must be warning-free. Nullable stays enabled. No new NuGet packages.",
+    "FKNRTD.Core must not reference FKNRTD.Cli and must contain no Console or terminal code.",
+    "Add a self-test per behaviour change, in the existing Check(...) style. No self-test may start a real agent.",
+    "Do not touch provisioning, AgentRegistry, DoctorService, GetDiffAsync or the orchestrator. Separate briefs."
+  ],
+  "acceptance": [
+    "Context and each usage window render a proportional bar beside the percentage at the widths that have room for one, and the percentage is always present - the bar never replaces the number",
+    "A bar built from a null percentage renders N/A and no bar, never an empty or full bar",
+    "Git health shows the modified-path count and ahead/behind beside the branch, and degrades without throwing in a standalone workspace and in a repository with no upstream",
+    "Code health shows tests passed/failed and lint issues from the most recent task's QualitySnapshot, and is omitted rather than zeroed when no task has been verified",
+    "owner/repository is shown when a GitHub remote is readable, falling back to the project name; reading the remote must not run a network call",
+    "A collision, a blocked agent or a failed verification displaces context and usage figures at narrow widths, and is still shown at every width",
+    "Stripping ANSI escapes from every statusline variant leaves exactly the colourless variant, character for character",
+    "No statusline variant exceeds the width it was rendered for, at 60, 80, 100, 120, 140 and 200 columns",
+    "grep the source tree for the former company name, the former product name and the pre-rename badge and find nothing",
+    "Every glyph the renderer can draw appears in the existing approved set; no new glyph is introduced",
+    "dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors",
+    "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all pass, count is 130 + the tests you added",
+    "fknrtd portal regenerates fknrtd-portal.html byte-identically after any Content change is reflected"
+  ],
+  "files": [
+    "src/FKNRTD.Cli/Commands/StatusLineRenderer.cs",
+    "src/FKNRTD.Cli/Dashboard/Canvas.cs:129",
+    "src/FKNRTD.Core/Domain/Models.cs:QualitySnapshot",
+    "src/FKNRTD.Core/Services/QualityCategories.cs",
+    "src/FKNRTD.Core/Services/GitService.cs",
+    "src/FKNRTD.Content/Glossary.cs",
+    "tests/FKNRTD.SelfTest/Program.cs"
+  ],
+  "tests": [
+    "dotnet build FKNRTD.CLI.sln -c Release",
+    "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build"
+  ],
+  "exclude": [
+    "The full command-centre dashboard, its twenty modules, its panel layout and its keyboard map. That is a separate and much larger brief.",
+    "Lead/support agent roles",
+    "A cross-agent message bus",
+    "A new cache directory or background collector process",
+    "Nerd Font support",
+    "Any change to how Codex usage is collected"
+  ],
+  "unknowns": [
+    "Whether the most recent task is the right source for code health, or whether it should be the most recently verified task. Pick one, state which in the report, and cover it with a test."
+  ]
+}
