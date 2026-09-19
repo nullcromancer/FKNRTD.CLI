@@ -10,6 +10,11 @@
 
 [pairing]
 profile = "standard"
+
+# Two repair rounds is the standard-profile default and it has not been enough here, because
+# rounds were spent on the environment rather than on the work: a sandbox that cannot commit, a
+# worktree missing its prerequisite commit. Four leaves room for an actual second look.
+max_rounds = 4
 implementer = "codex"
 
 # A linked Git worktree keeps its index under the MAIN repository's .git/worktrees/<name>/,
