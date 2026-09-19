@@ -182,7 +182,7 @@ public sealed class GitService
     /// A ceiling on what is returned. A diff is unbounded and the caller is a terminal; a very large
     /// change is reported as truncated rather than read entirely into memory.
     /// </param>
-    public async Task<(IReadOnlyList<string> Lines, bool Truncated)> GetDiffAsync(
+    public async Task<(IReadOnlyList<string> Lines, bool Truncated, string? Error)> GetDiffAsync(
         string directory,
         string baseRef,
         int maximumLines = 4000,
@@ -196,14 +196,15 @@ public sealed class GitService
                     ["diff", "--no-color", $"{baseRef}...HEAD"],
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (committed.Success)
-            {
-                lines.AddRange(SplitLines(committed.StandardOutput));
-            }
+            if (!committed.Success)
+                return ([], false, DiffFailure("committed diff", committed));
+            lines.AddRange(SplitLines(committed.StandardOutput));
         }
 
         var pending = await GitAsync(directory, ["diff", "--no-color", "HEAD"], cancellationToken)
             .ConfigureAwait(false);
+        if (!pending.Success)
+            return ([], false, DiffFailure("pending diff", pending));
         if (pending.Success)
         {
             var uncommitted = SplitLines(pending.StandardOutput);
@@ -228,7 +229,12 @@ public sealed class GitService
         var contentWithheld = false;
         if (lines.Count <= maximumLines)
         {
-            var untracked = await GetUntrackedPathsAsync(directory, cancellationToken).ConfigureAwait(false);
+            var status = await GitAsync(directory,
+                ["--no-optional-locks", "status", "--porcelain=v1", "-z", "-uall"], cancellationToken)
+                .ConfigureAwait(false);
+            if (!status.Success)
+                return ([], false, DiffFailure("new-file status", status));
+            var untracked = ParseUntrackedPaths(status.StandardOutput);
             if (untracked.Count > 0)
             {
                 if (lines.Count > 0)
@@ -269,6 +275,8 @@ public sealed class GitService
 
                     // --no-index reports a difference by exiting 1, so Success is the wrong
                     // question: an exit of 0 here means the file was identical to nothing.
+                    if (added.StartFailed || added.TimedOut || added.ExitCode is not (0 or 1))
+                        return ([], false, DiffFailure($"new-file diff for '{path}'", added));
                     var body = SplitLines(added.StandardOutput);
                     if (body.Count > 0)
                     {
@@ -286,8 +294,15 @@ public sealed class GitService
         }
 
         return lines.Count > maximumLines
-            ? (lines.Take(maximumLines).ToArray(), true)
-            : (lines, contentWithheld);
+            ? (lines.Take(maximumLines).ToArray(), true, null)
+            : (lines, contentWithheld, null);
+    }
+
+    private static string DiffFailure(string operation, CommandResult result)
+    {
+        var reason = result.StartFailed ? "could not start" : result.TimedOut ? "timed out"
+            : $"exited with code {result.ExitCode}";
+        return $"Git failed while reading the {operation}: {reason}. {result.StandardError.Trim()}".Trim();
     }
 
     /// <summary>

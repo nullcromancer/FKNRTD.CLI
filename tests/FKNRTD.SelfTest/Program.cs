@@ -306,6 +306,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A too-small window says so", TestATooSmallWindowSaysSoAsync),
     ("Doctor does not tick what is not there", TestDoctorDoesNotTickWhatIsNotThereAsync),
     ("An agent can be repointed from the command line", TestAnAgentCanBeRepointedFromTheCommandLineAsync),
+    ("Doctor checks stage profiles", TestDoctorStageProfilesAsync),
+    ("Doctor checks base refs by mode", TestDoctorBaseRefAsync),
+    ("Doctor reports dirty trees without automatic commits", TestDoctorAutoCommitAsync),
+    ("Git diff failures reach both surfaces", TestDiffFailureAsync),
     ("Doctor asks whether Git can commit", TestDoctorAsksWhetherGitCanCommitAsync),
     ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync),
     ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen),
@@ -6901,7 +6905,7 @@ static async Task TestANewFileIsInTheDiffAsync()
         Equal(string.Empty, pending.StandardOutput.Trim(),
             "Git itself still shows nothing, which is the whole reason this test exists");
 
-        var (lines, truncated) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
+        var (lines, truncated, _) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
         Equal(false, truncated, "One new file does not fill the line budget");
         True(lines.Count > 0, "A task that added a file has not changed nothing");
         True(lines.Any(line => line.Contains("new files, not yet added to Git (1)", StringComparison.Ordinal)),
@@ -6917,7 +6921,7 @@ static async Task TestANewFileIsInTheDiffAsync()
                 "second" + "\n",
                 new UTF8Encoding(false))
             .ConfigureAwait(false);
-        var (both, _) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
+        var (both, _, _) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
         True(both.Any(line => line.Contains("-first", StringComparison.Ordinal)),
             "The tracked edit is still shown");
         True(both.Any(line => line.Contains("+public sealed class Feature;", StringComparison.Ordinal)),
@@ -6936,7 +6940,7 @@ static async Task TestANewFileIsInTheDiffAsync()
                 .ConfigureAwait(false);
         }
 
-        var (many, manyTruncated) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
+        var (many, manyTruncated, _) = await git.GetDiffAsync(root, "main").ConfigureAwait(false);
         Equal(true, manyTruncated, "Sixty new files do not all fit, and the caller is told so");
         True(many.Any(line => line.Contains("bulk59.txt", StringComparison.Ordinal)),
             "Every new file is still named, even the ones not opened");
@@ -7312,6 +7316,103 @@ static async Task TestCoreVerificationDetectionAsync()
     });
 }
 
+static async Task TestDoctorStageProfilesAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var agent = new AgentDefinition { Id = "fake", Executable = "fknrtd-missing-test-agent",
+            Profiles = new() { ["audit"] = new() } };
+        var config = new FknrtdConfig { Mode = WorkspaceMode.Standalone, Agents = [agent] };
+        await store.InitializeAsync(config).ConfigureAwait(false);
+        var process = new ProcessRunner();
+        var doctor = new DoctorService(store, new GitService(process), process);
+        var check = (await doctor.RunAsync()).Single(c => c.Name == "Stage profiles: fake");
+        True(!check.Passed && check.Required && check.Detail.Contains("plan, implement"),
+            "Missing plan and implement are reported even when audit exists");
+        agent.Profiles["default"] = new();
+        await store.SaveConfigAsync(config);
+        True((await doctor.RunAsync()).Single(c => c.Name == check.Name).Passed, "Default resolves all stages");
+        agent.Profiles.Remove("default");
+        agent.Profiles["plan"] = new();
+        agent.Profiles["implement"] = new();
+        agent.Profiles.Remove("audit");
+        await store.SaveConfigAsync(config);
+        True(!(await doctor.RunAsync()).Single(c => c.Name == check.Name).Passed, "Missing audit is reported");
+        agent.Profiles["audit"] = new();
+        await store.SaveConfigAsync(config);
+        True((await doctor.RunAsync()).Single(c => c.Name == check.Name).Passed, "Explicit stages resolve");
+        await store.SaveConfigAsync(config with { Agents = [agent with { Enabled = false, Profiles = new() }] });
+        check = (await doctor.RunAsync()).Single(c => c.Name == check.Name);
+        True(check.Passed && !check.Required, "Disabled agents do not fail readiness");
+    });
+}
+
+static async Task TestDoctorBaseRefAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var process = new ProcessRunner();
+        var git = new GitService(process);
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]), "init");
+        MustSucceed(await git.GitAsync(root, ["-c", "user.name=n", "-c", "user.email=a@b.invalid",
+            "commit", "--allow-empty", "-m", "init"]), "initial commit");
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var config = new FknrtdConfig { DefaultBaseRef = "missing-base" };
+        await store.InitializeAsync(config);
+        var doctor = new DoctorService(store, git, process);
+        True(!(await doctor.RunAsync()).Single(c => c.Name == "Base branch resolves").Passed,
+            "Missing Git base fails readiness");
+        await store.SaveConfigAsync(config with { DefaultBaseRef = "main" });
+        True((await doctor.RunAsync()).Single(c => c.Name == "Base branch resolves").Passed,
+            "Existing base passes");
+        // A detached HEAD provisions an empty defaultBaseRef, so this is reachable without
+        // anyone editing the configuration by hand. The check probes HEAD in that case; what it
+        // must not do is describe an empty ref as the thing that did or did not resolve.
+        await store.SaveConfigAsync(config with { DefaultBaseRef = string.Empty });
+        var noBase = (await doctor.RunAsync()).Single(c => c.Name == "Base branch resolves");
+        True(noBase.Passed, "An unset base falls back to HEAD");
+        True(noBase.Detail.Contains("No defaultBaseRef is set", StringComparison.Ordinal),
+            "An unset base says so rather than naming an empty ref");
+        True(!noBase.Detail.TrimStart().StartsWith("resolves", StringComparison.Ordinal),
+            "The base check never opens with a headless sentence");
+
+        await store.SaveConfigAsync(config with { Mode = WorkspaceMode.Standalone });
+        True(!(await doctor.RunAsync()).Any(c => c.Name == "Base branch resolves" && !c.Passed),
+            "Standalone ignores missing base even inside Git");
+    });
+}
+
+static async Task TestDoctorAutoCommitAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var process = new ProcessRunner();
+        var git = new GitService(process);
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]), "init");
+        await File.WriteAllTextAsync(Path.Combine(root, ".gitignore"), ".fknrtd/\n");
+        MustSucceed(await git.GitAsync(root, ["add", ".gitignore"]), "add");
+        MustSucceed(await git.GitAsync(root, ["-c", "user.name=n", "-c", "user.email=a@b.invalid",
+            "commit", "-m", "init"]), "commit");
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var config = new FknrtdConfig { DefaultBaseRef = "main", AutoCommitAgentChanges = false };
+        await store.InitializeAsync(config);
+        var doctor = new DoctorService(store, git, process);
+        True((await doctor.RunAsync()).Single(c => c.Name == "Agent changes get committed").Passed,
+            "Clean tree with automatic commits off passes");
+        await File.WriteAllTextAsync(Path.Combine(root, "new.txt"), "pending");
+        var check = (await doctor.RunAsync()).Single(c => c.Name == "Agent changes get committed");
+        True(!check.Passed && !check.Required, "Dirty tree with automatic commits off warns");
+        foreach (var alternative in new[] { config with { AutoCommitAgentChanges = true },
+            config with { Mode = WorkspaceMode.Standalone } })
+        {
+            await store.SaveConfigAsync(alternative);
+            True(!(await doctor.RunAsync()).Any(c => c.Name == check.Name && !c.Passed),
+                "Automatic commits on or standalone does not warn");
+        }
+    });
+}
+
 static async Task TestCoreGitProvisioningAsync()
 {
     await WithTemporaryDirectoryAsync(async root =>
@@ -7397,5 +7498,36 @@ static async Task TestCoreProvisioningRefusalAsync()
                 exception.Message, "Git refusal wording unchanged");
         }
         True(!File.Exists(paths.Config), "Refusal writes no configuration");
+    });
+}
+
+
+static async Task TestDiffFailureAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var git = new GitService(new ProcessRunner());
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]), "init");
+        var pending = await git.GetDiffAsync(root, "");
+        True(pending.Error is not null && pending.Error.Contains("pending diff"), "Unborn HEAD fails pending diff");
+        MustSucceed(await git.GitAsync(root, ["-c", "user.name=n", "-c", "user.email=a@b.invalid",
+            "commit", "--allow-empty", "-m", "init"]), "commit");
+        var clean = await git.GetDiffAsync(root, "main");
+        True(clean.Error is null && clean.Lines.Count == 0 && !clean.Truncated, "Clean diff remains successful");
+        var failure = await git.GetDiffAsync(root, "deleted-base");
+        True(failure.Error is not null && failure.Error.Contains("deleted-base"), "Failure preserves Git reason");
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var config = new FknrtdConfig { DefaultBaseRef = "main" };
+        await store.InitializeAsync(config);
+        var task = new WorkflowTask { Id = "FKN-diff-failure", Title = "Broken diff", BaseRef = "deleted-base", WorktreePath = root };
+        await store.SaveTaskAsync(task);
+        var output = new StringWriter();
+        Equal(2, await QuietlyAsync(["task", "diff", task.Id, "-root", root], output), "CLI failure exits 2");
+        True(output.ToString().Contains("Git failed") && !output.ToString().Contains("Nothing has changed"),
+            "CLI distinguishes failure from emptiness");
+        var panel = Reference.Diff(task, config, failure.Lines, failure.Truncated, failure.Error);
+        var renderer = new DashboardApp(null!, null!, null!, null!, null!, null!, null!, null!, null!);
+        var frame = renderer.Render(Scenes.PopulatedSnapshot(), 120, 35, useColor: false, panel);
+        True(frame.Contains("Git failed") && !frame.Contains("Nothing has changed"), "Dashboard displays failure");
     });
 }

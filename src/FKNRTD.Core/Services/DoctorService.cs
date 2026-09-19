@@ -123,9 +123,73 @@ public sealed class DoctorService
                       "never commits."
         });
 
+        if (config is not null && gitRequired)
+        {
+            // An empty defaultBaseRef is a real state - a detached HEAD provisions one - so the
+            // check names the ref it actually probed rather than interpolating an empty string
+            // into its own message and reporting that nothing resolved to a commit.
+            var configuredBaseRef = config.DefaultBaseRef;
+            var hasBaseRef = !string.IsNullOrWhiteSpace(configuredBaseRef);
+            var probedRef = hasBaseRef ? configuredBaseRef : "HEAD";
+            var baseResult = await _git.GitAsync(_store.Paths.Root,
+                ["rev-parse", "--verify", "--end-of-options", $"{probedRef}^{{commit}}"],
+                cancellationToken).ConfigureAwait(false);
+            checks.Add(new DoctorCheck
+            {
+                Name = "Base branch resolves",
+                Passed = baseResult.Success,
+                Detail = baseResult.Success
+                    ? hasBaseRef
+                        ? $"{configuredBaseRef} resolves to a commit."
+                        : "No defaultBaseRef is set, so HEAD was checked instead and resolves to a commit. " +
+                          "Set defaultBaseRef in .fknrtd/config.json to name the branch tasks start from."
+                    : hasBaseRef
+                        ? $"Base ref '{configuredBaseRef}' does not resolve, so tasks cannot start from it. " +
+                          "Check 'git branch' and set defaultBaseRef in .fknrtd/config.json to an existing branch. " +
+                          baseResult.StandardError.Trim()
+                        : "No defaultBaseRef is set and HEAD does not resolve, so tasks have nothing to " +
+                          "start from. Make a first commit here, then set defaultBaseRef in " +
+                          ".fknrtd/config.json. " + baseResult.StandardError.Trim()
+            });
+
+            if (!config.AutoCommitAgentChanges)
+            {
+                var status = await _git.GitAsync(_store.Paths.Root,
+                    ["--no-optional-locks", "status", "--porcelain=v1", "-uall"], cancellationToken)
+                    .ConfigureAwait(false);
+                checks.Add(new DoctorCheck
+                {
+                    Name = "Agent changes get committed",
+                    Required = false,
+                    Passed = status.Success && string.IsNullOrWhiteSpace(status.StandardOutput),
+                    Detail = !status.Success
+                        ? "Git could not check for pending changes. Automatic commits are off, so changes may " +
+                          "remain uncommitted. Run 'git status' here and fix its error. " + status.StandardError.Trim()
+                        : string.IsNullOrWhiteSpace(status.StandardOutput)
+                            ? "Automatic commits are off; the workspace is clean."
+                            : "autoCommitAgentChanges is off and this workspace has pending changes, so agent " +
+                              "changes will not be committed automatically. Review them with 'git status' and " +
+                              "commit them yourself, or enable autoCommitAgentChanges in .fknrtd/config.json."
+                });
+            }
+        }
+
         var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var agent in config?.Agents ?? [])
         {
+            var missing = new[] { "plan", "implement", "audit" }
+                .Where(stage => !agent.Profiles.ContainsKey(stage) && !agent.Profiles.ContainsKey("default"))
+                .ToArray();
+            checks.Add(new DoctorCheck
+            {
+                Name = $"Stage profiles: {agent.Id}",
+                Passed = missing.Length == 0 || !agent.Enabled,
+                Required = agent.Enabled,
+                Detail = missing.Length == 0 ? "plan, implement and audit profiles resolve (including default fallback)."
+                    : $"Agent '{agent.Id}' lacks {string.Join(", ", missing)} profiles and a default fallback, " +
+                      "so it cannot run those stages. Add the missing profiles or a default under this agent " +
+                      "in .fknrtd/config.json." + (agent.Enabled ? string.Empty : " [disabled]")
+            });
             var executable = FindExecutable(agent.Executable);
             // "Not found on PATH" states the fault and leaves the reader with it. Every other
             // check that can fail here names what to do next, and this is the one most likely to

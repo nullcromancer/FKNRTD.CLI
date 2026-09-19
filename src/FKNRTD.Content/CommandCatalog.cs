@@ -61,7 +61,9 @@ public static class CommandCatalog
         Entry("fknrtd doctor", "doctor", GettingStarted,
             "Check workspace readiness before spending agent time.",
             "Checks configuration, state access, runtime prerequisites and configured agent " +
-            "executables. Git checks depend on workspace mode. Probes can launch executable " +
+            "executables and their plan, implement and audit profiles (with default fallback). " +
+            "In Git mode it checks defaultBaseRef and warns about pending workspace changes when " +
+            "autoCommitAgentChanges is off. Git checks depend on workspace mode. Probes can launch executable " +
             "checks and test writable state; this does not run a coding task or repair your " +
             "configuration. Exit 0 means required checks passed; exit 2 means a required check failed.",
             "Fix each failed required check, then run doctor again before creating or running a task.",
@@ -186,6 +188,7 @@ public static class CommandCatalog
             "four thousand lines and say so. It reads " +
             "the worktree and changes nothing. A task with no worktree yet, or a standalone " +
             "workspace with no branch to compare against, says so rather than printing nothing. " +
+            "Git failures show their reason and exit 2; they are not reported as an empty change. " +
             "Output is plain diff text, so it pipes into a pager or a reviewer as it stands.",
             "Once you have read it, land it with fknrtd task land <id> -confirm LAND.",
             [new("<id>", "<task id>", "The task whose change to print.", Required: true)],

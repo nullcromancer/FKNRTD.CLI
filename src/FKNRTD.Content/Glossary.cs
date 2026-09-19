@@ -153,7 +153,10 @@ public static class Glossary
             "Doctor inspects everything a task run depends on and reports each item as passing, " +
             "failing, or optional: whether the workspace is readable, whether Git is present when " +
             "the mode needs it, whether each configured agent's executable can actually be found " +
-            "and launched, and whether the configuration parses. Run it after installing or " +
+            "and launched, whether plan, implement and audit profiles resolve with default fallback, " +
+            "and whether the configuration parses. In Git mode it checks that defaultBaseRef resolves " +
+            "to a commit and warns when autoCommitAgentChanges is off with pending workspace changes. " +
+            "Run it after installing or " +
             "reconfiguring anything. It reports and does not gate: nothing consults doctor before " +
             "running a task, so a failed required check is a warning that something is likely to go " +
             "wrong, not a lock. It can also fail on an enabled agent that the task you are about to " +
