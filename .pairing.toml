@@ -1,0 +1,16 @@
+# Ghostrider pairing configuration.
+#
+# Verification is pinned rather than auto-discovered. `dotnet test` finds nothing here: the
+# suite is a hand-rolled console harness, not a test framework, so an auto-discovered
+# `dotnet test` would exit 0 having run nothing and report a green leg for an untested change.
+# These are the two commands AGENTS.md names as the only evidence that counts.
+#
+# Keep each array on one line: the runtime's .pairing.toml reader is line-based and rejects a
+# multi-line array.
+
+[pairing]
+profile = "standard"
+implementer = "codex"
+
+[verification]
+commands = ["dotnet build FKNRTD.CLI.sln -c Release", "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build"]
