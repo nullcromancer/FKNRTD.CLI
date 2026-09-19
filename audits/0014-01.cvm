@@ -1,0 +1,5 @@
+CVM1|A|B
+E|Duplicate created by mistake: pairctl pair always creates a new brief, so using it for a repair round made #14 from the same spec instead of resuming #13
+E|It never dispatched - the runtime refused because the main working tree was dirty, so no work was done and no worktree was written
+E|#13 is the live entry for this work and is at repair-ready
+E|The correct verb for an existing brief is pairctl dispatch <id>, not pair
