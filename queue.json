@@ -747,8 +747,8 @@
     {
       "id": 9,
       "title": "One owner for configuration writes",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "blocked",
+      "phase": "blocked",
       "path": "briefs/0009-one-owner-for-configuration-writes.cvm",
       "seat": "codex",
       "created": "2026-09-19T02:28:11+00:00",
@@ -781,6 +781,13 @@
           "seat": "codex",
           "pid": 36024,
           "dispatch_id": "2ed2085d-b5cc-4d7b-b9d7-95049d2e3a57"
+        },
+        {
+          "type": "audit",
+          "at": "2026-09-19T17:59:01+00:00",
+          "seat": "claude",
+          "verdict": "block",
+          "wire": "CVM1|A|B\nE|THE WORK LANDED. This is a bookkeeping correction, not abandoned work - do not re-dispatch it.\nE|Implementation a1d5f77 'Give configuration writes a single owner and a lock' is an ancestor of HEAD\nE|Land commit e547712 'pairing: land #9' is an ancestor of HEAD\nE|The behaviour is present in the tree: AgentRegistry.UpdateAsync takes store.AcquireConfigLeaseAsync and every agent write goes through it\nE|The queue disagreed only because Codex could not call pairctl to report; the runtime already recorded claim=dead\nE|Its branch codex/pair-9-one-owner-for-configuration-writes and worktree 0009-* were removed earlier in this session, after confirming the branch was merged\nT|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors\nT|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 130/130\nQ|Closed as 'blocked' because the runtime has no state meaning 'landed outside the runtime': land requires audit-passed and a branch that no longer exists. Blocked here means the queue entry is closed, not that the work is undone.\n"
         }
       ],
       "round": 1,
