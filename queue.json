@@ -748,7 +748,7 @@
       "id": 9,
       "title": "One owner for configuration writes",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0009-one-owner-for-configuration-writes.cvm",
       "seat": null,
       "created": "2026-09-19T02:28:11+00:00",
@@ -759,10 +759,23 @@
           "at": "2026-09-19T02:28:11+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T02:28:12+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0009-one-owner-for-configuration-writes",
+          "branch": "codex/pair-9-one-owner-for-configuration-writes",
+          "base": "6ddea0b24f51630bb375093f585e6f86bb90a004"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0009-one-owner-for-configuration-writes",
+      "branch": "codex/pair-9-one-owner-for-configuration-writes",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "6ddea0b24f51630bb375093f585e6f86bb90a004"
     }
   ]
 }
