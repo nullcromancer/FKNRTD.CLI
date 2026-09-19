@@ -589,7 +589,7 @@
       "id": 7,
       "title": "Fix four agent-log parsing faults",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0007-fix-four-agent-log-parsing-faults.cvm",
       "seat": null,
       "created": "2026-09-19T02:14:51+00:00",
@@ -600,10 +600,23 @@
           "at": "2026-09-19T02:14:51+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T02:14:51+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0007-fix-four-agent-log-parsing-faults",
+          "branch": "codex/pair-7-fix-four-agent-log-parsing-faults",
+          "base": "d6d71625149aed40f74d37ff0a7f83129c697ee5"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0007-fix-four-agent-log-parsing-faults",
+      "branch": "codex/pair-7-fix-four-agent-log-parsing-faults",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "d6d71625149aed40f74d37ff0a7f83129c697ee5"
     }
   ]
 }
