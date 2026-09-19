@@ -842,12 +842,17 @@
           "at": "2026-09-19T02:56:02+00:00",
           "seat": "claude",
           "note": "resume recovered stale claim"
+        },
+        {
+          "type": "cleanup",
+          "at": "2026-09-19T17:56:35+00:00",
+          "seat": "claude"
         }
       ],
       "round": 1,
       "protocol": "caveman-v1",
       "implementer": "codex",
-      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0010-workspace-creation-belongs-in-core",
+      "worktree": null,
       "branch": "codex/pair-10-workspace-creation-belongs-in-core",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
       "base_oid": "e547712585538905511452a427e5101df2d92afc"
