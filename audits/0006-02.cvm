@@ -1,0 +1,10 @@
+CVM1|A|B
+E|THE WORK LANDED. This is a bookkeeping correction, not abandoned work - do not re-dispatch it.
+E|Land commit 1da5c5a and implementation 4b43a3a are both ancestors of HEAD
+E|The move is visible in the tree: LogLine.cs now lives at src/FKNRTD.Core/Services/LogLine.cs, and no log-reading file remains under src/FKNRTD.Cli
+E|The land commit records the rename src/{FKNRTD.Cli/Dashboard => FKNRTD.Core/Services}/LogLine.cs
+E|The 'correct' half of this brief's title was carried by #7, which landed separately as 6ddea0b - hence the 'commit 1' in this land message
+E|Branch codex/pair-6-* and worktree 0006-* were removed earlier, after confirming the branch was merged
+T|dotnet build => 0 warnings, 0 errors
+T|self-test suite => 130/130
+Q|phase was max-rounds, which reads as 'failed after exhausting repair rounds'. It did exhaust its rounds, but the work still landed by hand afterwards. Closed as blocked because the runtime has no state meaning 'landed outside the runtime'.
