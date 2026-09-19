@@ -81,7 +81,9 @@ dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false
 - All box-drawing must stay aligned at every width. Layout math is in `Dashboard/Canvas.cs`.
 - Never assume one `char` equals one terminal column: emoji, CJK and surrogate pairs break
   that assumption and shift every box border on the row.
-- Colour must degrade cleanly: `-no-color` and redirected output must emit no ANSI escapes.
+- Colour must degrade cleanly: `-no-color` and `NO_COLOR` must emit no ANSI escapes.
+  Redirected output also omits ANSI, except `telemetry claude-statusline`: Claude Code
+  consumes that output through a pipe and renders its ANSI colours.
 - **Colour is only ever an enhancement.** Stripping the escapes from a coloured frame must leave
   exactly the colourless frame, character for character — so nothing is ever distinguished by
   colour alone. A self-test asserts this for every scene; if you add a surface, it covers yours too.

@@ -677,8 +677,32 @@ public static class Glossary
             "Claude Code renders a configurable status line and hands it a payload containing " +
             "session usage. Installing the integration points that line at FKNRTD.CLI, so every " +
             "refresh feeds real numbers into the dashboard and shows the FKN badge in Claude. It " +
-            "writes to your Claude settings file and takes effect after a restart.",
+            "writes to your Claude settings file and takes effect after a restart. This statusline keeps " +
+            "ANSI colour when piped because Claude Code renders it; -no-color or NO_COLOR disables colour. " +
+            "Repository is blue, Claude orange and Codex purple; text carries the same information without colour.",
             "fknrtd integration install-claude-statusline"),
+
+        new("statusline-bars", "Statusline usage bars", Budget,
+            "Block bars show the remaining percentage beside its number.",
+            "CTX is context remaining; Cl or Claude and Cx or Codex show the five-hour and weekly " +
+            "windows. Bars shrink before numbers are dropped. N/A means no measurement; it has no bar."),
+        new("statusline-git", "Statusline Git health", Budget,
+            "Branch, mod: changed paths, ahead: and behind: commits relative to the local upstream ref.",
+            "Git status counts tracked changes and untracked paths, counting a rename once. No fetch " +
+            "runs. Missing upstream or unavailable Git renders N/A. GitHub origin URLs supply " +
+            "owner/repository; otherwise the configured project name is used. Narrow lines omit Git health."),
+        new("statusline-quality", "Statusline code health", Budget,
+            "tests: passed/failed and lint: issues from the most recently verified task.",
+            "The task with the newest QualitySnapshot.UpdatedAt supplies these counts, even when a " +
+            "newer task is unverified. No verified task means no code-health field. Positive stored " +
+            "counts are shown; zero defaults have no measurement provenance and render N/A. " +
+            "Lint counts are not currently collected by the built-in verifier."),
+        new("statusline-priority", "Statusline critical priority", Budget,
+            "×COLLISION, ■BLOCKED and ×VERIFY take priority over telemetry.",
+            "A collision, a blocked agent or a failed verification command or category in the selected " +
+            "quality snapshot is shown immediately after FKN. Below 100 columns these conditions " +
+            "displace context and usage. Other fields appear only when they fit. ∆RISK marks other " +
+            "claim conflicts; √ SAFE means no claim conflict was reported."),
 
         // Configuration
         new("max-parallel", "Max parallel agents", Configuration,
