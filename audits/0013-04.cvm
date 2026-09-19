@@ -1,0 +1,16 @@
+CVM1|A|P
+E|IMPLEMENTED IN THE AUDIT SEAT at the user's explicit direction after Codex exhausted its quota mid-round. This hunk had no independent reviewer.
+E|Rounds 1-3 by Codex are intact and accepted: colour surviving redirection, per-segment colour, matching line endings with a byte-capturing test, the AGENTS.md carve-out, owner/repository, meters, N/A handling and the width budget
+E|Round 5, by Claude: the two-row reference arrangement, glyph-and-number Git health, context as the only meter, per-seat compact agent entries, and the SAFE marker dropped from the quiet case
+E|Verified against the built binary in a workspace with a real upstream: row 1 renders 'FKN \p scratchpad/up master \p CTX ####. 85% left \p d3 u2d0' and row 2 renders both usage windows then 'Cl(glyph) offline Cx(glyph) offline'
+E|Ahead/behind is present, per the user's explicit instruction, and is omitted rather than zeroed where there is no upstream
+E|Three self-test failures were faults, not noise: two described the superseded arrangement and were rewritten; the third caught a real regression I had introduced, where a narrow row stopped letting a critical condition displace telemetry, and that was fixed rather than tested around
+E|A glyph slip of mine was caught by the suite: the blocked marker had become U+25AA, which appears nowhere in this codebase, instead of the U+25A0 already used here
+T|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 138/138
+T|Stripping escapes yields the -no-color frame byte for byte at 60, 80, 100, 120, 140 and 200 columns
+T|No row exceeds its width at any of those six widths, measured by character count
+T|Five distinct colours in one coloured frame; NO_COLOR=1 and -no-color each emit zero escapes
+T|fknrtd portal regenerated
+Q|GitHubRepository parses a local filesystem remote into an owner/repo shape, so a bare-repo clone shows 'scratchpad/up'. Harmless here and inherited from round 3, but it is not a GitHub remote and arguably should fall back to the project name.
+Q|No independent audit of the round-5 hunk, by construction.
