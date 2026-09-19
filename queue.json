@@ -1076,6 +1076,26 @@
         "backup_ref": "refs/pairing/backups/12/20260919-134358",
         "at": "2026-09-19T17:43:58+00:00"
       }
+    },
+    {
+      "id": 13,
+      "title": "Statusline: bars, git health, code health, priority",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0013-statusline-bars-git-health-code-health-p.cvm",
+      "seat": null,
+      "created": "2026-09-19T20:54:44+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T20:54:44+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }
