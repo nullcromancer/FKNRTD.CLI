@@ -1,0 +1,14 @@
+CVM1|A|F
+E|Built and ran the suite in the worktree: 0 warnings, 0 errors, 136/136
+E|No width overflow at 60, 80, 100, 120, 140 and 200 columns, checked against rendered output
+E|Bars render and always carry the number; unmeasured counts render N/A, and the implementer correctly identified that a stored 0 is not evidence a runner measured anything
+E|Git health renders mod/ahead/behind and degrades to N/A with no upstream
+E|Quality segment is omitted rather than zeroed when no task has been verified
+E|No forbidden glyph introduced: the document's set is absent from src
+E|No forbidden name introduced: the only hits are AGENTS.md stating the rule and README recording the rename
+T|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 136/136
+T|Rendered a real workspace at four widths and compared against the landed binary
+B|COLOUR IS OFF IN ACTUAL USE. useColor now requires !Console.IsOutputRedirected. Claude Code always pipes the statusline command, so the bar emits zero ANSI escapes in its only real consumer: piping the landed binary yields 1 escape sequence, the new one yields 0. This followed AGENTS.md:84 and was a reasonable reading, but the user has decided the statusline is carved out of that rule, because its consumer renders ANSI rather than storing text.
+B|PER-SEGMENT PALETTE LOST. Paint call sites fell from 18 to 2, so the whole line is painted one colour instead of each segment carrying its own. The source design's palette - repository blue, Claude orange, Codex purple - cannot survive that, and neither can the landed appearance.
+Q|The width-budget logic that drops bars before telemetry is good and should be kept; restoring per-segment colour must not regress it, because Text.DisplayWidth must continue to measure the visible text rather than the escapes.
