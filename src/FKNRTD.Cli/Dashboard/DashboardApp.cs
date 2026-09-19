@@ -2097,10 +2097,9 @@ internal sealed class DashboardApp
         _overlayCompleted = async (completed, current, token) =>
         {
             var answered = ((Wizard)completed).Value(key);
-            // The configuration is re-read on every frame, so the write is built from the snapshot
-            // taken now rather than the one the form was opened against.
-            var updated = setting.Write(current.Config, answered);
-            await _store.SaveConfigAsync(updated, token).ConfigureAwait(false);
+            // Read again inside the lease so edits made while the form was open survive.
+            var updated = await new AgentRegistry(_store).UpdateAsync(
+                fresh => setting.Write(fresh, answered), token).ConfigureAwait(false);
             _toast = $"{key} is now {Summarise(setting, updated)}. Press S to see the rest.";
         };
     }
@@ -2133,7 +2132,7 @@ internal sealed class DashboardApp
                     OpenAgentWizard(current.Config);
                     return;
                 case AgentAction.Toggle:
-                    await ToggleAgentAsync(current.Config, manager.AgentId, token).ConfigureAwait(false);
+                    await ToggleAgentAsync(manager.AgentId, token).ConfigureAwait(false);
                     return;
                 case AgentAction.Remove:
                     ConfirmAgentRemoval(current, manager.AgentId);
@@ -2199,41 +2198,23 @@ internal sealed class DashboardApp
         _overlayCompleted = async (completed, current, token) =>
         {
             var executable = ((Wizard)completed).Value("executable").Trim();
-            var updated = current.Config with
-            {
-                Agents = current.Config.Agents
-                    .Select(item => item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase)
-                        ? item with { Executable = executable }
-                        : item)
-                    .ToList()
-            };
-            await _store.SaveConfigAsync(updated, token).ConfigureAwait(false);
+            await new AgentRegistry(_store).SetAsync(agentId, executable, null, token, requireExisting: false)
+                .ConfigureAwait(false);
             _toast = $"{agentId} now runs {executable}. Press D to check it answers.";
         };
     }
 
     /// <summary>Flips one agent's enabled flag and writes the configuration back.</summary>
-    private async Task ToggleAgentAsync(FknrtdConfig config, string agentId, CancellationToken cancellationToken)
+    private async Task ToggleAgentAsync(string agentId, CancellationToken cancellationToken)
     {
-        var agent = config.Agents.FirstOrDefault(item =>
-            item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase));
-        if (agent is null)
+        var enabled = await new AgentRegistry(_store).ToggleAsync(agentId, cancellationToken).ConfigureAwait(false);
+        if (enabled is null)
         {
             _toast = $"'{agentId}' is no longer configured.";
             return;
         }
 
-        var enabled = !agent.Enabled;
-        var updated = config with
-        {
-            Agents = config.Agents
-                .Select(item => item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase)
-                    ? item with { Enabled = enabled }
-                    : item)
-                .ToList()
-        };
-        await _store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
-        _toast = enabled
+        _toast = enabled.Value
             ? $"{agentId} is enabled. New tasks can now be assigned to it."
             : $"{agentId} is disabled. It stays out of the task builder until you turn it back on.";
     }
@@ -2274,10 +2255,7 @@ internal sealed class DashboardApp
             "instead. That is reversible.");
         _overlayCompleted = async (_, current, token) =>
         {
-            var remaining = current.Config.Agents
-                .Where(item => !item.Id.Equals(agentId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            await _store.SaveConfigAsync(current.Config with { Agents = remaining }, token)
+            await new AgentRegistry(_store).RemoveAsync(agentId, token, requireExisting: false)
                 .ConfigureAwait(false);
             _toast = $"Removed {agentId}. Press A to see what is left.";
         };
@@ -2287,23 +2265,20 @@ internal sealed class DashboardApp
     private void OpenAgentWizard(FknrtdConfig config)
     {
         _overlay = AgentWizard.Create(config);
-        _overlayCompleted = async (completed, current, token) =>
-        {
-            var agent = AgentWizard.Build((Wizard)completed);
-            if (current.Config.Agents.Any(item => item.Id.Equals(agent.Id, StringComparison.OrdinalIgnoreCase)))
-            {
-                _toast = $"'{agent.Id}' is already configured. Press A and use Space to enable it.";
-                return;
-            }
+        _overlayCompleted = (completed, _, token) => RegisterAgentAsync(AgentWizard.Build((Wizard)completed), token);
+    }
 
-            await _store
-                .SaveConfigAsync(
-                    current.Config with { Agents = current.Config.Agents.Append(agent).ToList() }, token)
-                .ConfigureAwait(false);
-            _toast = ExecutableLocator.Find(agent.Executable) is null
-                ? $"Added {agent.Id}, but {agent.Executable} is not on PATH yet. Press D to recheck."
-                : $"Added {agent.Id}. It is now offered by the task builder.";
-        };
+    internal async Task RegisterAgentAsync(AgentDefinition agent, CancellationToken cancellationToken = default)
+    {
+        if (!await new AgentRegistry(_store).TryAddAsync(agent, cancellationToken).ConfigureAwait(false))
+        {
+            _toast = $"'{agent.Id}' is already configured. Press A and use Space to enable it.";
+            return;
+        }
+
+        _toast = ExecutableLocator.Find(agent.Executable) is null
+            ? $"Added {agent.Id}, but {agent.Executable} is not on PATH yet. Press D to recheck."
+            : $"Added {agent.Id}. It is now offered by the task builder.";
     }
 
     private void OpenMessageWizard(DashboardSnapshot snapshot)
