@@ -1,0 +1,9 @@
+CVM1|R|P
+D|Updated only parser queue path to src/FKNRTD.Content/CommandCatalog.cs
+M|18327cafe880da0189dc3f348b55cc7b11f01d49
+T|dotnet build FKNRTD.CLI.sln -c Release => 0; 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 0; 113/113 self-tests passed
+T|fknrtd.exe portal => 0; git diff --exit-code fknrtd-portal.html clean
+T|Exact byte replacement verified; new target exists; git diff --check clean
+B|R2 remains uncommitted: git add and git commit failed creating C:/DEV/GIT/FKNRTD.CLI/.git/worktrees/0005-extract-fknrtd-content-from-the-cli/index.lock: Permission denied. commit field is existing R1 HEAD.
+E|scripts/codex-review.sh:40; only working-tree change
