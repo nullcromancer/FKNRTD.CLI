@@ -1,0 +1,13 @@
+CVM1|A|F
+E|git diff --summary -M confirms all 8 files are 100% renames: content byte-identical, no wording changed
+E|src/FKNRTD.Cli/Help no longer exists
+E|src/FKNRTD.Content/FKNRTD.Content.csproj references FKNRTD.Core only; no PackageReference; no Console/ANSI code in the project
+E|namespace FKNRTD.Help preserved; no consumer using-directive changed
+E|InternalsVisibleTo(fknrtd) + InternalsVisibleTo(FKNRTD.SelfTest) on the new assembly keeps SampleWorkspace internal as the brief required
+E|Cli AssemblyInfo left unchanged; sln and Cli.csproj edits are minimal and correct
+E|AGENTS.md now names src/FKNRTD.Content
+E|docs/collab/*.md still name the old path, correctly: those are historical records of past rounds and must not be rewritten
+T|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors (observed by auditor in the worktree)
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 113/113 self-tests passed (observed by auditor)
+T|fknrtd.exe portal then git diff --exit-code fknrtd-portal.html => clean, portal byte-identical (observed by auditor)
+B|scripts/codex-review.sh:40 still points the 'parser' queue entry at src/FKNRTD.Cli/Help/CommandCatalog.cs, which the move deleted. That QUEUE block is live script input, not history: the next review round would dispatch a read of a path that no longer exists. Change that one path to src/FKNRTD.Content/CommandCatalog.cs. Change nothing else in the file, and do not touch docs/collab/*.md - those are records of what was true at the time.
