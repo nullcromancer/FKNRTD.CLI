@@ -1,0 +1,10 @@
+CVM1|A|B
+E|THE WORK LANDED. This is a bookkeeping correction, not abandoned work - do not re-dispatch it.
+E|Implementation a1d5f77 'Give configuration writes a single owner and a lock' is an ancestor of HEAD
+E|Land commit e547712 'pairing: land #9' is an ancestor of HEAD
+E|The behaviour is present in the tree: AgentRegistry.UpdateAsync takes store.AcquireConfigLeaseAsync and every agent write goes through it
+E|The queue disagreed only because Codex could not call pairctl to report; the runtime already recorded claim=dead
+E|Its branch codex/pair-9-one-owner-for-configuration-writes and worktree 0009-* were removed earlier in this session, after confirming the branch was merged
+T|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 130/130
+Q|Closed as 'blocked' because the runtime has no state meaning 'landed outside the runtime': land requires audit-passed and a branch that no longer exists. Blocked here means the queue entry is closed, not that the work is undone.
