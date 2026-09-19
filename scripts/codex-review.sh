@@ -37,7 +37,7 @@ QUEUE=$(cat <<'ENTRIES'
 identity|src/FKNRTD.Core/Services/DoctorService.cs|src/FKNRTD.Core/Services/Orchestrator.cs|Report ONLY prerequisites the orchestrator enforces during a run that doctor does not check, or checks differently.
 newfiles|src/FKNRTD.Core/Services/GitService.cs|src/FKNRTD.Core/Services/Orchestrator.cs|Report ONLY ways GetDiffAsync could miss a change a task made, report one that is not there, or write to the repository it is reading.
 logread|src/FKNRTD.Cli/Dashboard/LogLine.cs|src/FKNRTD.Core/Services/AgentOutputObserver.cs|Report ONLY input that would make this throw, return something misleading, or lose the agent's message.
-parser|src/FKNRTD.Cli/Commands/CliArguments.cs|src/FKNRTD.Cli/Help/CommandCatalog.cs|Report ONLY command lines that this parser would read differently from how the catalog documents them, or option spellings a user could reasonably write that it would mis-parse.
+parser|src/FKNRTD.Cli/Commands/CliArguments.cs|src/FKNRTD.Content/CommandCatalog.cs|Report ONLY command lines that this parser would read differently from how the catalog documents them, or option spellings a user could reasonably write that it would mis-parse.
 window|src/FKNRTD.Cli/Dashboard/AgentManager.cs|src/FKNRTD.Cli/Dashboard/Canvas.cs|Report ONLY defects: an index that can go out of range, a panel that can draw outside its rectangle or clip its own text, a key that does nothing or the wrong thing, or code that contradicts its own comment.
 wizardempty|src/FKNRTD.Cli/Dashboard/Wizard.cs|src/FKNRTD.Cli/Dashboard/TaskWizard.cs|Report ONLY defects: an answer that can be lost or replaced by one the user did not give, a step that can be skipped or repeated wrongly, or code that contradicts its own comment.
 ENTRIES
