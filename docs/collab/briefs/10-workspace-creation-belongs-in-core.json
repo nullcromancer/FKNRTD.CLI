@@ -1,0 +1,59 @@
+{
+  "goal": "Move workspace creation into FKNRTD.Core so a front end that is not a terminal can create a workspace. Today the whole of it - deciding the mode, reading the repository, detecting verification commands, backing up an existing configuration, writing the initial state and recording the event - lives in CommandDispatcher, and takes the terminal's Wizard as a parameter.",
+  "scope": [
+    "New Core service (suggested: src/FKNRTD.Core/Services/WorkspaceProvisioner.cs) owning what CommandDispatcher.ProvisionAsync and DetectVerificationCommands do today, plus the already-set-up refusal and the configuration backup that InitializeAsync does",
+    "An options record for the caller's choices, replacing the Wizard parameter",
+    "A result record carrying the saved config and the backup path, if one was taken",
+    "CommandDispatcher.InitializeAsync reduced to: parse arguments, run the guided form if interactive, call the service, print",
+    "Small API tidy on AgentRegistry, described in acceptance"
+  ],
+  "constraints": [
+    "DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.",
+    "FKNRTD.Core must not reference FKNRTD.Cli and must contain no Console or terminal code. The Core service must NOT take Wizard, CliArguments, or any type from the CLI project - that coupling is the thing being removed. It takes a plain options record that a form, a dialog or a flag parser can all fill in.",
+    "User-visible text must not change. Every line fknrtd init prints, and every refusal - the already-set-up message with its -force advice, the 'not a Git repository' message, the 'Git was not found on PATH' message - must read exactly as it does now.",
+    "Precedence must not change: an explicit choice beats what the folder suggested, a requested Git mode against a non-repository is refused rather than silently downgraded, and a requested standalone mode never probes Git.",
+    "A standalone workspace must keep working end to end, and nothing here may add a Git requirement to a standalone path.",
+    "The ProjectInitialized event must still be appended, with the same type, severity and wording.",
+    "TreatWarningsAsErrors is on; the build must be warning-free.",
+    "Add a self-test per behaviour change, in the existing Check(...) style. No self-test may start a real agent.",
+    "Do not touch the doctor settings check, SettingsBrowser, GetDiffAsync, the orchestrator, or the wizard's own validation. Those are separate briefs."
+  ],
+  "acceptance": [
+    "A caller holding only FKNRTD.Core can create a workspace: choose Git or standalone, supply a base ref and verification commands or accept what is detected, and get back the saved FknrtdConfig. Prove it with a self-test that provisions a workspace WITHOUT going through CommandDispatcher.",
+    "The Core entry point takes no type from FKNRTD.Cli. grep the new file for Wizard and CliArguments and find nothing.",
+    "Verification-command detection lives in Core and is callable on its own",
+    "The existing-configuration refusal and the timestamped backup under runtime/backups live in Core, and -force still replaces the configuration while keeping the backup",
+    "fknrtd init, fknrtd init -standalone, fknrtd init -git, -yes, -force and the guided form all behave exactly as they do now, printing exactly what they print now",
+    "API TIDY: AgentRegistry.RemoveAsync and SetAsync currently declare (string id, CancellationToken cancellationToken = default, bool requireExisting = true) - a meaningful flag sitting after the cancellation token, which forces every caller to use a named argument and is the wrong shape for an API a second front end will consume. Put the flag before the cancellation token. Update the four call sites.",
+    "dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors",
+    "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all pass, count is 121 + the tests you added",
+    "fknrtd portal regenerates fknrtd-portal.html byte-identically"
+  ],
+  "files": [
+    "src/FKNRTD.Cli/Commands/CommandDispatcher.cs:InitializeAsync",
+    "src/FKNRTD.Cli/Commands/CommandDispatcher.cs:ProvisionAsync",
+    "src/FKNRTD.Cli/Commands/CommandDispatcher.cs:DetectVerificationCommands",
+    "src/FKNRTD.Cli/Commands/CommandDispatcher.cs:DescribeMode",
+    "src/FKNRTD.Cli/Commands/CommandDispatcher.cs:RequestedMode",
+    "src/FKNRTD.Core/Services/StateStore.cs:InitializeAsync",
+    "src/FKNRTD.Core/Domain/Configuration.cs:BuiltInAgents",
+    "src/FKNRTD.Core/Services/AgentRegistry.cs:RemoveAsync",
+    "src/FKNRTD.Core/Services/AgentRegistry.cs:SetAsync",
+    "src/FKNRTD.Core/Services/WorkspaceLocator.cs"
+  ],
+  "tests": [
+    "dotnet build FKNRTD.CLI.sln -c Release",
+    "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build"
+  ],
+  "exclude": [
+    "The doctor settings check and SettingsBrowser.Problems",
+    "Doctor/orchestrator divergence",
+    "GetDiffAsync",
+    "Wizard.Store, Back-without-validation, Reopen",
+    "Change notification and file watching",
+    "Any dashboard layout, padding or width work"
+  ],
+  "unknowns": [
+    "Whether DescribeMode should move to Core or stay a presentation detail. It is used in a message Core appends to the event log, so at least that use has to resolve somewhere; decide and say which you chose and why."
+  ]
+}
