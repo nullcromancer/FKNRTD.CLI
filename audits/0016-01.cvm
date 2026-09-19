@@ -1,0 +1,15 @@
+CVM1|A|P
+E|Built and ran the suite in the worktree: 0 warnings, 0 errors, 139/139
+E|Only DashboardApp.cs changed under Dashboard/: all seven overlays keep their Escape handling untouched, which was the constraint most likely to cause real harm
+E|Escape and Q are separate actions now; Q keeps its fast path when nothing is running, exactly as the brief required
+E|Read the cancel path directly: OverlayResult.Cancel nulls the overlay and its completion handler without setting _quit, so Escape on the confirmation cannot leave
+E|Idle wording is distinct and truthful - it never claims work is running and never counts tasks - and carries its own glossary term dashboard.leave
+E|Keymap's Q entry no longer claims Escape is its alias, and the Escape entry describes the new behaviour; both are now true
+E|A new scene quit-idle is registered, so the colour-strip and alignment assertions cover it automatically
+E|Portal regeneration is deterministic: two runs produced identical sha256
+E|No screenshot is missing - the capture script is a curated list of 18 and quit-while-running has none either
+T|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 139/139
+T|fknrtd portal twice => identical bytes
+Q|The idle explanation reads Glossary.Find("dashboard.leave")!.Detail with a null-forgiving operator. Safe today because a self-test fails if the entry is missing, but removing that entry would turn a documentation slip into a crash in the quit path rather than a test failure.
+Q|A few of the new ternaries run past the line length the rest of the file keeps. Cosmetic only.

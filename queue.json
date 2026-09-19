@@ -1323,8 +1323,8 @@
     {
       "id": 16,
       "title": "Escape always confirms before leaving",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "audit-passed",
+      "phase": "audit-passed",
       "path": "briefs/0016-escape-always-confirms-before-leaving.cvm",
       "seat": "codex",
       "created": "2026-09-19T22:46:08+00:00",
@@ -1357,6 +1357,13 @@
           "seat": "codex",
           "pid": 4848,
           "dispatch_id": "464fda02-8b9a-4682-bc4a-27522aa85fee"
+        },
+        {
+          "type": "audit",
+          "at": "2026-09-19T22:53:57+00:00",
+          "seat": "claude",
+          "verdict": "pass",
+          "wire": "CVM1|A|P\nE|Built and ran the suite in the worktree: 0 warnings, 0 errors, 139/139\nE|Only DashboardApp.cs changed under Dashboard/: all seven overlays keep their Escape handling untouched, which was the constraint most likely to cause real harm\nE|Escape and Q are separate actions now; Q keeps its fast path when nothing is running, exactly as the brief required\nE|Read the cancel path directly: OverlayResult.Cancel nulls the overlay and its completion handler without setting _quit, so Escape on the confirmation cannot leave\nE|Idle wording is distinct and truthful - it never claims work is running and never counts tasks - and carries its own glossary term dashboard.leave\nE|Keymap's Q entry no longer claims Escape is its alias, and the Escape entry describes the new behaviour; both are now true\nE|A new scene quit-idle is registered, so the colour-strip and alignment assertions cover it automatically\nE|Portal regeneration is deterministic: two runs produced identical sha256\nE|No screenshot is missing - the capture script is a curated list of 18 and quit-while-running has none either\nT|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors\nT|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 139/139\nT|fknrtd portal twice => identical bytes\nQ|The idle explanation reads Glossary.Find(\"dashboard.leave\")!.Detail with a null-forgiving operator. Safe today because a self-test fails if the entry is missing, but removing that entry would turn a documentation slip into a crash in the quit path rather than a test failure.\nQ|A few of the new ternaries run past the line length the rest of the file keeps. Cosmetic only.\n"
         }
       ],
       "round": 1,
