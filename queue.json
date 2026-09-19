@@ -803,7 +803,7 @@
       "id": 10,
       "title": "Workspace creation belongs in Core",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0010-workspace-creation-belongs-in-core.cvm",
       "seat": null,
       "created": "2026-09-19T02:55:37+00:00",
@@ -814,10 +814,23 @@
           "at": "2026-09-19T02:55:37+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T02:55:37+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0010-workspace-creation-belongs-in-core",
+          "branch": "codex/pair-10-workspace-creation-belongs-in-core",
+          "base": "e547712585538905511452a427e5101df2d92afc"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0010-workspace-creation-belongs-in-core",
+      "branch": "codex/pair-10-workspace-creation-belongs-in-core",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "e547712585538905511452a427e5101df2d92afc"
     }
   ]
 }
