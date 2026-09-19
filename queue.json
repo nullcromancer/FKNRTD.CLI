@@ -913,6 +913,11 @@
           "type": "cleanup",
           "at": "2026-09-19T17:34:23+00:00",
           "seat": "runtime"
+        },
+        {
+          "type": "cleanup",
+          "at": "2026-09-19T17:56:35+00:00",
+          "seat": "claude"
         }
       ],
       "round": 1,
