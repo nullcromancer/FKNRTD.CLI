@@ -359,8 +359,8 @@
     {
       "id": 5,
       "title": "Extract FKNRTD.Content from the CLI",
-      "state": "audit-passed",
-      "phase": "audit-passed",
+      "state": "landed",
+      "phase": "landed",
       "path": "briefs/0005-extract-fknrtd-content-from-the-cli.cvm",
       "seat": "codex",
       "created": "2026-09-19T01:54:55+00:00",
@@ -450,6 +450,13 @@
           "seat": "claude",
           "verdict": "pass",
           "wire": "CVM1|A|P\nE|R2 finding fixed in 57a7c79: scripts/codex-review.sh:40 now names src/FKNRTD.Content/CommandCatalog.cs\nE|Every file path in the review QUEUE block now resolves on disk (12/12 checked by the auditor)\nE|docs/collab/*.md correctly left naming the old path: historical records of past rounds\nE|R2 diff is the single line asked for and nothing else\nE|All 8 moved files remain 100% renames; no table content changed\nE|FKNRTD.Content references FKNRTD.Core only and contains no terminal code\nE|Environment note: Codex could not commit either round - git index.lock Permission denied on this machine, transient, no stale lock file left behind. The auditor committed R2 on the codex seat's behalf; the change itself is Codex's and was not modified.\nT|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors (auditor, post-repair)\nT|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 113/113 self-tests passed (auditor, post-repair)\nT|fknrtd.exe portal => fknrtd-portal.html byte-identical (auditor)\n"
+        },
+        {
+          "type": "land",
+          "at": "2026-09-19T02:02:16+00:00",
+          "seat": "claude",
+          "commit": "c58001791f2a02f56be79485120df6ae33a3ac16",
+          "backup_ref": "refs/pairing/backups/5/20260918-220216"
         }
       ],
       "round": 2,
@@ -466,6 +473,12 @@
         "pid": 32624,
         "host": "Tenebris",
         "dispatch_id": "daa42588-bfc3-41a2-b03b-e84602149673"
+      },
+      "closed": "2026-09-19T02:02:16+00:00",
+      "merge": {
+        "commit": "c58001791f2a02f56be79485120df6ae33a3ac16",
+        "backup_ref": "refs/pairing/backups/5/20260918-220216",
+        "at": "2026-09-19T02:02:16+00:00"
       }
     }
   ]
