@@ -45,6 +45,19 @@ supplies a fake agent by re-executing the self-test binary, as `TestWorkflowAsyn
 points every agent's executable at a name nothing resolves first. Never leave the shipped
 executables in place in a test that reaches the implement stage.
 
+**Kill MSBuild's worker processes after an agent runs a build.** MSBuild reuses long-lived
+worker nodes between builds. A build run inside a sandboxed agent's worktree leaves those nodes
+behind, still confined to that worktree, and the next build in the main checkout is handed them -
+so writing any directory that does not already exist fails with `Access to the path ... is denied`
+and the build reports errors that have nothing to do with the code. It looks exactly like a
+permissions fault and is not one: a project that needs no new files still builds, which is why
+only a newly added project fails. Before believing such a failure:
+
+```
+powershell -NoProfile -Command "Get-Process dotnet,MSBuild,VBCSCompiler -ErrorAction SilentlyContinue | Stop-Process -Force"
+dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false
+```
+
 **GitHub Actions results are not evidence.** Never gate on, wait for, or report CI status.
 
 ## Architecture rules
