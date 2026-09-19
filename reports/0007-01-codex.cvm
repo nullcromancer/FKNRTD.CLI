@@ -1,0 +1,8 @@
+CVM1|R|P
+D|Fixed the four parsing faults A-D in FKNRTD.Core/Services/LogLine.cs
+D|Added four self-tests
+M|uncommitted-in-worktree
+T|dotnet build => 0 warnings 0 errors
+T|self-test => 117/117 passed
+T|portal byte-identical
+E|exit_code and aggregated_output verified against the Codex TypeScript SDK item definitions

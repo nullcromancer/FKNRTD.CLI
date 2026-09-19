@@ -588,12 +588,20 @@
     {
       "id": 7,
       "title": "Fix four agent-log parsing faults",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "reported",
+      "phase": "reported",
       "path": "briefs/0007-fix-four-agent-log-parsing-faults.cvm",
       "seat": "codex",
       "created": "2026-09-19T02:14:51+00:00",
-      "reports": [],
+      "reports": [
+        {
+          "path": "reports/0007-01-codex.cvm",
+          "seat": "codex",
+          "verdict": "pass",
+          "at": "2026-09-19T02:22:54+00:00",
+          "round": 2
+        }
+      ],
       "events": [
         {
           "type": "brief",
@@ -642,6 +650,13 @@
           "seat": "codex",
           "pid": 15560,
           "dispatch_id": "d0547e97-23f9-4df3-9813-4ec85f40cfa2"
+        },
+        {
+          "type": "report",
+          "at": "2026-09-19T02:22:54+00:00",
+          "seat": "codex",
+          "verdict": "pass",
+          "round": 2
         }
       ],
       "round": 2,
