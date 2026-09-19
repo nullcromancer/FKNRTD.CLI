@@ -1578,10 +1578,10 @@ internal sealed class DashboardApp
         Paint(snapshot);
         try
         {
-            var (lines, truncated) = await _git
+            var (lines, truncated, error) = await _git
                 .GetDiffAsync(task.WorktreePath, task.BaseRef, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            _overlay = Reference.Diff(task, snapshot.Config, lines, truncated);
+            _overlay = Reference.Diff(task, snapshot.Config, lines, truncated, error);
             _toast = "Ready";
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

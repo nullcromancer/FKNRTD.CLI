@@ -55,6 +55,7 @@ public static class Keymap
             "base branch, plus anything still uncommitted in its worktree — searchable by file or " +
             "by any text in it. The uncommitted half is 'git diff HEAD', so a file the agent created " +
             "and never staged does not appear here; run 'git status' in the worktree to catch those. " +
+            "Git failures show their reason instead of claiming nothing changed. " +
             "This is the reading that landing asks you to have done.",
             InFooter: true),
         new("P", "prompts",

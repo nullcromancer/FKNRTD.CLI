@@ -954,9 +954,15 @@ internal static class CommandDispatcher
             return 0;
         }
 
-        var (lines, truncated) = await runtime.Git
+        var (lines, truncated, error) = await runtime.Git
             .GetDiffAsync(task.WorktreePath, task.BaseRef, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        if (error is not null)
+        {
+            WriteParagraph(error + " The change could not be read. Check the base ref and worktree with " +
+                $"Git, then retry 'fknrtd task diff {task.Id}'.", string.Empty);
+            return 2;
+        }
         if (lines.Count == 0)
         {
             Console.WriteLine(

@@ -581,7 +581,8 @@ internal static class Reference
         WorkflowTask task,
         FknrtdConfig config,
         IReadOnlyList<string> lines,
-        bool truncated) => new(
+        bool truncated,
+        string? error = null) => new(
         "THE FINISHED CHANGE",
         Theme.Blue,
         filter =>
@@ -597,6 +598,13 @@ internal static class Reference
                     "This is a standalone workspace, so there is no branch to compare against and no " +
                     "diff to show. Agents edited this folder directly; whatever changed is simply " +
                     "what is here now.", Theme.Amber));
+                return blocks;
+            }
+
+            if (error is not null)
+            {
+                blocks.Add(new InfoParagraph(error + " The change could not be read. Check the base ref " +
+                    "and worktree with Git, then press V to retry.", Theme.Amber));
                 return blocks;
             }
 
