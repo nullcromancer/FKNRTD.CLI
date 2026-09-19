@@ -1,0 +1,12 @@
+CVM1|A|F
+E|Round 2 fixed both colour findings. Built and ran the suite in the worktree: 0 warnings, 0 errors, 138/138
+E|Colour survives redirection again: piping yields 2 escape sequences where round 1 yielded 0
+E|-no-color yields exactly 0 escapes, and NO_COLOR=1 yields exactly 0
+E|Per-segment palette restored: five distinct colours in one frame - cyan badge, blue repository, orange Claude, purple Codex, green healthy marker
+E|Round 1's accepted work is intact: width budget, meters, N/A handling, Git and quality reads
+T|dotnet build FKNRTD.CLI.sln -c Release -nodeReuse:false => 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 138/138
+T|Piped, -no-color and NO_COLOR frames compared byte for byte at 60, 80, 100, 140 and 200 columns
+B|LINE ENDINGS DIFFER BETWEEN COLOUR MODES. Stripping the escapes from a coloured frame does NOT leave exactly the colourless frame: the coloured output carries 0 carriage returns and the -no-color output carries 2. Identical at 60 and 80 columns, divergent at 100, 140 and 200 - that is, wherever the layout becomes two rows. The invariant is character-for-character equality, so the row separator must be the same sequence in both modes. The self-test that claims to cover this passed at 138/138, so it is testing the renderer's return value rather than what the command writes; it needs to cover the command's actual output.
+B|AGENTS.md LINE 84 STILL UNAMENDED. It reads 'redirected output must emit no ANSI escapes', which the statusline now deliberately contradicts. This was an explicit acceptance criterion. A documented rule that contradicts the code is worse than one that is missing, and this file is the first thing another seat reads.
+Q|Round 3 also carries a layout change to match a reference the user supplied, so these two findings travel with it rather than in a round of their own.
