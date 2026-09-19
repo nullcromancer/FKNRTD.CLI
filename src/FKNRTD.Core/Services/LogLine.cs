@@ -93,12 +93,6 @@ public static class LogFormat
         // Claude's session banner and its token accounting are the two things that repeat most and
         // tell an operator watching a task the least.
         var subtype = Text(root, "subtype") ?? string.Empty;
-        if (type.Equals("system", StringComparison.OrdinalIgnoreCase))
-        {
-            return new LogLine(
-                subtype.Length == 0 ? "session started" : "session " + subtype,
-                LogKind.Noise);
-        }
 
         // A run that failed says so in any of three places, and only one of them was read. Claude
         // reports a failed result as {"type":"result","subtype":"error_during_execution",
@@ -120,22 +114,29 @@ public static class LogFormat
                 LogKind.Failed);
         }
 
+        if (type.Equals("system", StringComparison.OrdinalIgnoreCase))
+        {
+            return new LogLine(
+                subtype.Length == 0 ? "session started" : "session " + subtype,
+                LogKind.Noise);
+        }
+
         // The final answer, which is the line most worth finding in a finished log.
-        if (root.TryGetProperty("result", out var result) && result.ValueKind == JsonValueKind.String)
+        if (TryGetProperty(root, "result", out var result) && result.ValueKind == JsonValueKind.String)
         {
             return new LogLine("√ " + Clip(result.GetString() ?? string.Empty), LogKind.Finished);
         }
 
         // Claude: {"type":"assistant","message":{"content":[ ... ]}}
-        if (root.TryGetProperty("message", out var message2) &&
+        if (TryGetProperty(root, "message", out var message2) &&
             message2.ValueKind == JsonValueKind.Object &&
-            message2.TryGetProperty("content", out var content))
+            TryGetProperty(message2, "content", out var content))
         {
             return FromContent(content);
         }
 
         // Codex: {"type":"item.completed","item":{ ... }}
-        if (root.TryGetProperty("item", out var item) && item.ValueKind == JsonValueKind.Object)
+        if (TryGetProperty(root, "item", out var item) && item.ValueKind == JsonValueKind.Object)
         {
             return FromItem(item);
         }
@@ -155,20 +156,21 @@ public static class LogFormat
             return null;
         }
 
+        LogLine? first = null;
         foreach (var block in content.EnumerateArray())
         {
             var kind = Text(block, "type") ?? string.Empty;
             if (kind.Equals("text", StringComparison.OrdinalIgnoreCase) &&
                 Text(block, "text") is { Length: > 0 } said)
             {
-                return new LogLine(Clip(said), LogKind.Said);
+                first ??= new LogLine(Clip(said), LogKind.Said);
             }
 
             if (kind.Equals("tool_use", StringComparison.OrdinalIgnoreCase))
             {
                 var name = Text(block, "name") ?? "a tool";
-                var subject = block.TryGetProperty("input", out var input) ? Subject(input) : null;
-                return new LogLine(
+                var subject = TryGetProperty(block, "input", out var input) ? Subject(input) : null;
+                first ??= new LogLine(
                     subject is null ? "> " + name : $"> {name}  {subject}",
                     LogKind.Did);
             }
@@ -186,11 +188,11 @@ public static class LogFormat
                         LogKind.Failed);
                 }
 
-                return new LogLine("  returned", LogKind.Noise);
+                first ??= new LogLine("  returned", LogKind.Noise);
             }
         }
 
-        return null;
+        return first;
     }
 
     private static LogLine? FromItem(JsonElement item)
@@ -200,6 +202,27 @@ public static class LogFormat
         if (kind.Contains("command", StringComparison.OrdinalIgnoreCase) &&
             Text(item, "command") is { Length: > 0 } command)
         {
+            // Codex CommandExecutionItem uses exit_code and aggregated_output; older or
+            // still-running records can omit the exit code entirely.
+            //
+            // Only a failure is annotated. Success is the unmarked case everywhere else in this
+            // file, and nearly every command in a finished log succeeded - so prefixing each of
+            // those rows with "exit 0" and appending the whole of that command's output buries
+            // the one thing the row exists to show, which is the command.
+            if (TryGetProperty(item, "exit_code", out var exit) &&
+                exit.ValueKind == JsonValueKind.Number && exit.TryGetInt32(out var code) &&
+                code != 0)
+            {
+                var output = Text(item, "aggregated_output");
+                var summary = $"exit {code}: {command}";
+                if (!string.IsNullOrWhiteSpace(output))
+                {
+                    summary += " - " + output;
+                }
+
+                return new LogLine("× " + Clip(summary), LogKind.Failed);
+            }
+
             return new LogLine("> " + Clip(command), LogKind.Did);
         }
 
@@ -253,7 +276,7 @@ public static class LogFormat
                      "file_path", "filePath", "path", "notebook_path", "command", "pattern", "url", "query"
                  })
         {
-            if (input.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String &&
+            if (TryGetProperty(input, name, out var value) && value.ValueKind == JsonValueKind.String &&
                 value.GetString() is { Length: > 0 } text)
             {
                 return Clip(text, 160);
@@ -277,7 +300,7 @@ public static class LogFormat
     /// <summary>Whether a JSON property is literally <c>true</c>. Absent or false reads as false.</summary>
     private static bool Flag(JsonElement element, string property) =>
         element.ValueKind == JsonValueKind.Object &&
-        element.TryGetProperty(property, out var value) &&
+        TryGetProperty(element, property, out var value) &&
         value.ValueKind == JsonValueKind.True;
 
     /// <summary>
@@ -292,7 +315,7 @@ public static class LogFormat
     private static string? Detail(JsonElement element, string property)
     {
         if (element.ValueKind != JsonValueKind.Object ||
-            !element.TryGetProperty(property, out var value))
+            !TryGetProperty(element, property, out var value))
         {
             return null;
         }
@@ -327,10 +350,28 @@ public static class LogFormat
 
     private static string? Text(JsonElement element, string property) =>
         element.ValueKind == JsonValueKind.Object &&
-        element.TryGetProperty(property, out var value) &&
+        TryGetProperty(element, property, out var value) &&
         value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
 
     /// <summary>
     /// Collapses a value onto one line and caps its length. A log row is one line by definition, and

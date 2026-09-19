@@ -306,6 +306,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A file the agent created is in the diff", TestANewFileIsInTheDiffAsync),
     ("The roster keeps the selected agent on screen", TestTheRosterKeepsTheSelectionOnScreen),
     ("A failed agent line is not drawn as a finished one", TestAFailureIsNotDrawnAsSuccess),
+    ("System failures outrank session noise", TestSystemFailure),
+    ("Log property names ignore case", TestLogPropertyCase),
+    ("Failed tool results outrank earlier content", TestLaterToolFailure),
+    ("Command logs preserve exit status", TestCommandExitStatus),
     ("A flag does not swallow the word after it", TestAFlagDoesNotSwallowTheNextWord),
     ("A retried task is not called one that never ran", TestTheDashboardSaysWhatActuallyHappened),
     ("Clearing a question means the empty answer", TestClearingAQuestionMeansEmpty),
@@ -6650,6 +6654,96 @@ static Task TestAFlagDoesNotSwallowTheNextWord()
     var literal = new CliArguments(["init", "--", "--"]);
     Equal("--", literal.Positional(1), "The second -- is a folder argument, not a second delimiter");
 
+    return Task.CompletedTask;
+}
+
+static Task TestSystemFailure()
+{
+    foreach (var signal in new[] { "\"is_error\":true", "\"subtype\":\"error\"", "\"subtype\":\"failed\"" })
+    {
+        var line = LogFormat.Read("{\"type\":\"system\",\"message\":\"Authentication failed\"," + signal + "}");
+        Equal(LogKind.Failed, line.Kind, "System failure is visible");
+        Equal("× Authentication failed", line.Text, "System failure retains its reason");
+    }
+
+    Equal(new LogLine("session started", LogKind.Noise), LogFormat.Read("""{"type":"system"}"""),
+        "Unflagged session banner stays noise");
+    Equal(new LogLine("session init", LogKind.Noise),
+        LogFormat.Read("""{"type":"system","subtype":"init","session_id":"3f9c"}"""),
+        "Session init remains unchanged");
+    return Task.CompletedTask;
+}
+
+static Task TestLogPropertyCase()
+{
+    Equal(new LogLine("× denied", LogKind.Failed),
+        LogFormat.Read("""{"TYPE":"result","IS_ERROR":true,"ERROR":{"MESSAGE":"denied"}}"""),
+        "Flag, type and nested diagnostic ignore property case");
+    Equal(new LogLine("  a tool failed: denied", LogKind.Failed),
+        LogFormat.Read("""{"MESSAGE":{"CONTENT":[{"TYPE":"tool_result","IS_ERROR":true,"CONTENT":[{"TEXT":"denied"}]}]}}"""),
+        "Nested content and diagnostic blocks ignore property case");
+    Equal(new LogLine("√ done", LogKind.Finished),
+        LogFormat.Read("""{"TYPE":"result","IS_ERROR":false,"RESULT":"done"}"""),
+        "False is not a failure");
+    return Task.CompletedTask;
+}
+
+static Task TestLaterToolFailure()
+{
+    foreach (var first in new[]
+             {
+                 """{"type":"text","text":"working"}""",
+                 """{"type":"tool_use","name":"Bash","input":{"command":"build"}}""",
+                 """{"type":"tool_result","content":"ok"}"""
+             })
+    {
+        var prefix = "{\"message\":{\"content\":[" + first;
+        var original = LogFormat.Read(prefix + "]}}");
+        Equal(original, LogFormat.Read(prefix + ",null,{\"type\":\"text\",\"text\":\"later\"}]}}"),
+            "Without failure the first recognised block still wins");
+        var failed = LogFormat.Read(prefix +
+            ",null,{\"type\":\"tool_result\",\"is_error\":true,\"content\":\"build failed\"}]}}");
+        Equal(new LogLine("  a tool failed: build failed", LogKind.Failed), failed,
+            "Later failure wins over text, tool use or successful result");
+    }
+
+    return Task.CompletedTask;
+}
+
+static Task TestCommandExitStatus()
+{
+    foreach (var code in new[] { -1, 0, 1, 123 })
+    {
+        var line = LogFormat.Read(JsonSerializer.Serialize(new
+        {
+            type = "item.completed",
+            item = new { type = "command_execution", command = "dotnet build", exit_code = code,
+                aggregated_output = "first\nsecond", status = "completed" }
+        }));
+        Equal(code == 0 ? LogKind.Did : LogKind.Failed, line.Kind, "Nonzero exit marks failure");
+        Equal(code == 0 ? "> dotnet build" : $"× exit {code}: dotnet build - first second", line.Text,
+            code == 0
+                ? "A command that succeeded is named and nothing more"
+                : "Exit, command and output survive on one row");
+    }
+
+    // 1.5 and 2147483648 are the interesting ones: both are JSON numbers, so a check that only
+    // asks whether the value is a number would read them as an exit status and fail to get one.
+    foreach (var extra in new[]
+             {
+                 "", ",\"exit_code\":null", ",\"exit_code\":\"bad\"", ",\"exit_code\":{}",
+                 ",\"exit_code\":true", ",\"exit_code\":[]", ",\"exit_code\":1.5",
+                 ",\"exit_code\":2147483648"
+             })
+    {
+        Equal(new LogLine("> build", LogKind.Did),
+            LogFormat.Read("{\"item\":{\"type\":\"command_execution\",\"command\":\"build\"" + extra + "}}"),
+            "Missing or malformed exit status remains readable");
+    }
+
+    Equal(new LogLine("× exit 2: build", LogKind.Failed),
+        LogFormat.Read("""{"ITEM":{"TYPE":"command_execution","COMMAND":"build","EXIT_CODE":2}}"""),
+        "Output is optional and command fields ignore case");
     return Task.CompletedTask;
 }
 
