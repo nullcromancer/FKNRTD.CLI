@@ -218,10 +218,12 @@ internal static class CommandDispatcher
 
         if (!File.Exists(paths.Config))
         {
-            var config = await ProvisionAsync(paths, RequestedMode(arguments), cancellationToken)
+            var result = await new WorkspaceProvisioner(paths).ProvisionAsync(
+                new WorkspaceProvisioningOptions { Mode = RequestedMode(arguments) }, cancellationToken)
                 .ConfigureAwait(false);
+            var config = result.Config;
             Console.WriteLine(
-                $"√ Prepared a {DescribeMode(config.Mode)} FKNRTD.CLI workspace at {paths.Root}");
+                $"√ Prepared a {WorkspaceProvisioner.DescribeMode(config.Mode)} FKNRTD.CLI workspace at {paths.Root}");
         }
 
         return await RunDashboardAsync(new FknrtdRuntime(paths), arguments, cancellationToken)
@@ -246,23 +248,8 @@ internal static class CommandDispatcher
     {
         var root = Path.GetFullPath(arguments.Get("root") ?? arguments.Positional(1) ?? Environment.CurrentDirectory);
         var paths = WorkspaceLocator.ForRoot(root);
-        if (File.Exists(paths.Config) && !arguments.Has("force"))
-        {
-            throw new InvalidOperationException(
-                $"FKNRTD.CLI is already set up at {root}. Nothing was changed. " +
-                "Use -force to replace its configuration, keeping a backup of the old one.");
-        }
-
-        string? backup = null;
-        if (File.Exists(paths.Config))
-        {
-            var backupDirectory = Path.Combine(paths.Runtime, "backups");
-            Directory.CreateDirectory(backupDirectory);
-            backup = Path.Combine(
-                backupDirectory,
-                "config-" + DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff") + ".json");
-            File.Copy(paths.Config, backup, overwrite: false);
-        }
+        var provisioner = new WorkspaceProvisioner(paths);
+        provisioner.EnsureCanProvision(arguments.Has("force"));
 
         // Scripts and the self-test suite pass -yes. An operator at a keyboard gets asked, because
         // the mode and the verification commands are the two settings that most determine how safe
@@ -282,9 +269,17 @@ internal static class CommandDispatcher
         var requested = answers is not null && answers.Value("mode") == "standalone"
             ? WorkspaceMode.Standalone
             : RequestedMode(arguments);
-        var config = await ProvisionAsync(paths, requested, cancellationToken, answers).ConfigureAwait(false);
+        var result = await provisioner.ProvisionAsync(new WorkspaceProvisioningOptions
+        {
+            Mode = requested,
+            BaseRef = answers?.Value("base"),
+            VerificationCommands = answers?.Lines("verify").ToList(),
+            Force = arguments.Has("force")
+        }, cancellationToken).ConfigureAwait(false);
+        var config = result.Config;
+        var backup = result.BackupPath;
 
-        Console.WriteLine($"√ FKNRTD.CLI is set up for {config.ProjectName} ({DescribeMode(config.Mode)})");
+        Console.WriteLine($"√ FKNRTD.CLI is set up for {config.ProjectName} ({WorkspaceProvisioner.DescribeMode(config.Mode)})");
         Console.WriteLine($"  Configuration: {paths.Config}");
         if (backup is not null)
         {
@@ -372,7 +367,7 @@ internal static class CommandDispatcher
             isRepository,
             GitService.IsInstalled(),
             snapshot is null || snapshot.Branch == "detached" ? string.Empty : snapshot.Branch,
-            DetectVerificationCommands(paths.Root),
+            WorkspaceProvisioner.DetectVerificationCommands(paths.Root),
             HasClaude: BuiltInAgents.CreateDefaults()
                 .Any(agent => agent.Id.Equals("claude", StringComparison.OrdinalIgnoreCase))));
 
@@ -386,86 +381,11 @@ internal static class CommandDispatcher
     /// <summary>Whether there is a terminal to ask questions in.</summary>
     private static bool NonInteractive => Console.IsInputRedirected || Console.IsOutputRedirected;
 
-    /// <summary>
-    /// Writes a workspace at <paramref name="paths"/> using the default loading parameters. The
-    /// mode is detected when <paramref name="requestedMode"/> is <see langword="null"/>, so a folder
-    /// that is not a Git repository is provisioned standalone instead of being rejected.
-    /// </summary>
-    private static async Task<FknrtdConfig> ProvisionAsync(
-        FknrtdPaths paths,
-        WorkspaceMode? requestedMode,
-        CancellationToken cancellationToken,
-        Wizard? answers = null)
-    {
-        var root = paths.Root;
-        var git = new GitService(new ProcessRunner());
-        var isRepository = requestedMode != WorkspaceMode.Standalone &&
-                           await git.IsRepositoryAsync(root, cancellationToken).ConfigureAwait(false);
-        if (requestedMode == WorkspaceMode.Git && !isRepository)
-        {
-            throw new InvalidOperationException(GitService.IsInstalled()
-                ? $"{root} is not a Git repository. Drop -git to initialize a standalone workspace."
-                : "Git was not found on PATH. Drop -git to initialize a standalone workspace.");
-        }
-
-        var mode = isRepository ? WorkspaceMode.Git : WorkspaceMode.Standalone;
-        var snapshot = isRepository
-            ? await git.GetSnapshotAsync(root, cancellationToken).ConfigureAwait(false)
-            : null;
-        var config = new FknrtdConfig
-        {
-            ProjectName = snapshot?.RepositoryName ?? new DirectoryInfo(root).Name,
-            Mode = mode,
-            DefaultBaseRef = snapshot is null || string.IsNullOrWhiteSpace(snapshot.Branch) ||
-                             snapshot.Branch == "detached"
-                ? string.Empty
-                : snapshot.Branch,
-            // Nothing can be committed or merged without a repository behind the workspace.
-            AutoCommitAgentChanges = mode == WorkspaceMode.Git,
-            DefaultVerificationCommands = DetectVerificationCommands(root),
-            Agents = BuiltInAgents.CreateDefaults().ToList()
-        };
-
-        // What the operator chose beats what the folder suggested.
-        if (answers is not null)
-        {
-            var chosenBase = answers.Value("base");
-            config = config with
-            {
-                DefaultBaseRef = mode == WorkspaceMode.Git && chosenBase.Length > 0
-                    ? chosenBase
-                    : config.DefaultBaseRef,
-                DefaultVerificationCommands = answers.Lines("verify").ToList()
-            };
-        }
-
-        var store = new StateStore(paths);
-        await store.InitializeAsync(config, cancellationToken).ConfigureAwait(false);
-        await store.AppendEventAsync(new FknrtdEvent
-        {
-            Severity = EventSeverity.Success,
-            Type = EventTypes.ProjectInitialized,
-            Message = $"Initialized a {DescribeMode(mode)} FKNRTD.CLI workspace for {config.ProjectName}."
-        }, cancellationToken).ConfigureAwait(false);
-        return config;
-    }
-
     private static WorkspaceMode? RequestedMode(CliArguments arguments) => arguments.Has("standalone")
         ? WorkspaceMode.Standalone
         : arguments.Has("git")
             ? WorkspaceMode.Git
             : null;
-
-    private static string DescribeMode(WorkspaceMode mode) =>
-        mode == WorkspaceMode.Git ? "Git-backed" : "standalone";
-
-    private static List<string> DetectVerificationCommands(string root)
-    {
-        var hasDotNet = Directory.EnumerateFiles(root, "*.sln", SearchOption.TopDirectoryOnly).Any() ||
-                        Directory.EnumerateFiles(root, "*.slnx", SearchOption.TopDirectoryOnly).Any() ||
-                        Directory.EnumerateFiles(root, "*.csproj", SearchOption.TopDirectoryOnly).Any();
-        return hasDotNet ? ["dotnet build", "dotnet test --no-build"] : [];
-    }
 
     private static Task<int> RunDashboardAsync(
         FknrtdRuntime runtime,
@@ -735,7 +655,7 @@ internal static class CommandDispatcher
 
         var wizard = TaskWizard.Create(config);
         var completed = await OverlayHost
-            .RunAsync(wizard, $"{config.ProjectName} · {DescribeMode(config.Mode)} workspace",
+            .RunAsync(wizard, $"{config.ProjectName} · {WorkspaceProvisioner.DescribeMode(config.Mode)} workspace",
                 UseColor(arguments), "fknrtd task create", cancellationToken)
             .ConfigureAwait(false);
         if (!completed)
@@ -1382,7 +1302,7 @@ internal static class CommandDispatcher
             throw new ArgumentException("-name cannot be empty. Omit it to leave the name alone.");
         }
 
-        await new AgentRegistry(runtime.Store).SetAsync(id, executable, displayName, cancellationToken)
+        await new AgentRegistry(runtime.Store).SetAsync(id, executable, displayName, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         if (executable is not null)
@@ -1430,7 +1350,7 @@ internal static class CommandDispatcher
             throw new InvalidOperationException("Removing an agent requires the explicit option -confirm REMOVE.");
         }
 
-        await new AgentRegistry(runtime.Store).RemoveAsync(id, cancellationToken).ConfigureAwait(false);
+        await new AgentRegistry(runtime.Store).RemoveAsync(id, cancellationToken: cancellationToken).ConfigureAwait(false);
         Console.WriteLine($"√ Removed agent {id} from the configuration");
         return 0;
     }

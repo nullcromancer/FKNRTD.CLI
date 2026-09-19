@@ -46,7 +46,7 @@ public sealed class AgentRegistry(StateStore store)
     }
 
     public Task<FknrtdConfig> SetAsync(string id, string? executable, string? displayName,
-        CancellationToken cancellationToken = default, bool requireExisting = true) =>
+        bool requireExisting = true, CancellationToken cancellationToken = default) =>
         UpdateAsync(config =>
         {
             if (requireExisting && !config.Agents.Any(agent => Matches(agent, id)))
@@ -105,8 +105,8 @@ public sealed class AgentRegistry(StateStore store)
         return enabled;
     }
 
-    public Task<FknrtdConfig> RemoveAsync(string id, CancellationToken cancellationToken = default,
-        bool requireExisting = true) => UpdateAsync(config =>
+    public Task<FknrtdConfig> RemoveAsync(string id, bool requireExisting = true,
+        CancellationToken cancellationToken = default) => UpdateAsync(config =>
         {
             var agents = config.Agents.Where(agent => !Matches(agent, id)).ToList();
             if (requireExisting && agents.Count == config.Agents.Count)
