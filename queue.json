@@ -1130,6 +1130,26 @@
       "branch": "codex/pair-13-statusline-bars-git-health-code-health-p",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
       "base_oid": "6d94e78529e2bbf3dc68512752b3cc973460f67b"
+    },
+    {
+      "id": 14,
+      "title": "Statusline: bars, git health, code health, priority",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0014-statusline-bars-git-health-code-health-p.cvm",
+      "seat": null,
+      "created": "2026-09-19T21:10:18+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T21:10:18+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

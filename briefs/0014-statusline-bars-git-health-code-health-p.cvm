@@ -1,0 +1,59 @@
+CVM1|B
+G|Bring the Claude statusline up to the handoff document's information design, inside the existing C# renderer. The renderer already carries the badge, repository, branch, context, both agents' usage windows, agent activity and conflict state across three breakpoints. What it lacks is the document's graphical bars, Git health, code health, owner/repository naming, and an explicit priority rule that lets a critical condition displace telemetry.
+S|src/FKNRTD.Cli/Commands/StatusLineRenderer.cs is the only renderer. Extend it; do not add a second implementation.
+S|Graphical bars for context and for each usage window, drawn with the block glyphs already used at src/FKNRTD.Cli/Dashboard/Canvas.cs:129
+S|Git health beside the branch: count of modified paths, and ahead/behind against the upstream
+S|Code health from the most recent task's QualitySnapshot: tests passed/failed and lint issues
+S|owner/repository when a GitHub remote can be read; fall back to the current project name otherwise
+S|An explicit priority rule: a collision, a blocked agent or a failed verification is allowed to displace context and usage figures when width is short
+C|REPAIR ROUND 2. The layout, width budget, bars, Git health, quality segment and N/A handling from round 1 are ACCEPTED - keep them. Two colour faults must be fixed and nothing else changed.
+C|COLOUR MUST SURVIVE REDIRECTION for this command only. Claude Code always pipes the statusline, so gating useColor on Console.IsOutputRedirected switches colour off in the only consumer there is. Remove that condition. Keep honouring -no-color and the NO_COLOR environment variable. AGENTS.md line 84 says redirected output must emit no ANSI escapes; amend that line to carve out the statusline, whose consumer renders ANSI rather than storing text, because a documented rule that contradicts the code is worse than one that is missing.
+C|RESTORE PER-SEGMENT COLOUR. Paint call sites fell from 18 to 2 and the whole line is now painted one colour. Each segment carries its own again: the FKN badge cyan, repository and branch blue, Claude's figures orange, Codex's figures purple, a healthy marker green, and any critical marker red and bold. Never distinguish anything by colour alone - every marker keeps its glyph and its text.
+C|DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.
+C|GLYPHS: use only glyphs this codebase already draws. The source design proposes a set that is NOT used anywhere here and must NOT be introduced. Forbidden new glyphs and their approved replacements, which are already in StatusLineRenderer.cs: use the existing state icons and markers rather than adding a circled bullet for the badge, a framed square for the project, a branch symbol, or tick/cross marks. AGENTS.md records that four glyphs were missing from all three measured fonts, including a failure marker that drew as an empty box on a default Windows Terminal. Block glyphs for bars are proven and allowed.
+C|NAMING: the source design's worked examples use a former company and product name, and one example still carries the pre-rename three-letter badge. None of that may appear in code, comment, test, catalog entry or commit message. The badge is FKN. AGENTS.md forbids any reference to the former names.
+C|Do not port the source design's Python implementation or its installer. FKNRTD.CLI ships as one dependency-free dotnet tool and already owns this surface through fknrtd telemetry claude-statusline.
+C|Colour is only ever an enhancement: stripping the escapes from a coloured frame must leave exactly the colourless frame, character for character. A self-test asserts this.
+C|Never assume one char is one terminal column. Bars and truncation must not shift a row's width.
+C|The three breakpoints stay: narrow under 80, medium under 100, then under 140, then wide. A statusline must never wrap.
+C|Never display fake precision. A figure with no measurable source renders N/A, as the Codex windows already do.
+C|The renderer must stay cheap and must not block: no remote Git, no agent queries, no test runners on the render path. Read local state only.
+C|Every new marker, field or concept needs its entry in src/FKNRTD.Content/ - Glossary, CommandCatalog, Keymap or SettingsCatalog as applicable. Self-tests fail if a marker the renderer can draw has no entry.
+C|TreatWarningsAsErrors is on; the build must be warning-free. Nullable stays enabled. No new NuGet packages.
+C|FKNRTD.Core must not reference FKNRTD.Cli and must contain no Console or terminal code.
+C|Add a self-test per behaviour change, in the existing Check(...) style. No self-test may start a real agent.
+C|Do not touch provisioning, AgentRegistry, DoctorService, GetDiffAsync or the orchestrator. Separate briefs.
+A|Piping this command to a file or another process still emits colour: the escape count is greater than zero, matching the landed binary's behaviour
+A|-no-color and NO_COLOR=1 each still emit exactly zero escapes
+A|Segments carry distinct colours: the badge, the repository, Claude's figures and Codex's figures are not all the same colour in a coloured frame
+A|Stripping every escape from a coloured frame leaves exactly the -no-color frame, character for character, at every width - and the width budget still measures visible text, not escapes, so no row overflows
+A|AGENTS.md line 84 reads truthfully about the statusline exception
+A|Context and each usage window render a proportional bar beside the percentage at the widths that have room for one, and the percentage is always present - the bar never replaces the number
+A|A bar built from a null percentage renders N/A and no bar, never an empty or full bar
+A|Git health shows the modified-path count and ahead/behind beside the branch, and degrades without throwing in a standalone workspace and in a repository with no upstream
+A|Code health shows tests passed/failed and lint issues from the most recent task's QualitySnapshot, and is omitted rather than zeroed when no task has been verified
+A|owner/repository is shown when a GitHub remote is readable, falling back to the project name; reading the remote must not run a network call
+A|A collision, a blocked agent or a failed verification displaces context and usage figures at narrow widths, and is still shown at every width
+A|Stripping ANSI escapes from every statusline variant leaves exactly the colourless variant, character for character
+A|No statusline variant exceeds the width it was rendered for, at 60, 80, 100, 120, 140 and 200 columns
+A|grep the source tree for the former company name, the former product name and the pre-rename badge and find nothing
+A|Every glyph the renderer can draw appears in the existing approved set; no new glyph is introduced
+A|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors
+A|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all pass, count is 130 + the tests you added
+A|fknrtd portal regenerates fknrtd-portal.html byte-identically after any Content change is reflected
+F|src/FKNRTD.Cli/Commands/StatusLineRenderer.cs
+F|src/FKNRTD.Cli/Dashboard/Canvas.cs:129
+F|src/FKNRTD.Core/Domain/Models.cs:QualitySnapshot
+F|src/FKNRTD.Core/Services/QualityCategories.cs
+F|src/FKNRTD.Core/Services/GitService.cs
+F|src/FKNRTD.Content/Glossary.cs
+F|tests/FKNRTD.SelfTest/Program.cs
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+X|The full command-centre dashboard, its twenty modules, its panel layout and its keyboard map. That is a separate and much larger brief.
+X|Lead/support agent roles
+X|A cross-agent message bus
+X|A new cache directory or background collector process
+X|Nerd Font support
+X|Any change to how Codex usage is collected
+U|Whether the most recent task is the right source for code health, or whether it should be the most recently verified task. Pick one, state which in the report, and cover it with a test.
