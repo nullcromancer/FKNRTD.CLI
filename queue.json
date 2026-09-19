@@ -798,6 +798,26 @@
         "host": "Tenebris",
         "dispatch_id": "2ed2085d-b5cc-4d7b-b9d7-95049d2e3a57"
       }
+    },
+    {
+      "id": 10,
+      "title": "Workspace creation belongs in Core",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0010-workspace-creation-belongs-in-core.cvm",
+      "seat": null,
+      "created": "2026-09-19T02:55:37+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T02:55:37+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }
