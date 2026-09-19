@@ -1,0 +1,66 @@
+{
+  "goal": "Escape must never close the dashboard on one keystroke. Today Escape and Q share one action, and that action quits immediately when no task is running - so a single stray Escape at the top level ends the session with no prompt. Escape must always ask first, whether or not anything is running.",
+  "scope": [
+    "DashboardApp.cs: separate Escape from Q in the key-to-action map so the two can behave differently",
+    "DashboardApp.cs OpenQuitConfirmation(): make it cover the idle case, where no task is running, with copy that fits that case",
+    "src/FKNRTD.Content/Keymap.cs: give Escape its own entry and correct the Q entry, which currently says Escape does the same as Q",
+    "src/FKNRTD.Content/Glossary.cs only if the confirmation needs a term that does not exist yet"
+  ],
+  "constraints": [
+    "DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.",
+    "ESCAPE MUST KEEP ITS EXISTING JOB INSIDE OVERLAYS. Escape is the universal way out of a modal - AgentManager, Confirmation, InfoPanel, Palette, Picker, SettingsBrowser and Wizard all close on it, and InfoPanel.cs carries the comment that nothing may bind Escape because it is the only way out of a modal. Only TOP-LEVEL Escape, with no overlay open, changes. Escape must still dismiss any open overlay in exactly one keystroke, including the new confirmation itself.",
+    "Q IS NOT IN SCOPE. Leave Q's behaviour exactly as it is, including its fast path when nothing is running. Only Escape gains the always-confirm behaviour.",
+    "DO NOT use the Confirmation type. It requires typing a word in full and exists for actions that cannot be undone, such as a merge or a directory delete. Leaving an idle dashboard is neither. Follow the existing OpenQuitConfirmation Wizard pattern - a Choice step whose default is to stay.",
+    "The recommended option must be to stay, so that Enter on the default never quits.",
+    "Escape pressed on the confirmation dismisses the confirmation and stays in the dashboard. It must not quit, and it must not reopen the prompt.",
+    "A key that does something must be in Keymap.cs and there are no undocumented aliases, so Escape needs its own entry once it stops being an alias of Q. The Q entry's claim that Escape does the same as Q becomes false and must be corrected - an entry must be true.",
+    "Every question carries its own explanation: a WizardStep must name a glossary term.",
+    "A refusal states its reason, and copy must say what happens and what to do next, in the voice the existing confirmation uses.",
+    "The idle copy must not claim work is running. The existing title is LEAVE WHILE WORK IS RUNNING? and the body counts running tasks; with nothing running both are untrue and must not be shown.",
+    "Colour is only ever an enhancement: stripping escapes from a coloured frame leaves exactly the colourless frame, character for character. A self-test asserts this for every scene, including any new one.",
+    "Only draw glyphs already used in this codebase. Introduce no new glyph.",
+    "All box drawing stays aligned at every width, across the narrow, medium and wide breakpoints.",
+    "TreatWarningsAsErrors is on; the build must be warning-free. Nullable stays enabled. No new NuGet packages.",
+    "DashboardApp.Render(snapshot, width, height, useColor) stays a pure function of its inputs - it is the renderer's test seam.",
+    "Add a self-test per behaviour change, in the existing Check(...) style. No self-test may start a real agent.",
+    "Do not touch the statusline renderer, provisioning, AgentRegistry, DoctorService or the orchestrator. Separate briefs, one of them in flight."
+  ],
+  "acceptance": [
+    "Top-level Escape with NO task running opens a confirmation instead of quitting, and the dashboard is still open afterwards unless the operator chooses to leave",
+    "Top-level Escape WITH a task running opens the existing running-work confirmation, unchanged in wording",
+    "Choosing to stay leaves the dashboard open and quits nothing; choosing to leave quits",
+    "The default option is to stay, so pressing Enter without choosing never quits",
+    "Escape pressed while the confirmation is open closes it and stays in the dashboard, in one keystroke",
+    "Escape still closes every other overlay in one keystroke: the palette, the picker, the settings browser, the agent manager, the help panel and a wizard",
+    "Q's behaviour is unchanged, including quitting straight away when nothing is running",
+    "The idle confirmation never says work is running and never counts running tasks",
+    "Keymap.cs has an entry for Escape describing what it now does, and the Q entry no longer claims Escape does the same as Q",
+    "Stripping ANSI escapes from the new confirmation leaves exactly the colourless frame, character for character",
+    "The new confirmation's box drawing stays aligned at the narrow, medium and wide breakpoints",
+    "dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors",
+    "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all pass, count is the current total plus the tests you added",
+    "fknrtd portal regenerates fknrtd-portal.html byte-identically once the Content change is reflected"
+  ],
+  "files": [
+    "src/FKNRTD.Cli/Dashboard/DashboardApp.cs:1311",
+    "src/FKNRTD.Cli/Dashboard/DashboardApp.cs:1383",
+    "src/FKNRTD.Cli/Dashboard/DashboardApp.cs:1900",
+    "src/FKNRTD.Cli/Dashboard/InfoPanel.cs:61",
+    "src/FKNRTD.Content/Keymap.cs:150",
+    "tests/FKNRTD.SelfTest/Program.cs"
+  ],
+  "tests": [
+    "dotnet build FKNRTD.CLI.sln -c Release",
+    "dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build"
+  ],
+  "exclude": [
+    "Changing Q",
+    "A confirmation on any other key",
+    "A setting to turn the confirmation off",
+    "The statusline",
+    "Any change to how overlays other than the quit confirmation handle Escape"
+  ],
+  "unknowns": [
+    "Whether the idle confirmation should be a distinct title from the running-work one or a single title that adapts. Pick one, keep both truthful, and say which in the report."
+  ]
+}
