@@ -2198,7 +2198,7 @@ internal sealed class DashboardApp
         _overlayCompleted = async (completed, current, token) =>
         {
             var executable = ((Wizard)completed).Value("executable").Trim();
-            await new AgentRegistry(_store).SetAsync(agentId, executable, null, token, requireExisting: false)
+            await new AgentRegistry(_store).SetAsync(agentId, executable, null, requireExisting: false, token)
                 .ConfigureAwait(false);
             _toast = $"{agentId} now runs {executable}. Press D to check it answers.";
         };
@@ -2255,7 +2255,7 @@ internal sealed class DashboardApp
             "instead. That is reversible.");
         _overlayCompleted = async (_, current, token) =>
         {
-            await new AgentRegistry(_store).RemoveAsync(agentId, token, requireExisting: false)
+            await new AgentRegistry(_store).RemoveAsync(agentId, requireExisting: false, token)
                 .ConfigureAwait(false);
             _toast = $"Removed {agentId}. Press A to see what is left.";
         };

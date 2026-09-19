@@ -330,6 +330,11 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Task list columns start where the header says", TestTaskListColumnsLineUpAsync),
     ("Prose wraps to the window it assumes", TestProseWrapsToTheWindowAsync),
     ("A budget cannot be recorded against a typo", TestABudgetCannotBeRecordedAgainstATypoAsync),
+    ("Core provisions standalone workspaces", TestCoreStandaloneProvisioningAsync),
+    ("Core detects verification commands", TestCoreVerificationDetectionAsync),
+    ("Core provisions Git workspaces and honors choices", TestCoreGitProvisioningAsync),
+    ("Core owns replacement refusal and backups", TestCoreProvisioningReplacementAsync),
+    ("Core refuses requested Git outside a repository", TestCoreProvisioningRefusalAsync),
     ("Nothing announces a run it cannot start", TestNothingAnnouncesARunItCannotStartAsync)
 };
 
@@ -7215,6 +7220,9 @@ static async Task TestAgentRegistryAsync()
                 Equal("Agent 'fake' is not configured.", exception.Message, "Missing refusal is unchanged");
             }
         }
+        await registry.SetAsync("fake", null, null, false, CancellationToken.None);
+        await registry.RemoveAsync("fake", false, CancellationToken.None);
+        Equal(0, (await store.LoadConfigAsync()).Agents.Count, "Optional missing-agent edits stay no-ops");
         Equal<bool?>(null, await registry.ToggleAsync("fake"), "Missing dashboard toggle has no flag");
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
@@ -7248,5 +7256,146 @@ static async Task TestDashboardFreshConfigAsync()
         var saved = await store.LoadConfigAsync();
         Equal("new", saved.ProjectName, "Setting callback saves the answer");
         Equal(1, saved.Agents.Count, "Agent added since the form opened survives");
+    });
+}
+
+static async Task TestCoreStandaloneProvisioningAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        var result = await new WorkspaceProvisioner(paths).ProvisionAsync(new WorkspaceProvisioningOptions
+        {
+            Mode = WorkspaceMode.Standalone,
+            BaseRef = "ignored",
+            VerificationCommands = ["custom check"]
+        });
+        Equal(WorkspaceMode.Standalone, result.Config.Mode, "Explicit standalone mode");
+        Equal(string.Empty, result.Config.DefaultBaseRef, "Standalone has no base ref");
+        Equal(false, result.Config.AutoCommitAgentChanges, "Standalone cannot commit");
+        Equal("custom check", result.Config.DefaultVerificationCommands.Single(), "Caller commands win");
+        Equal<string?>(null, result.BackupPath, "New workspace needs no backup");
+        var store = new StateStore(paths);
+        Equal(JsonSerializer.Serialize(result.Config), JsonSerializer.Serialize(await store.LoadConfigAsync()),
+            "Core returns exactly the saved configuration");
+        var item = (await store.LoadEventsAsync()).Single();
+        Equal(EventTypes.ProjectInitialized, item.Type, "Initialization event type");
+        Equal(EventSeverity.Success, item.Severity, "Initialization event severity");
+        Equal($"Initialized a standalone FKNRTD.CLI workspace for {new DirectoryInfo(root).Name}.",
+            item.Message, "Initialization event wording");
+        True(result.Config.Agents.Count > 0, "Built-in agents configured without launching them");
+    });
+}
+
+static async Task TestCoreVerificationDetectionAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        Equal(0, WorkspaceProvisioner.DetectVerificationCommands(root).Count, "Empty folder has no commands");
+        Directory.CreateDirectory(Path.Combine(root, "nested"));
+        await File.WriteAllTextAsync(Path.Combine(root, "nested", "nested.csproj"), "");
+        Equal(0, WorkspaceProvisioner.DetectVerificationCommands(root).Count, "Detection remains top-level");
+        foreach (var extension in new[] { ".sln", ".slnx", ".csproj" })
+        {
+            var marker = Path.Combine(root, "project" + extension);
+            await File.WriteAllTextAsync(marker, "");
+            Equal("dotnet build|dotnet test --no-build",
+                string.Join('|', WorkspaceProvisioner.DetectVerificationCommands(root)), "Detects " + extension);
+            File.Delete(marker);
+        }
+        await File.WriteAllTextAsync(Path.Combine(root, "project.sln"), "");
+        var result = await new WorkspaceProvisioner(WorkspaceLocator.ForRoot(root))
+            .ProvisionAsync(new WorkspaceProvisioningOptions());
+        Equal(WorkspaceMode.Standalone, result.Config.Mode, "Non-repository defaults to standalone");
+        Equal("dotnet build|dotnet test --no-build", string.Join('|', result.Config.DefaultVerificationCommands),
+            "Omitted commands accept detection");
+    });
+}
+
+static async Task TestCoreGitProvisioningAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var git = new GitService(new ProcessRunner());
+        MustSucceed(await git.GitAsync(root, ["init", "-b", "main"]), "git init");
+        await File.WriteAllTextAsync(Path.Combine(root, "project.sln"), "");
+        var provisioner = new WorkspaceProvisioner(WorkspaceLocator.ForRoot(root));
+        var detected = await provisioner.ProvisionAsync(new WorkspaceProvisioningOptions());
+        Equal(WorkspaceMode.Git, detected.Config.Mode, "Repository defaults to Git");
+        Equal("main", detected.Config.DefaultBaseRef, "Branch detected");
+        Equal(true, detected.Config.AutoCommitAgentChanges, "Git enables auto-commit");
+        var chosen = await provisioner.ProvisionAsync(new WorkspaceProvisioningOptions
+        {
+            Mode = WorkspaceMode.Git, BaseRef = "release", VerificationCommands = [], Force = true
+        });
+        Equal("release", chosen.Config.DefaultBaseRef, "Explicit base wins");
+        Equal(0, chosen.Config.DefaultVerificationCommands.Count, "Explicit empty commands beat detection");
+        var standalone = await provisioner.ProvisionAsync(new WorkspaceProvisioningOptions
+        {
+            Mode = WorkspaceMode.Standalone, Force = true
+        });
+        Equal(WorkspaceMode.Standalone, standalone.Config.Mode, "Explicit standalone beats repository");
+        Equal(false, standalone.Config.AutoCommitAgentChanges, "Standalone in repository cannot auto-commit");
+    });
+}
+
+static async Task TestCoreProvisioningReplacementAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        var provisioner = new WorkspaceProvisioner(paths);
+        await provisioner.ProvisionAsync(new WorkspaceProvisioningOptions { Mode = WorkspaceMode.Standalone });
+        var original = await File.ReadAllTextAsync(paths.Config);
+        try
+        {
+            await provisioner.ProvisionAsync(new WorkspaceProvisioningOptions());
+            throw new InvalidDataException("Existing configuration was replaced without force");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Equal($"FKNRTD.CLI is already set up at {root}. Nothing was changed. " +
+                "Use -force to replace its configuration, keeping a backup of the old one.",
+                exception.Message, "Refusal wording unchanged");
+        }
+        Equal(original, await File.ReadAllTextAsync(paths.Config), "Refusal preserves bytes");
+        True(!Directory.Exists(Path.Combine(paths.Runtime, "backups")), "Refusal creates no backup");
+        var taskPath = Path.Combine(paths.Tasks, "keep.txt");
+        await File.WriteAllTextAsync(taskPath, "keep");
+        var result = await provisioner.ProvisionAsync(new WorkspaceProvisioningOptions
+        {
+            Mode = WorkspaceMode.Standalone, VerificationCommands = ["replacement"], Force = true
+        });
+        True(result.BackupPath is not null, "Force returns backup path");
+        Equal(Path.Combine(paths.Runtime, "backups"), Path.GetDirectoryName(result.BackupPath!),
+            "Backup lives under runtime/backups");
+        True(System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(result.BackupPath!),
+            @"^config-\d{8}-\d{6}-\d{3}\.json$"), "Backup name retains timestamp format");
+        Equal(original, await File.ReadAllTextAsync(result.BackupPath!), "Backup preserves exact old bytes");
+        Equal("replacement", (await new StateStore(paths).LoadConfigAsync()).DefaultVerificationCommands.Single(),
+            "Force saves replacement");
+        Equal("keep", await File.ReadAllTextAsync(taskPath), "Force keeps task records");
+    });
+}
+
+static async Task TestCoreProvisioningRefusalAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        try
+        {
+            await new WorkspaceProvisioner(paths).ProvisionAsync(
+                new WorkspaceProvisioningOptions { Mode = WorkspaceMode.Git });
+            throw new InvalidDataException("Requested Git silently downgraded");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Equal(GitService.IsInstalled()
+                ? $"{root} is not a Git repository. Drop -git to initialize a standalone workspace."
+                : "Git was not found on PATH. Drop -git to initialize a standalone workspace.",
+                exception.Message, "Git refusal wording unchanged");
+        }
+        True(!File.Exists(paths.Config), "Refusal writes no configuration");
     });
 }
