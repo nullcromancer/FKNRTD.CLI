@@ -335,6 +335,26 @@
         "backup_ref": "refs/pairing/backups/3/20260915-061935",
         "at": "2026-09-15T10:19:35+00:00"
       }
+    },
+    {
+      "id": 4,
+      "title": "Extract FKNRTD.Content from the CLI",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0004-extract-fknrtd-content-from-the-cli.cvm",
+      "seat": null,
+      "created": "2026-09-19T01:54:42+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T01:54:42+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

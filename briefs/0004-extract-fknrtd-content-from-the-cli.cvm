@@ -1,0 +1,42 @@
+CVM1|B
+G|Extract the eight explanation tables from src/FKNRTD.Cli/Help into a new referencable library src/FKNRTD.Content, so a future non-terminal front end can reuse them. Pure move: zero behaviour change.
+S|New project src/FKNRTD.Content/FKNRTD.Content.csproj, net10.0, RootNamespace FKNRTD, AssemblyName FKNRTD.Content, ProjectReference to FKNRTD.Core only
+S|Move all 8 files from src/FKNRTD.Cli/Help/ to src/FKNRTD.Content/ preserving the existing namespace FKNRTD.Help
+S|Add ProjectReference FKNRTD.Content to FKNRTD.Cli.csproj
+S|Add the project to FKNRTD.CLI.sln
+S|Fix accessibility so both fknrtd and FKNRTD.SelfTest still compile
+S|Update the AGENTS.md path reference to the tables
+C|Namespace stays FKNRTD.Help. Do not rename types, members, or namespaces. No consumer using-directive should need to change.
+C|FKNRTD.Content must reference ONLY FKNRTD.Core. It must not reference FKNRTD.Cli, and must contain no Console./ANSI/terminal code.
+C|Do not edit the CONTENT of any table row. No wording changes, no added or removed entries. This is a file move.
+C|SampleWorkspace is internal and consumed by src/FKNRTD.Cli/Commands/PortalCommand.cs:67,81,95. Resolve with InternalsVisibleTo on the new assembly rather than widening it to public, so the visibility decision stays deliberate. Cli AssemblyName is fknrtd, so the attribute value is fknrtd, plus FKNRTD.SelfTest.
+C|Use git mv so the move is reviewable as a rename.
+C|TreatWarningsAsErrors is on solution-wide; the build must be warning-free.
+C|Do not fix any unrelated bug, do not reformat untouched code, do not touch src/FKNRTD.Cli/Dashboard or src/FKNRTD.Core.
+A|dotnet build FKNRTD.CLI.sln -c Release succeeds with 0 warnings and 0 errors
+A|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build prints 113/113 self-tests passed and exits 0
+A|src/FKNRTD.Cli/Help/ no longer exists
+A|git diff --stat on the branch shows the 8 files as renames, not rewrites
+A|fknrtd portal regenerates fknrtd-portal.html byte-identically: run src/FKNRTD.Cli/bin/Release/net10.0/fknrtd.exe portal and confirm git diff --exit-code fknrtd-portal.html is clean
+A|grep for src/FKNRTD.Cli/Help in AGENTS.md returns nothing; the line names src/FKNRTD.Content instead
+F|src/FKNRTD.Cli/Help/CommandCatalog.cs
+F|src/FKNRTD.Cli/Help/Glossary.cs
+F|src/FKNRTD.Cli/Help/Keymap.cs
+F|src/FKNRTD.Cli/Help/Milestones.cs
+F|src/FKNRTD.Cli/Help/RoleNotes.cs
+F|src/FKNRTD.Cli/Help/SampleWorkspace.cs
+F|src/FKNRTD.Cli/Help/SettingsCatalog.cs
+F|src/FKNRTD.Cli/Help/TaskText.cs
+F|src/FKNRTD.Cli/FKNRTD.Cli.csproj
+F|src/FKNRTD.Cli/Properties/AssemblyInfo.cs
+F|FKNRTD.CLI.sln
+F|AGENTS.md:The product explains itself
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+T|No new self-test is required: this is a move with no behaviour change, and the existing suite already asserts the tables are complete and the portal is deterministic.
+X|Moving LogLine/LogFormat (a separate brief)
+X|Moving write paths or wizard logic into Core (a separate brief)
+X|Any parsing or correctness fix (a separate brief)
+X|Adding a config lease or change notification (a separate brief)
+X|Any Avalonia or GUI work
+U|Whether Directory.Build.props needs no change for the new project: confirm it applies solution-wide by inspection rather than assuming.
