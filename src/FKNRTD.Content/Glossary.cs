@@ -49,6 +49,11 @@ public static class Glossary
     private static readonly GlossaryEntry[] Entries =
     [
         // Concepts
+        new("dashboard.leave", "Leaving an idle dashboard", Concepts,
+            "Return to the terminal or keep the dashboard open.",
+            "Leaving restores the terminal. Your workspace stays on disk and nothing is merged. " +
+            "Choose Stay here to keep using the dashboard, or Leave the dashboard to close it. " +
+            "Run fknrtd in this folder to open it again."),
         new("fknrtd", "FKNRTD.CLI", Concepts,
             "A command center that runs coding agents through one reviewed, verified pipeline.",
             "FKNRTD.CLI does not write code itself. It drives the coding agents you already have " +

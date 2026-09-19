@@ -278,6 +278,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("A task naming a missing agent says so", TestOrphanedAgentIsFlaggedAsync),
     ("The busy repaint stays inside the dashboard loop", TestBusyRepaintStaysInsideTheLoopAsync),
     ("Nothing on screen tells you to leave the dashboard", TestNothingTellsYouToLeaveAsync),
+    ("Escape always confirms and dismisses overlays", TestEscapeAlwaysConfirmsAsync),
     ("Quitting asks when work is running", TestQuittingAsksWhenWorkIsRunningAsync),
     ("A stage log reads as sentences, not JSON", TestLogIsReadableAsync),
     ("A panel never names a key that does nothing there", TestPanelsDoNotNameDeadKeysAsync),
@@ -3810,6 +3811,68 @@ static Task TestNothingTellsYouToLeaveAsync()
         "An empty roster names the key that fills it");
 
     return Task.CompletedTask;
+}
+
+static async Task TestEscapeAlwaysConfirmsAsync()
+{
+    var config = Scenes.SampleConfig();
+    var snapshot = new DashboardSnapshot { Config = config };
+    var store = new StateStore(WorkspaceLocator.ForRoot(Path.GetTempPath()));
+    var field = typeof(DashboardApp).GetField("_overlay",
+        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+    foreach (var running in new[] { 0, 1, 2 })
+    {
+        foreach (var logView in new[] { false, true })
+        {
+            var app = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+            for (var i = 0; i < running; i++) app.PretendTaskIsRunning($"fake-{i}");
+            if (logView) await app.HandleKeyAsync(Key(ConsoleKey.Tab), snapshot, CancellationToken.None);
+            await app.HandleKeyAsync(Key(ConsoleKey.Escape), snapshot, CancellationToken.None);
+            True(!app.WantsToQuit, "Escape never quits immediately");
+            var title = running == 0 ? "LEAVE THE DASHBOARD?" : "LEAVE WHILE WORK IS RUNNING?";
+            var frame = app.RenderLive(snapshot, 120, 44);
+            True(frame.Contains(title, StringComparison.Ordinal), "Escape asks the appropriate question");
+            if (running == 0)
+            {
+                True(!frame.Contains("still running", StringComparison.Ordinal), "Idle copy never counts running tasks");
+                True(!frame.Contains("WORK IS RUNNING", StringComparison.Ordinal), "Idle title is truthful");
+            }
+            else
+            {
+                var viaQ = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+                for (var i = 0; i < running; i++) viaQ.PretendTaskIsRunning($"fake-{i}");
+                if (logView) await viaQ.HandleKeyAsync(Key(ConsoleKey.Tab), snapshot, CancellationToken.None);
+                await viaQ.HandleKeyAsync(Key(ConsoleKey.Q), snapshot, CancellationToken.None);
+                Equal(viaQ.RenderLive(snapshot, 120, 44), frame, "Busy Escape uses unchanged Q confirmation");
+            }
+            await app.HandleKeyAsync(Key(ConsoleKey.Escape), snapshot, CancellationToken.None);
+            True(!app.WantsToQuit && field.GetValue(app) is null, "One Escape dismisses confirmation and stays");
+            await app.HandleKeyAsync(Key(ConsoleKey.Escape), snapshot, CancellationToken.None);
+            await app.HandleKeyAsync(Key(ConsoleKey.Enter), snapshot, CancellationToken.None);
+            True(!app.WantsToQuit && field.GetValue(app) is null, "Default Enter stays and closes question");
+            await app.HandleKeyAsync(Key(ConsoleKey.Escape), snapshot, CancellationToken.None);
+            await app.HandleKeyAsync(Key(ConsoleKey.DownArrow), snapshot, CancellationToken.None);
+            await app.HandleKeyAsync(Key(ConsoleKey.Enter), snapshot, CancellationToken.None);
+            True(app.WantsToQuit, "Explicit leave quits");
+        }
+    }
+    foreach (var overlay in new IOverlay[]
+    {
+        new AgentManager([], new Dictionary<string, int>()),
+        new Confirmation("Confirm", Theme.Amber, "subject", "consequence", "yes", "workspace"),
+        new InfoPanel("Help", Theme.Cyan, _ => []),
+        new Palette(() => Palette.Build(snapshot, selected: null, running: 0)),
+        new Picker("Pick", Theme.Cyan, [], "hint", "empty"),
+        new SettingsBrowser(config, "config.json"),
+        TaskWizard.Create(config)
+    })
+    {
+        var app = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+        field.SetValue(app, overlay);
+        await app.HandleKeyAsync(Key(ConsoleKey.Escape), snapshot, CancellationToken.None);
+        True(field.GetValue(app) is null, $"One Escape dismisses {overlay.GetType().Name}");
+        True(!app.WantsToQuit, "Overlay Escape never quits");
+    }
 }
 
 /// <summary>

@@ -151,12 +151,13 @@ public static class Keymap
             "Leaves the dashboard and restores the terminal. Leaving cancels the session, which " +
             "kills each running agent where it stands, so with anything running it asks first. " +
             "Whatever an agent had already written to disk stays there and nothing is merged; the " +
-            "task is recorded as cancelled and R resets it to run again. Escape does the same as Q " +
-            "when no panel is open.",
+            "task is recorded as cancelled and R resets it to run again. With nothing running, " +
+            "Q leaves immediately.",
             InFooter: true, Essential: true),
         new("Esc", "back",
-            "Closes whatever overlay is open. With nothing open it quits, the same as Q, from the " +
-            "log view as well as the overview.")
+            "Closes whatever overlay is open. With nothing open it always asks before leaving, " +
+            "from the log view as well as the overview. Stay here is the default; Enter stays, " +
+            "and Escape closes the question and keeps the dashboard open.")
     ];
 
     public static IReadOnlyList<KeyBinding> All => Bindings;

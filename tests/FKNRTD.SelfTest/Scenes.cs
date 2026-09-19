@@ -13,7 +13,7 @@ internal static class Scenes
     public static readonly string[] Names =
     [
         "overview", "empty", "wizard", "wizard-brief", "wizard-review", "wizard-auditor", "wizard-failed", "message", "land", "land-landed", "remove", "remove-landed",
-        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "welcome-standalone", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running",
+        "help", "help-search", "inspect", "agents", "agents-empty", "agents-nothing-installed", "agents-remove", "doctor", "welcome", "welcome-standalone", "setup", "setup-no-git", "setup-no-repo", "palette", "palette-search", "logs", "logs-plain", "logs-json", "agent", "events", "events-empty", "coordination", "settings", "settings-reference", "settings-edit", "settings-number", "usage", "usage-missing", "find", "find-search", "diff", "diff-empty", "diff-standalone", "prompts", "standalone", "standalone-inspect", "inspect-missing-agent", "quit-while-running", "quit-idle",
         "tasks-unreadable", "tasks-all-unreadable", "wide-glyphs"
     ];
 
@@ -132,12 +132,12 @@ internal static class Scenes
             return renderer.Render(broken, width, height, colour);
         }
 
-        if (name == "quit-while-running")
+        if (name is "quit-while-running" or "quit-idle")
         {
             var app = new DashboardApp(null!, null!, null!, null!, null!, new StateStore(
                 WorkspaceLocator.ForRoot(Path.GetTempPath())), null!, null!, null!);
-            app.PretendTaskIsRunning(snapshot.Tasks[1].Id);
-            app.HandleKeyAsync(new ConsoleKeyInfo((char)0, ConsoleKey.Q, false, false, false),
+            if (name == "quit-while-running") app.PretendTaskIsRunning(snapshot.Tasks[1].Id);
+            app.HandleKeyAsync(new ConsoleKeyInfo((char)0, ConsoleKey.Escape, false, false, false),
                 snapshot, CancellationToken.None).GetAwaiter().GetResult();
             return app.RenderLive(snapshot, width, height, colour);
         }

@@ -1308,7 +1308,8 @@ internal sealed class DashboardApp
         // action has exactly one implementation.
         var action = key.Key switch
         {
-            ConsoleKey.Q or ConsoleKey.Escape => "Q",
+            ConsoleKey.Q => "Q",
+            ConsoleKey.Escape => "Esc",
             ConsoleKey.UpArrow => "up",
             ConsoleKey.DownArrow => "down",
             ConsoleKey.Enter => "Enter",
@@ -1390,6 +1391,9 @@ internal sealed class DashboardApp
                     break;
                 }
 
+                OpenQuitConfirmation();
+                break;
+            case "Esc":
                 OpenQuitConfirmation();
                 break;
             case "up":
@@ -1893,7 +1897,7 @@ internal sealed class DashboardApp
     }
 
     /// <summary>
-    /// Asks before quitting with work in flight. Leaving cancels the session, and cancelling a
+    /// Asks before quitting, including idle sessions reached through Escape. Leaving cancels the session, and cancelling a
     /// session kills each running agent's process tree - so an operator who pressed Q meaning
     /// "put this away" would come back to tasks that had stopped part-way through.
     /// </summary>
@@ -1904,17 +1908,17 @@ internal sealed class DashboardApp
             ? "One task is still running."
             : $"{running} tasks are still running.";
 
-        _overlay = new Wizard("LEAVE WHILE WORK IS RUNNING?", Theme.Amber,
+        _overlay = new Wizard(running == 0 ? "LEAVE THE DASHBOARD?" : "LEAVE WHILE WORK IS RUNNING?", Theme.Amber,
         [
             new WizardStep
             {
                 Key = "leave",
-                Question = subject + " What should happen to " +
+                Question = running == 0 ? "Stay here or return to the terminal?" : subject + " What should happen to " +
                            (running == 1 ? "it" : "them") + "?",
-                GlossaryTerm = "status.running",
+                GlossaryTerm = running == 0 ? "dashboard.leave" : "status.running",
                 Input = WizardInput.Choice,
                 Default = _ => "stay",
-                Explanation =
+                Explanation = running == 0 ? Glossary.Find("dashboard.leave")!.Detail :
                     "Quitting cancels this session, and cancelling kills each running agent where it " +
                     $"stands — whatever it had already written to disk stays there, and the task is " +
                     "recorded as cancelled. Nothing is merged either way. A cancelled task can be " +
@@ -1925,9 +1929,9 @@ internal sealed class DashboardApp
                 Options = _ =>
                 [
                     new WizardOption("stay", "Stay here",
-                        running == 1 ? "let it finish" : "let them finish", Recommended: true),
-                    new WizardOption("leave", "Stop " + (running == 1 ? "it" : "them") + " and quit",
-                        "each running agent is killed where it stands")
+                        running == 0 ? "keep the dashboard open" : running == 1 ? "let it finish" : "let them finish", Recommended: true),
+                    new WizardOption("leave", running == 0 ? "Leave the dashboard" : "Stop " + (running == 1 ? "it" : "them") + " and quit",
+                        running == 0 ? "return to the terminal" : "each running agent is killed where it stands")
                 ]
             }
         ], finishVerb: "confirm");
@@ -1937,7 +1941,7 @@ internal sealed class DashboardApp
             _quit = ((Wizard)completed).Value("leave") == "leave";
             if (!_quit)
             {
-                _toast = "Still here. Press L to watch what is running.";
+                _toast = running == 0 ? "Still here. Press ? for help." : "Still here. Press L to watch what is running.";
             }
 
             return Task.CompletedTask;
