@@ -1,9 +1,9 @@
 using System.Text.Json;
 
-namespace FKNRTD.Dashboard;
+namespace FKNRTD.Services;
 
 /// <summary>What a line of agent output turns out to be, which decides how it is coloured.</summary>
-internal enum LogKind
+public enum LogKind
 {
     /// <summary>Ordinary output, shown as it arrived.</summary>
     Plain,
@@ -25,7 +25,7 @@ internal enum LogKind
 }
 
 /// <summary>One line of a stage log, ready to draw.</summary>
-internal readonly record struct LogLine(string Text, LogKind Kind);
+public readonly record struct LogLine(string Text, LogKind Kind);
 
 /// <summary>
 /// Turns a line of raw agent output into something a person can read.
@@ -42,7 +42,7 @@ internal readonly record struct LogLine(string Text, LogKind Kind);
 /// not recognise is shown exactly as it is, so an agent whose format is unknown is no worse off
 /// than before.
 /// </remarks>
-internal static class LogFormat
+public static class LogFormat
 {
     /// <summary>The longest a single formatted line is allowed to get before it is cut.</summary>
     private const int MaximumLength = 2000;
