@@ -1311,10 +1311,10 @@
     {
       "id": 16,
       "title": "Escape always confirms before leaving",
-      "state": "ready",
-      "phase": "worktree-ready",
+      "state": "claimed",
+      "phase": "implementing",
       "path": "briefs/0016-escape-always-confirms-before-leaving.cvm",
-      "seat": null,
+      "seat": "codex",
       "created": "2026-09-19T22:46:08+00:00",
       "reports": [],
       "events": [
@@ -1331,15 +1331,30 @@
           "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0016-escape-always-confirms-before-leaving",
           "branch": "codex/pair-16-escape-always-confirms-before-leaving",
           "base": "74ec55efe658cc18a67967b89bc961815eed45ce"
+        },
+        {
+          "type": "claim",
+          "at": "2026-09-19T22:46:08+00:00",
+          "seat": "codex",
+          "round": 1,
+          "lease_expires": "2026-09-19T23:31:08+00:00"
         }
       ],
-      "round": 0,
+      "round": 1,
       "protocol": "caveman-v1",
       "implementer": "codex",
       "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0016-escape-always-confirms-before-leaving",
       "branch": "codex/pair-16-escape-always-confirms-before-leaving",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
-      "base_oid": "74ec55efe658cc18a67967b89bc961815eed45ce"
+      "base_oid": "74ec55efe658cc18a67967b89bc961815eed45ce",
+      "claim": {
+        "seat": "codex",
+        "at": "2026-09-19T22:46:08+00:00",
+        "lease_expires": "2026-09-19T23:31:08+00:00",
+        "pid": null,
+        "host": "Tenebris",
+        "dispatch_id": "464fda02-8b9a-4682-bc4a-27522aa85fee"
+      }
     }
   ]
 }
