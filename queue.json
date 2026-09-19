@@ -686,7 +686,7 @@
       "id": 8,
       "title": "Keep a successful command line readable",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0008-keep-a-successful-command-line-readable.cvm",
       "seat": null,
       "created": "2026-09-19T02:23:11+00:00",
@@ -697,10 +697,23 @@
           "at": "2026-09-19T02:23:11+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T02:23:11+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0008-keep-a-successful-command-line-readable",
+          "branch": "codex/pair-8-keep-a-successful-command-line-readable",
+          "base": "0b0d0765c31bd96cf6e632fb873b6e9fcf3a575c"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0008-keep-a-successful-command-line-readable",
+      "branch": "codex/pair-8-keep-a-successful-command-line-readable",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "0b0d0765c31bd96cf6e632fb873b6e9fcf3a575c"
     }
   ]
 }
