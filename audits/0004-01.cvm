@@ -1,0 +1,3 @@
+CVM1|A|B
+E|Duplicate of #5, which landed as c580017. #4 was created when the first pair invocation was refused for a dirty working tree and never dispatched.
+B|Superseded by #5. Nothing to implement.
