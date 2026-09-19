@@ -355,6 +355,26 @@
       ],
       "round": 0,
       "protocol": "caveman-v1"
+    },
+    {
+      "id": 5,
+      "title": "Extract FKNRTD.Content from the CLI",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0005-extract-fknrtd-content-from-the-cli.cvm",
+      "seat": null,
+      "created": "2026-09-19T01:54:55+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T01:54:55+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }
