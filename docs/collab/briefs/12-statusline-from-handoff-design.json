@@ -9,6 +9,9 @@
     "An explicit priority rule: a collision, a blocked agent or a failed verification is allowed to displace context and usage figures when width is short"
   ],
   "constraints": [
+    "REPAIR ROUND 2. The layout, width budget, bars, Git health, quality segment and N/A handling from round 1 are ACCEPTED - keep them. Two colour faults must be fixed and nothing else changed.",
+    "COLOUR MUST SURVIVE REDIRECTION for this command only. Claude Code always pipes the statusline, so gating useColor on Console.IsOutputRedirected switches colour off in the only consumer there is. Remove that condition. Keep honouring -no-color and the NO_COLOR environment variable. AGENTS.md line 84 says redirected output must emit no ANSI escapes; amend that line to carve out the statusline, whose consumer renders ANSI rather than storing text, because a documented rule that contradicts the code is worse than one that is missing.",
+    "RESTORE PER-SEGMENT COLOUR. Paint call sites fell from 18 to 2 and the whole line is now painted one colour. Each segment carries its own again: the FKN badge cyan, repository and branch blue, Claude's figures orange, Codex's figures purple, a healthy marker green, and any critical marker red and bold. Never distinguish anything by colour alone - every marker keeps its glyph and its text.",
     "DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.",
     "GLYPHS: use only glyphs this codebase already draws. The source design proposes a set that is NOT used anywhere here and must NOT be introduced. Forbidden new glyphs and their approved replacements, which are already in StatusLineRenderer.cs: use the existing state icons and markers rather than adding a circled bullet for the badge, a framed square for the project, a branch symbol, or tick/cross marks. AGENTS.md records that four glyphs were missing from all three measured fonts, including a failure marker that drew as an empty box on a default Windows Terminal. Block glyphs for bars are proven and allowed.",
     "NAMING: the source design's worked examples use a former company and product name, and one example still carries the pre-rename three-letter badge. None of that may appear in code, comment, test, catalog entry or commit message. The badge is FKN. AGENTS.md forbids any reference to the former names.",
@@ -25,6 +28,11 @@
     "Do not touch provisioning, AgentRegistry, DoctorService, GetDiffAsync or the orchestrator. Separate briefs."
   ],
   "acceptance": [
+    "Piping this command to a file or another process still emits colour: the escape count is greater than zero, matching the landed binary's behaviour",
+    "-no-color and NO_COLOR=1 each still emit exactly zero escapes",
+    "Segments carry distinct colours: the badge, the repository, Claude's figures and Codex's figures are not all the same colour in a coloured frame",
+    "Stripping every escape from a coloured frame leaves exactly the -no-color frame, character for character, at every width - and the width budget still measures visible text, not escapes, so no row overflows",
+    "AGENTS.md line 84 reads truthfully about the statusline exception",
     "Context and each usage window render a proportional bar beside the percentage at the widths that have room for one, and the percentage is always present - the bar never replaces the number",
     "A bar built from a null percentage renders N/A and no bar, never an empty or full bar",
     "Git health shows the modified-path count and ahead/behind beside the branch, and degrades without throwing in a standalone workspace and in a repository with no upstream",
