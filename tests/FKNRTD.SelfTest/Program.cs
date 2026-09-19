@@ -255,6 +255,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync),
     ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync),
     ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync),
+    ("Concurrent configuration edits preserve both writers", TestConcurrentConfigEditsAsync),
+    ("Dashboard and CLI share agent validation", TestSharedAgentValidationAsync),
+    ("Registry mutations preserve state and release leases", TestAgentRegistryAsync),
+    ("Dashboard settings save against fresh configuration", TestDashboardFreshConfigAsync),
     ("The agent roster lists and changes the roster", TestAgentManagerAsync),
     ("The settings screen can change what it explains", TestSettingsBrowserAsync),
     ("Coordination can clear the reservations it reports", TestCoordinationReleaseAsync),
@@ -7080,4 +7084,169 @@ static async Task TestAnAgentCanBeRepointedFromTheCommandLineAsync()
         True(!listed.Out.Contains("correct the executable in", StringComparison.Ordinal),
             "and no longer sends the reader to the configuration file");
     }).ConfigureAwait(false);
+}
+
+static async Task TestConcurrentConfigEditsAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var paths = WorkspaceLocator.ForRoot(root);
+        var store = new StateStore(paths);
+        await store.InitializeAsync(new FknrtdConfig { Mode = WorkspaceMode.Standalone });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        // Hold the actual file lease so independent stores start their edits at the same time.
+        var lease = await store.AcquireConfigLeaseAsync(timeout.Token);
+        Task first;
+        Task second;
+        try
+        {
+            first = new AgentRegistry(new StateStore(paths)).AddAsync(
+                CreateFakeAgent() with { Id = "first" }, timeout.Token);
+            second = new AgentRegistry(new StateStore(paths)).UpdateAsync(
+                config => config with { ProjectName = "concurrent-name" }, timeout.Token);
+            await Task.Delay(150, timeout.Token);
+            True(!first.IsCompleted && !second.IsCompleted, "Both writers wait for the configuration lease");
+        }
+        finally
+        {
+            await lease.DisposeAsync();
+        }
+
+        await Task.WhenAll(first, second).WaitAsync(timeout.Token);
+        var saved = await store.LoadConfigAsync();
+        True(saved.Agents.Any(agent => agent.Id == "first"), "Agent addition survives the setting edit");
+        Equal("concurrent-name", saved.ProjectName, "Setting survives the agent addition");
+
+        // Two toggles must each read the flag inside their lease, not toggle the same stale flag.
+        await Task.WhenAll(
+            new AgentRegistry(store).ToggleAsync("first", timeout.Token),
+            new AgentRegistry(new StateStore(paths)).ToggleAsync("first", timeout.Token));
+        Equal(true, (await store.LoadConfigAsync()).Agents.Single(agent => agent.Id == "first").Enabled,
+            "Two concurrent toggles both take effect");
+    });
+}
+
+static async Task TestSharedAgentValidationAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { Mode = WorkspaceMode.Standalone });
+        var dashboard = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+        var invalid = new[]
+        {
+            (CreateFakeAgent() with { Id = "has space" },
+                "Agent ID 'has space' can contain only letters, numbers, hyphens, and underscores."),
+            (CreateFakeAgent() with { Profiles = [] }, "Agent 'fake' needs at least one command profile."),
+            (CreateFakeAgent() with { Executable = " " }, "Each agent requires non-empty id and executable values.")
+        };
+        foreach (var (agent, expected) in invalid)
+        {
+            var file = Path.Combine(root, "agent.json");
+            await File.WriteAllTextAsync(file, JsonSerializer.Serialize(agent, JsonSupport.Options));
+            foreach (var submit in new Func<Task>[]
+            {
+                () => CommandDispatcher.ExecuteAsync(new CliArguments(
+                    ["agent", "add", "-file", file, "-root", root]), CancellationToken.None),
+                () => dashboard.RegisterAgentAsync(agent)
+            })
+            {
+                try
+                {
+                    await submit();
+                    throw new InvalidOperationException("Invalid agent was accepted");
+                }
+                catch (InvalidDataException exception)
+                {
+                    Equal(expected, exception.Message, "Both surfaces refuse with the same exact message");
+                }
+            }
+        }
+
+        Equal(0, (await store.LoadConfigAsync()).Agents.Count, "Failed validation writes no agent");
+        await dashboard.RegisterAgentAsync(CreateFakeAgent());
+        await dashboard.RegisterAgentAsync(CreateFakeAgent() with { Id = "FAKE" });
+        Equal(1, (await store.LoadConfigAsync()).Agents.Count, "Dashboard refuses duplicate IDs case-insensitively");
+    });
+}
+
+static async Task TestAgentRegistryAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        await store.InitializeAsync(new FknrtdConfig { Mode = WorkspaceMode.Standalone });
+        var registry = new AgentRegistry(store);
+        await registry.AddAsync(CreateFakeAgent());
+        try
+        {
+            await registry.AddAsync(CreateFakeAgent() with { Id = "FAKE" });
+            throw new InvalidDataException("Duplicate was accepted");
+        }
+        catch (InvalidOperationException exception)
+        {
+            Equal("Agent 'FAKE' is already configured.", exception.Message, "Duplicate refusal is unchanged");
+        }
+        var original = (await store.LoadConfigAsync()).Agents.Single();
+        await registry.SetAsync("FAKE", "fknrtd-no-such-test-executable", "New name");
+        await registry.SetEnabledAsync("FAKE", false);
+        var updated = (await store.LoadConfigAsync()).Agents.Single();
+        Equal("New name", updated.DisplayName, "Rename saved");
+        Equal("fknrtd-no-such-test-executable", updated.Executable, "Executable saved");
+        Equal(false, updated.Enabled, "Disabled");
+        Equal(JsonSerializer.Serialize(original.Profiles), JsonSerializer.Serialize(updated.Profiles),
+            "Profiles survive all changes");
+        await registry.SetEnabledAsync("fake", true);
+        Equal(true, (await store.LoadConfigAsync()).Agents.Single().Enabled, "Enabled");
+        await registry.RemoveAsync("FAKE");
+        foreach (var change in new Func<Task>[]
+        {
+            () => registry.SetEnabledAsync("fake", false),
+            () => registry.RemoveAsync("fake")
+        })
+        {
+            try
+            {
+                await change();
+                throw new InvalidDataException("Missing agent was accepted");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Equal("Agent 'fake' is not configured.", exception.Message, "Missing refusal is unchanged");
+            }
+        }
+        Equal<bool?>(null, await registry.ToggleAsync("fake"), "Missing dashboard toggle has no flag");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        try
+        {
+            await registry.AddAsync(CreateFakeAgent(), cancelled.Token);
+            throw new InvalidOperationException("Cancellation was ignored");
+        }
+        catch (OperationCanceledException) { }
+        await registry.AddAsync(CreateFakeAgent());
+        Equal(1, (await store.LoadConfigAsync()).Agents.Count, "Lease released after failures and cancellation");
+    });
+}
+
+static async Task TestDashboardFreshConfigAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var store = new StateStore(WorkspaceLocator.ForRoot(root));
+        var config = new FknrtdConfig { Mode = WorkspaceMode.Standalone, ProjectName = "old" };
+        await store.InitializeAsync(config);
+        var dashboard = new DashboardApp(null!, null!, null!, null!, null!, store, null!, null!, null!);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(DashboardApp).GetMethod("OpenSettingEditor", flags)!.Invoke(dashboard, [config, "projectName"]);
+        var wizard = (Wizard)typeof(DashboardApp).GetField("_overlay", flags)!.GetValue(dashboard)!;
+        wizard.Reopen(new Dictionary<string, string> { ["projectName"] = "new" }, "");
+        await new AgentRegistry(store).AddAsync(CreateFakeAgent());
+        var complete = (Func<IOverlay, DashboardSnapshot, CancellationToken, Task>)typeof(DashboardApp)
+            .GetField("_overlayCompleted", flags)!.GetValue(dashboard)!;
+        await complete(wizard, null!, CancellationToken.None);
+        var saved = await store.LoadConfigAsync();
+        Equal("new", saved.ProjectName, "Setting callback saves the answer");
+        Equal(1, saved.Agents.Count, "Agent added since the form opened survives");
+    });
 }

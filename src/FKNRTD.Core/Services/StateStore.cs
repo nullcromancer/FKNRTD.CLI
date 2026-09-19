@@ -160,6 +160,18 @@ public sealed class StateStore
 
     public string CancelPath(string taskId) => Path.Combine(Paths.Cancels, SafeName(taskId) + ".cancel");
 
+    public async Task<ExclusiveFileLease> AcquireConfigLeaseAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var path = Path.Combine(Paths.Locks, "config.lock");
+        return await ExclusiveFileLease.AcquireAsync(
+                path,
+                "The configuration is being changed by another FKNRTD.CLI process.",
+                maximumAttempts: null,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<ExclusiveFileLease> AcquireTaskLeaseAsync(
         string taskId,
         CancellationToken cancellationToken = default)

@@ -1271,10 +1271,7 @@ internal static class CommandDispatcher
         }
 
         var agent = AgentWizard.Build(wizard);
-        ValidateAgentDefinition(agent);
-        await runtime.Store
-            .SaveConfigAsync(config with { Agents = config.Agents.Append(agent).ToList() }, cancellationToken)
-            .ConfigureAwait(false);
+        await new AgentRegistry(runtime.Store).AddAsync(agent, cancellationToken).ConfigureAwait(false);
 
         Console.WriteLine($"√ Registered {agent.DisplayName}");
         foreach (var line in AgentWizard.Report(agent, wizard.Value("audit") == "yes"))
@@ -1339,15 +1336,7 @@ internal static class CommandDispatcher
             };
         }
 
-        ValidateAgentDefinition(agent);
-        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
-        if (config.Agents.Any(item => item.Id.Equals(agent.Id, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidOperationException($"Agent '{agent.Id}' is already configured.");
-        }
-
-        var updated = config with { Agents = config.Agents.Append(agent).ToList() };
-        await runtime.Store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
+        await new AgentRegistry(runtime.Store).AddAsync(agent, cancellationToken).ConfigureAwait(false);
         Console.WriteLine($"√ Added {agent.DisplayName} using {agent.Executable}");
         return 0;
     }
@@ -1393,29 +1382,8 @@ internal static class CommandDispatcher
             throw new ArgumentException("-name cannot be empty. Omit it to leave the name alone.");
         }
 
-        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
-        var existing = config.Agents.FirstOrDefault(agent =>
-            agent.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
-        if (existing is null)
-        {
-            throw new InvalidOperationException(
-                $"Agent '{id}' is not configured. 'fknrtd agent list' shows what is, and " +
-                "'fknrtd agent add' creates a new one.");
-        }
-
-        var updated = config with
-        {
-            Agents = config.Agents.Select(agent => agent.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
-                    ? agent with
-                    {
-                        Executable = executable ?? agent.Executable,
-                        DisplayName = displayName ?? agent.DisplayName
-                    }
-                    : agent)
-                .ToList()
-        };
-
-        await runtime.Store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
+        await new AgentRegistry(runtime.Store).SetAsync(id, executable, displayName, cancellationToken)
+            .ConfigureAwait(false);
 
         if (executable is not null)
         {
@@ -1445,19 +1413,8 @@ internal static class CommandDispatcher
         CancellationToken cancellationToken)
     {
         var id = Required(arguments.Get("id") ?? arguments.Positional(2), "agent ID");
-        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
-        if (!config.Agents.Any(agent => agent.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidOperationException($"Agent '{id}' is not configured.");
-        }
-
-        var updated = config with
-        {
-            Agents = config.Agents.Select(agent =>
-                agent.Id.Equals(id, StringComparison.OrdinalIgnoreCase) ? agent with { Enabled = enabled } : agent)
-                .ToList()
-        };
-        await runtime.Store.SaveConfigAsync(updated, cancellationToken).ConfigureAwait(false);
+        await new AgentRegistry(runtime.Store).SetEnabledAsync(id, enabled, cancellationToken)
+            .ConfigureAwait(false);
         Console.WriteLine($"√ Agent {id} {(enabled ? "enabled" : "disabled")}");
         return 0;
     }
@@ -1473,14 +1430,7 @@ internal static class CommandDispatcher
             throw new InvalidOperationException("Removing an agent requires the explicit option -confirm REMOVE.");
         }
 
-        var config = await runtime.Store.LoadConfigAsync(cancellationToken).ConfigureAwait(false);
-        var agents = config.Agents.Where(agent => !agent.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (agents.Count == config.Agents.Count)
-        {
-            throw new InvalidOperationException($"Agent '{id}' is not configured.");
-        }
-
-        await runtime.Store.SaveConfigAsync(config with { Agents = agents }, cancellationToken).ConfigureAwait(false);
+        await new AgentRegistry(runtime.Store).RemoveAsync(id, cancellationToken).ConfigureAwait(false);
         Console.WriteLine($"√ Removed agent {id} from the configuration");
         return 0;
     }
@@ -1888,7 +1838,7 @@ internal static class CommandDispatcher
 
                 foreach (var agent in config.Agents)
                 {
-                    ValidateAgentDefinition(agent);
+                    AgentRegistry.ValidateAgentDefinition(agent);
                 }
 
                 Console.WriteLine($"√ Configuration is valid with {config.Agents.Count} agent(s)");
@@ -1981,24 +1931,6 @@ internal static class CommandDispatcher
         foreach (var line in Text.Wrap(text, width))
         {
             Console.WriteLine(indent + line);
-        }
-    }
-
-    private static void ValidateAgentDefinition(AgentDefinition agent)
-    {
-        if (string.IsNullOrWhiteSpace(agent.Id) || string.IsNullOrWhiteSpace(agent.Executable))
-        {
-            throw new InvalidDataException("Each agent requires non-empty id and executable values.");
-        }
-
-        if (agent.Id.Any(character => !char.IsLetterOrDigit(character) && character is not '-' and not '_'))
-        {
-            throw new InvalidDataException($"Agent ID '{agent.Id}' can contain only letters, numbers, hyphens, and underscores.");
-        }
-
-        if (agent.Profiles.Count == 0)
-        {
-            throw new InvalidDataException($"Agent '{agent.Id}' needs at least one command profile.");
         }
     }
 
