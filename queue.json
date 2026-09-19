@@ -743,6 +743,26 @@
         "host": "Tenebris",
         "dispatch_id": "f5c2b208-8b84-4a44-bcbe-e8e8b63d96e9"
       }
+    },
+    {
+      "id": 9,
+      "title": "One owner for configuration writes",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0009-one-owner-for-configuration-writes.cvm",
+      "seat": null,
+      "created": "2026-09-19T02:28:11+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T02:28:11+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

@@ -1,0 +1,48 @@
+CVM1|B
+G|Give configuration writing a single owner in FKNRTD.Core, guarded by a lease. Ten read-modify-write sites edit .fknrtd/config.json today - five in CommandDispatcher, five in DashboardApp - each loading the config, changing it and saving it with no lock, and the two sets have already drifted apart. Replace them with one Core service that both front ends call.
+S|New StateStore.AcquireConfigLeaseAsync, following the existing AcquireTaskLeaseAsync/AcquireAgentLeaseAsync pattern and lock directory
+S|New Core service (suggested: src/FKNRTD.Core/Services/AgentRegistry.cs) owning add, repoint/rename, enable, disable and remove of an agent definition, plus a general read-modify-write for a single settings field
+S|Move ValidateAgentDefinition out of CommandDispatcher into that service
+S|Repoint all five CommandDispatcher sites and all five DashboardApp sites at it
+C|DO NOT RUN git commit AND DO NOT RUN pairctl. Your sandbox on this machine denies git's index.lock and three rounds were already lost to retrying it. Make the changes, run the two verification commands, leave the work uncommitted in the worktree, and describe it in your final message. The auditor commits.
+C|Every mutation must be read-modify-write INSIDE the lease: acquire, load the config fresh, apply, save, release. Do not apply a mutation to a config that was loaded before the lease was taken - that is the bug being fixed, and passing a caller's stale snapshot in would reintroduce it.
+C|User-visible text must not change. Every existing message - 'Agent '{id}' is already configured.', 'Agent '{id}' is not configured.', 'Each agent requires non-empty id and executable values.', the ID-character message, the profile-count message, the CLI's √ lines and every dashboard toast - must read exactly as it does now. Self-tests assert some of these.
+C|Exception types must not change: InvalidOperationException and InvalidDataException stay where they are today.
+C|The dashboard must keep its behaviour of building the write from the snapshot taken at completion time rather than the one the form was opened against; the lease makes that stronger, not different.
+C|FKNRTD.Core must not reference FKNRTD.Cli and must contain no Console or terminal code.
+C|A standalone workspace must keep working: nothing here may add a Git requirement.
+C|TreatWarningsAsErrors is on; the build must be warning-free.
+C|Add a self-test per behaviour change, in the existing Check(...) style. No self-test may start a real agent - point every executable at a name nothing resolves, or supply a fake agent by re-executing the suite.
+C|Do not touch workspace provisioning (init), the orchestrator, GitService, or the wizard's own validation. Those are separate briefs.
+A|One Core service is the only thing in the codebase that writes an agent definition. Neither CommandDispatcher nor DashboardApp calls StateStore.SaveConfigAsync directly for an agent change any more; grep proves it.
+A|StateStore.AcquireConfigLeaseAsync exists, is used by every config mutation, and follows the existing lease pattern
+A|FIXED DIVERGENCE: DashboardApp.OpenAgentWizard adds an agent WITHOUT calling ValidateAgentDefinition, while the CLI's agent add validates. After this brief both go through the same validation, so an agent whose id contains a space or that has no profiles is refused identically from either surface. Add a self-test proving the dashboard path refuses what the CLI path refuses.
+A|Add, repoint, enable, disable and remove behave exactly as they do now from the command line, including exit codes, messages and the -confirm REMOVE requirement
+A|The dashboard's agent roster and settings editor behave as they do now, including every toast
+A|A concurrent write is no longer lost: add a self-test that runs two config mutations concurrently against one workspace and asserts both survive - the second must not overwrite the first with a stale copy. This is the point of the brief; it must be a real concurrency test, not an assertion that the lease type exists.
+A|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors
+A|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all pass, count is 117 + the tests you added
+A|fknrtd portal regenerates fknrtd-portal.html byte-identically
+F|src/FKNRTD.Core/Services/StateStore.cs:AcquireTaskLeaseAsync
+F|src/FKNRTD.Core/Services/StateStore.cs:AcquireAgentLeaseAsync
+F|src/FKNRTD.Core/Services/StateStore.cs:SaveConfigAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:AddAgentAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:SetAgentAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:SetAgentEnabledAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:RemoveAgentAsync
+F|src/FKNRTD.Cli/Commands/CommandDispatcher.cs:ValidateAgentDefinition
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:OpenAgentWizard
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:ToggleAgentAsync
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:2103
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:2210
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:2280
+F|AGENTS.md:Architecture rules
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+X|Workspace provisioning: InitializeAsync, ProvisionAsync, DetectVerificationCommands, SettingsCheckAsync
+X|GetDiffAsync and any GitService change
+X|Doctor/orchestrator divergence
+X|Change notification and file watching
+X|Wizard.Store, Back-without-validation, and Reopen - a separate brief
+X|Any dashboard layout, padding or width work
+U|Whether SetAgentAsync changes fields beyond the executable (rename, colour, profiles). Read it and cover what it actually does rather than assuming it is executable-only.
