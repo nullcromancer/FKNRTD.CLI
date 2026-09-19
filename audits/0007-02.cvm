@@ -1,0 +1,10 @@
+CVM1|A|B
+E|THE WORK LANDED. This is a bookkeeping correction, not abandoned work - do not re-dispatch it.
+E|Land commit 6ddea0b and implementation c3e9bbd are both ancestors of HEAD
+E|All four parsing fixes are present in src/FKNRTD.Core/Services/LogLine.cs: the case-insensitive TryGetProperty helper, first ??= so the first line wins rather than the last, the system/subtype block, and exit_code-driven failure marking
+E|The land commit carried 94 added lines of self-test coverage alongside the fix
+E|Branch codex/pair-7-* and worktree 0007-* were removed earlier, after confirming the branch was merged
+E|#8's superseded worktree edits were folded into this brief, which is why #8 has no land commit of its own
+T|dotnet build => 0 warnings, 0 errors
+T|self-test suite => 130/130
+Q|Same as #6: phase max-rounds understates what happened. The rounds were exhausted, then the work landed by hand.
