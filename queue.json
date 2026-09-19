@@ -491,12 +491,20 @@
     {
       "id": 6,
       "title": "Share and correct agent-log reading",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "reported",
+      "phase": "reported",
       "path": "briefs/0006-share-and-correct-agent-log-reading.cvm",
       "seat": "codex",
       "created": "2026-09-19T02:06:33+00:00",
-      "reports": [],
+      "reports": [
+        {
+          "path": "reports/0006-01-codex.cvm",
+          "seat": "codex",
+          "verdict": "fail",
+          "at": "2026-09-19T02:14:36+00:00",
+          "round": 2
+        }
+      ],
       "events": [
         {
           "type": "brief",
@@ -545,6 +553,13 @@
           "seat": "codex",
           "pid": 30820,
           "dispatch_id": "4f9f7c14-3776-4448-922e-e25d8f7b8a57"
+        },
+        {
+          "type": "report",
+          "at": "2026-09-19T02:14:36+00:00",
+          "seat": "codex",
+          "verdict": "fail",
+          "round": 2
         }
       ],
       "round": 2,

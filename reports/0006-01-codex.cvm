@@ -1,0 +1,8 @@
+CVM1|R|F
+D|Commit 1 of 2 done: LogKind/LogLine/LogFormat moved to FKNRTD.Core/Services, made public, consumers and review-queue path updated
+M|4b43a3a
+T|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings 0 errors
+T|self-test => 113/113 passed
+T|portal byte-identical
+B|Codex could not run git or pairctl: workspace-write sandbox denies index.lock even with --add-dir for .git and TEMP. Auditor committed on the codex seat's behalf; the code is Codex's.
+E|src/FKNRTD.Core/Services/LogLine.cs
