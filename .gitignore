@@ -7,3 +7,6 @@ publish/
 .fknrtd/worktrees/
 .fknrtd/tasks/
 .fknrtd/artifacts/
+
+# Session handoff notes, deliberately untracked and deliberately kept.
+reminder.md
