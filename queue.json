@@ -487,6 +487,26 @@
         "backup_ref": "refs/pairing/backups/5/20260918-220216",
         "at": "2026-09-19T02:02:16+00:00"
       }
+    },
+    {
+      "id": 6,
+      "title": "Share and correct agent-log reading",
+      "state": "ready",
+      "phase": "briefed",
+      "path": "briefs/0006-share-and-correct-agent-log-reading.cvm",
+      "seat": null,
+      "created": "2026-09-19T02:06:33+00:00",
+      "reports": [],
+      "events": [
+        {
+          "type": "brief",
+          "at": "2026-09-19T02:06:33+00:00",
+          "seat": "claude",
+          "lint": []
+        }
+      ],
+      "round": 0,
+      "protocol": "caveman-v1"
     }
   ]
 }

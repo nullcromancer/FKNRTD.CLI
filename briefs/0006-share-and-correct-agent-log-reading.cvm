@@ -1,0 +1,40 @@
+CVM1|B
+G|Make agent-log reading a shared, correct Core concern: move LogLine/LogKind/LogFormat out of the terminal project into FKNRTD.Core so any front end can reuse it, then fix the four confirmed parsing faults in it. Deliver as exactly two commits: commit 1 the pure move, commit 2 the fixes.
+S|Commit 1 (pure move, zero behaviour change): move src/FKNRTD.Cli/Dashboard/LogLine.cs to src/FKNRTD.Core/Services/LogLine.cs, namespace FKNRTD.Dashboard -> FKNRTD.Services, and make LogLine, LogKind and LogFormat public (they are consumed across an assembly boundary now, and a front end is the point of the move). Update the consumers in src/FKNRTD.Cli/Dashboard/DashboardApp.cs and tests/FKNRTD.SelfTest/Program.cs. Update the logread path in scripts/codex-review.sh.
+S|Commit 2 (fixes only): the four faults listed in acceptance, each with a self-test.
+C|TWO commits, in that order. Commit 1 must change no behaviour: the full suite must pass at commit 1 before commit 2 is written. This split exists so the fix can be reviewed separately from the move; do not squash.
+C|Do not change AgentOutputObserver. It is the reference for correct behaviour here, not a thing to edit.
+C|Keep LogFormat.Read's signature and its single-line-per-record contract. A record still yields at most one LogLine.
+C|Preserve every existing self-test expectation in tests/FKNRTD.SelfTest/Program.cs around line 3627 and line 6664. In particular {"type":"system","subtype":"init","session_id":"3f9c"} must still read as 'session init' / LogKind.Noise.
+C|Only draw glyphs already used in this file. Do not introduce a new marker character; AGENTS.md requires font checks for new glyphs.
+C|Add a self-test per fix, in the existing Check(...) style of the hand-rolled harness. No test may start a real agent.
+C|TreatWarningsAsErrors is on; the build must be warning-free.
+C|Do not touch the write paths, the wizard, GitService, or config. Those are separate briefs.
+A|FIX A - ordering: LogFormat.Read answers type 'system' BEFORE it checks for failure, so {"type":"system","is_error":true,"message":"Authentication failed"} reads as 'session started' noise. Move the system branch after the failure detection so a failing system record reads as LogKind.Failed carrying its message. A system record with no failure signal must still read as noise exactly as today.
+A|FIX B - case: LogFormat's property lookups (Text, Flag, Detail) use JsonElement.TryGetProperty, which is case-sensitive, so IS_ERROR is ignored. AgentOutputObserver.FindString matches property names with OrdinalIgnoreCase. Make LogFormat match the observer: a record carrying IS_ERROR true must read as a failure.
+A|FIX C - first block wins: LogFormat.FromContent returns on the first recognised block, so a content array whose first block is text and whose second is a tool_result with is_error true reports only the text and loses the failure. Scan every block; a failed tool_result anywhere in the array must win over an earlier text or tool_use block. With no failed block present, behaviour is unchanged - the first recognised block still wins.
+A|FIX D - lost exit status: LogFormat.FromItem renders a command_execution as '> ' + command and drops the command's exit status and output entirely, so a failed build reads identically to a successful one. Carry the exit status: a command that exited non-zero must read as LogKind.Failed and say so. VERIFY the actual field names Codex emits rather than assuming - check tests/FKNRTD.SelfTest/Program.cs:3638 and AgentOutputObserver for what this codebase already believes, tolerate the fields being absent, and state in your report which field names you relied on and what evidence you had for them.
+A|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors
+A|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => all self-tests pass, count is 113 + the tests you added
+A|src/FKNRTD.Cli/Dashboard/LogLine.cs no longer exists; grep for it in scripts/codex-review.sh returns nothing
+A|fknrtd portal still regenerates fknrtd-portal.html byte-identically
+F|src/FKNRTD.Cli/Dashboard/LogLine.cs:LogFormat.Read
+F|src/FKNRTD.Cli/Dashboard/LogLine.cs:LogFormat.FromContent
+F|src/FKNRTD.Cli/Dashboard/LogLine.cs:LogFormat.FromItem
+F|src/FKNRTD.Cli/Dashboard/LogLine.cs:LogFormat.Text
+F|src/FKNRTD.Cli/Dashboard/LogLine.cs:LogFormat.Flag
+F|src/FKNRTD.Cli/Dashboard/LogLine.cs:LogFormat.Detail
+F|src/FKNRTD.Core/Services/AgentOutputObserver.cs:FindString
+F|src/FKNRTD.Cli/Dashboard/DashboardApp.cs:832
+F|tests/FKNRTD.SelfTest/Program.cs:3627
+F|tests/FKNRTD.SelfTest/Program.cs:6664
+F|scripts/codex-review.sh:39
+T|dotnet build FKNRTD.CLI.sln -c Release
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build
+T|Run the suite at commit 1 as well as commit 2, and report both counts.
+X|Editing AgentOutputObserver
+X|GetDiffAsync or any GitService change
+X|Moving write paths, agent CRUD, or wizard logic into Core
+X|Config leases and change notification
+X|Any dashboard layout, padding or width work
+U|The exact field names on a Codex command_execution item carrying exit status and output. Establish this from the repository rather than assuming, and say what you relied on.
