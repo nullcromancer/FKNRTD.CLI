@@ -1,0 +1,13 @@
+CVM1|R|P
+D|Extracted eight unchanged FKNRTD.Help files into FKNRTD.Content; Core-only dependency
+D|Added CLI reference, solution configuration, friend assemblies and AGENTS.md path
+M|18327cafe880da0189dc3f348b55cc7b11f01d49
+T|dotnet build FKNRTD.CLI.sln -c Release => 0; 0 warnings, 0 errors
+T|dotnet run --project tests/FKNRTD.SelfTest/FKNRTD.SelfTest.csproj -c Release --no-build => 0; 113/113 self-tests passed
+T|fknrtd.exe portal => 0; SHA256 unchanged; git diff --exit-code fknrtd-portal.html => 0
+T|8/8 moved files byte-identical; committed renames 100%; old Help directory absent; AGENTS.md path updated
+T|git diff --check => 0
+E|src/FKNRTD.Content/FKNRTD.Content.csproj
+E|src/FKNRTD.Content/Properties/AssemblyInfo.cs
+E|Directory.Build.props applies inherited nullable and warnings-as-errors settings
+E|git mv initially denied index.lock; filesystem move plus git add produced eight 100% renames; transient git commit denial resolved on retry

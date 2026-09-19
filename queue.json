@@ -359,12 +359,20 @@
     {
       "id": 5,
       "title": "Extract FKNRTD.Content from the CLI",
-      "state": "claimed",
-      "phase": "implementing",
+      "state": "reported",
+      "phase": "reported",
       "path": "briefs/0005-extract-fknrtd-content-from-the-cli.cvm",
       "seat": "codex",
       "created": "2026-09-19T01:54:55+00:00",
-      "reports": [],
+      "reports": [
+        {
+          "path": "reports/0005-01-codex.cvm",
+          "seat": "codex",
+          "verdict": "pass",
+          "at": "2026-09-19T01:58:24+00:00",
+          "round": 1
+        }
+      ],
       "events": [
         {
           "type": "brief",
@@ -393,6 +401,13 @@
           "seat": "codex",
           "pid": 13000,
           "dispatch_id": "0e334c90-c8a1-4436-a348-fe87609ad37a"
+        },
+        {
+          "type": "report",
+          "at": "2026-09-19T01:58:24+00:00",
+          "seat": "codex",
+          "verdict": "pass",
+          "round": 1
         }
       ],
       "round": 1,
