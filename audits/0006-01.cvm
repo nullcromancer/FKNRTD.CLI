@@ -1,0 +1,8 @@
+CVM1|A|F
+E|Commit 1 (the move) is verified and LANDED on the branch as 4b43a3a. Do not redo it.
+E|Moved file is byte-identical to the original apart from namespace FKNRTD.Services and public accessibility (auditor diffed it)
+E|Two redundant 'using LogFormat = FKNRTD.Services.LogFormat;' alias directives were removed before commit: both files already have 'using FKNRTD.Services;' and the build is warning-free without them. Do not reintroduce an alias.
+E|COMMITTING IS BLOCKED FOR YOUR SEAT on this machine: workspace-write denies git index.lock even with --add-dir. Do NOT spend the round retrying git. Make the code changes, run the two verification commands, leave the work UNCOMMITTED in the worktree, and say so. The auditor will commit it.
+T|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors (auditor)
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 113/113 (auditor)
+B|REMAINING WORK IS COMMIT 2 ONLY: the four parsing fixes A, B, C and D in the brief, against src/FKNRTD.Core/Services/LogLine.cs at its NEW path, each with a self-test added to tests/FKNRTD.SelfTest/Program.cs in the existing Check(...) style. The move is done; touch it no further.
