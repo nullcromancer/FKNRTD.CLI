@@ -998,6 +998,11 @@
           "type": "cleanup",
           "at": "2026-09-19T17:43:58+00:00",
           "seat": "runtime"
+        },
+        {
+          "type": "cleanup",
+          "at": "2026-09-19T17:56:36+00:00",
+          "seat": "claude"
         }
       ],
       "round": 1,
