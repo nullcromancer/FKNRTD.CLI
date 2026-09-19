@@ -13,6 +13,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\FKNRTD.Content\FKNRTD.Content.csproj" />
     <ProjectReference Include="..\FKNRTD.Core\FKNRTD.Core.csproj" />
   </ItemGroup>
 </Project>

@@ -83,7 +83,7 @@ executables in place in a test that reaches the implement stage.
 This is the property most easily broken by accident, so it is enforced by tests rather than by
 convention.
 
-- **Four tables in `src/FKNRTD.Cli/Help/` are the single source of every explanation.**
+- **Four tables in `src/FKNRTD.Content/` are the single source of every explanation.**
   `Glossary.cs` defines each concept, `CommandCatalog.cs` each command, `Keymap.cs` each dashboard
   key, `SettingsCatalog.cs` each configuration field. The dashboard's inline hints, the in-app
   reference, `fknrtd help`, `fknrtd explain` and the generated portal all read from them. Never
