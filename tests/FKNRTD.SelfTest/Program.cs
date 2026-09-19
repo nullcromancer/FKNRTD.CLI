@@ -252,6 +252,14 @@ var tests = new (string Name, Func<Task> Run)[]
     ("The prompt preview shows what is actually sent", TestPromptPreviewAsync),
     ("A failing key becomes a message, not an exit", TestAFailingActionDoesNotCrashAsync),
     ("The task-reading commands work end to end", TestTaskReadingCommandsAsync),
+    ("Statusline bars preserve measured numbers", TestStatusLineBarsAsync),
+    ("Statusline segment palette survives width budgeting", TestStatusLinePaletteAsync),
+    ("Statusline pipes preserve colour and explicit opt-outs", TestStatusLinePipedColourAsync),
+    ("Statusline rows fit and colour preserves text", TestStatusLineWidthsAsync),
+    ("Statusline critical conditions outrank telemetry", TestStatusLinePriorityAsync),
+    ("Statusline chooses the latest verified quality", TestStatusLineQualityAsync),
+    ("Statusline Git parsing and remote names", TestStatusLineGitParsingAsync),
+    ("Statusline Git reads stay local and degrade", TestStatusLineGitLocalAsync),
     ("The statusline agrees with the dashboard", TestStatusLineAgreesWithTheDashboardAsync),
     ("Every recorded event type is in the vocabulary", TestEventVocabularyAsync),
     ("The standalone overlay host draws a usable frame", TestOverlayHostFrameAsync),
@@ -2510,6 +2518,201 @@ static Task TestPromptPreviewAsync()
 /// The statusline is the surface a Claude Code user looks at constantly, and it renders the same
 /// state the dashboard does. The two must not describe the same agent differently.
 /// </summary>
+static Task TestStatusLineBarsAsync()
+{
+    Equal("N/A", StatusLineRenderer.Meter(null, 5), "Unknown has no bar");
+    Equal("░░░░ 0%", StatusLineRenderer.Meter(0, 4), "Zero measured");
+    Equal("██░░ 50%", StatusLineRenderer.Meter(50, 4), "Proportional half");
+    Equal("████ 100%", StatusLineRenderer.Meter(100, 4), "Full measured");
+    Equal("N/A", StatusLineRenderer.Meter(double.NaN, 4), "Nonfinite unavailable");
+    var usage = new UsageSnapshot { ContextRemainingPercent = 50, FiveHourRemainingPercent = 50, WeeklyRemainingPercent = 50 };
+    var line = StatusLineRenderer.Render("owner/repo", "main", usage, usage, new(), [], [], 200, false);
+    // Context is the only figure that earns a meter. The reference layout gives the usage windows
+    // their numbers and nothing more: four further bars crowd the row without telling the reader
+    // anything the percentage had not already said.
+    Equal(1, System.Text.RegularExpressions.Regex.Matches(line, "███░░ 50%").Count,
+        "Context carries the only meter");
+    foreach (var window in new[] { "Claude 5h 50% 7d 50%", "Codex 5h 50% 7d 50%" })
+    {
+        True(line.Contains(window, StringComparison.Ordinal), "Usage window keeps its numbers: " + window);
+    }
+    return Task.CompletedTask;
+}
+
+static Task TestStatusLineWidthsAsync()
+{
+    var usage = new UsageSnapshot { ContextRemainingPercent = 100, FiveHourRemainingPercent = 0, WeeklyRemainingPercent = 50 };
+    foreach (var width in new[] { 1, 20, 60, 80, 100, 120, 140, 200 })
+    foreach (var repository in new[] { "owner/repo", new string('x', 300), "界😀é界😀é界😀é" })
+    foreach (var critical in new[] { false, true })
+    {
+        ConflictRecord[] conflicts = critical ? [new() { Kind = ConflictKind.Collision }] : [];
+        string Render(bool color) => StatusLineRenderer.Render(repository, new string('b', 300), usage, null,
+            new(), [], conflicts, width, color, new("main", 3, 4, 5));
+        var plain = Render(false);
+        Equal(plain, Ansi.Sequence.Replace(Render(true), string.Empty), "ANSI only enhances");
+        True(FrameLines(plain).All(row => Text.DisplayWidth(row) <= width), $"Every row bounded at {width}");
+    }
+    return Task.CompletedTask;
+}
+
+static Task TestStatusLinePaletteAsync()
+{
+    foreach (var width in new[] { 60, 80, 100, 120, 140, 200 })
+    {
+        var usage = new UsageSnapshot { ContextRemainingPercent = 50, FiveHourRemainingPercent = 50, WeeklyRemainingPercent = 50 };
+        var line = StatusLineRenderer.Render("repo", "main", usage, usage, new(), [], [], width, true);
+        True(line.Contains("\u001b[38;2;88;166;255mrepo"), "Repository stays blue");
+        True(line.Contains("\u001b[38;2;255;166;87mCl"), "Claude stays orange");
+        True(line.Contains("\u001b[38;2;210;168;255mC"), "Codex stays purple");
+        if (line.Contains("√ SAFE"))
+            True(line.Contains("\u001b[38;2;86;211;100m√ SAFE"), "Safe marker stays green");
+        var critical = StatusLineRenderer.Render("repo", "main", usage, usage, new(), [],
+            [new() { Kind = ConflictKind.Collision }], width, true);
+        True(critical.Contains("\u001b[38;2;255;123;114m\u001b[1m×COLLISION"), "Critical alert stays red and bold");
+        True(critical.Contains("\u001b[38;2;88;166;255mrepo"), "Alert does not recolour repository");
+    }
+    return Task.CompletedTask;
+}
+
+static async Task TestStatusLinePipedColourAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var runner = new ProcessRunner();
+        foreach (var initialized in new[] { false, true })
+        {
+            if (initialized)
+                await new StateStore(WorkspaceLocator.ForRoot(root)).InitializeAsync(new() { Mode = WorkspaceMode.Standalone });
+            foreach (var width in new[] { 60, 80, 100, 120, 140, 200 })
+            {
+                async Task<string> Render(bool noColorFlag, string noColor)
+                {
+                    var arguments = new List<string>
+                    {
+                        "exec", "--runtimeconfig", Path.ChangeExtension(Assembly.GetExecutingAssembly().Location, ".runtimeconfig.json"),
+                        typeof(StatusLineRenderer).Assembly.Location, "telemetry", "claude-statusline"
+                    };
+                    if (noColorFlag) arguments.Add("-no-color");
+                    // Capture stdout bytes in a file: ProcessRunner's line reader normalizes
+                    // CRLF/LF, which would hide colour-dependent row separator regressions.
+                    var inputPath = Path.Combine(root, "statusline-input.json");
+                    var outputPath = Path.Combine(root, "statusline-output.txt");
+                    await File.WriteAllTextAsync(inputPath, JsonSerializer.Serialize(new
+                    {
+                        workspace = new { current_dir = root },
+                        context_window = new { used_percentage = 38 }
+                    }));
+                    static string Quote(string value) => OperatingSystem.IsWindows()
+                        ? "\"" + value + "\""
+                        : "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
+                    var command = "dotnet " + string.Join(" ", arguments.Select(Quote)) +
+                        " < " + Quote(inputPath) + " > " + Quote(outputPath);
+                    var scriptPath = Path.Combine(root, OperatingSystem.IsWindows() ? "capture.cmd" : "capture.sh");
+                    await File.WriteAllTextAsync(scriptPath, command + Environment.NewLine);
+                    var shell = OperatingSystem.IsWindows()
+                        ? Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe" : "/bin/sh";
+                    string[] shellArguments = OperatingSystem.IsWindows()
+                        ? ["/D", "/C", scriptPath] : [scriptPath];
+                    var result = await runner.RunAsync(shell, shellArguments, root,
+                        environment: new Dictionary<string, string> { ["NO_COLOR"] = noColor, ["COLUMNS"] = width.ToString() },
+                        timeout: TimeSpan.FromSeconds(30));
+                    True(result.Success, "Piped statusline exits successfully: " + result.StandardError);
+                    return Encoding.UTF8.GetString(await File.ReadAllBytesAsync(outputPath));
+                }
+                var color = await Render(false, "");
+                var plain = await Render(true, "");
+                var environmentPlain = await Render(false, "1");
+                True(color.Contains('\u001b'), "Real redirected stdout retains ANSI for Claude Code");
+                True(!plain.Contains('\u001b') && !environmentPlain.Contains('\u001b'), "Both explicit opt-outs suppress ANSI");
+                Equal(plain, Ansi.Sequence.Replace(color, string.Empty), "Piped colour preserves visible text");
+                Equal(plain, environmentPlain, "Opt-outs agree");
+                True(!plain.Contains('\r') && plain.EndsWith('\n'), "Pipe protocol uses LF in every colour mode");
+                Equal(initialized && width >= 100 ? 2 : 1, plain.Count(character => character == '\n'),
+                    "Actual command writes every expected row and final terminator");
+                True(FrameLines(plain).All(row => Text.DisplayWidth(row) <= width), "Piped rows fit");
+            }
+        }
+    });
+}
+
+static Task TestStatusLinePriorityAsync()
+{
+    foreach (var width in new[] { 60, 80, 100, 120, 140, 200 })
+    {
+        var line = StatusLineRenderer.Render("repo", "main", new() { ContextRemainingPercent = 60 }, null,
+            new(), [new() { State = AgentActivityState.Blocked }],
+            [new() { Kind = ConflictKind.Collision }], width, false,
+            quality: new() { Build = StageState.Failed });
+        foreach (var marker in new[] { "×COLLISION", "■BLOCKED", "×VERIFY" })
+            True(line.Contains(marker, StringComparison.Ordinal), $"Critical {marker} survives {width}");
+        if (width < 100) True(!line.Contains("ctx", StringComparison.OrdinalIgnoreCase) && !line.Contains("60%"),
+            "Critical conditions displace telemetry");
+    }
+    return Task.CompletedTask;
+}
+
+static Task TestStatusLineQualityAsync()
+{
+    var now = DateTimeOffset.UtcNow;
+    var measured = new QualitySnapshot { UpdatedAt = now, TestsPassed = 12, TestsFailed = 2, LintIssues = 3 };
+    WorkflowTask[] tasks = [new() { Id = "old", Quality = new() { UpdatedAt = now.AddDays(-1), TestsPassed = 7 } },
+        new() { Id = "verified", Quality = measured }, new() { Id = "new", CreatedAt = now.AddHours(1) }];
+    Equal(measured, StatusLineRenderer.LatestQuality(tasks)!, "Newest verification survives newer unverified task");
+    True(StatusLineRenderer.LatestQuality([new()]) is null, "No verification no health");
+    string Render(QualitySnapshot? quality) => StatusLineRenderer.Render("repo", "main", new(), null,
+        new(), [], [], 200, false, quality: quality);
+    True(Render(measured).Contains("tests:12/2 lint:3"), "Snapshot counts rendered");
+    True(!Render(null).Contains("tests:"), "Absent health omitted");
+    True(Render(new()).Contains("tests:N/A/N/A lint:N/A"), "Unmeasured defaults are not fake zeros");
+    return Task.CompletedTask;
+}
+
+static Task TestStatusLineGitParsingAsync()
+{
+    var git = StatusLineRenderer.ParseGit("# branch.head main\0# branch.ab +2 -3\0" +
+        "1 .M data\0? new file\0" + "2 R. renamed\0old name\0", "git@github.com:owner/repo.git");
+    Equal(3, git.Modified!.Value, "Rename counts once; untracked counted");
+    Equal(2, git.Ahead!.Value, "Ahead read");
+    Equal(3, git.Behind!.Value, "Behind read");
+    foreach (var remote in new[] { git.Remote, "https://github.com/owner/repo.git", "ssh://git@github.com/owner/repo.git" })
+        Equal("owner/repo", StatusLineRenderer.GitHubRepository(remote)!, "GitHub remote owner/repo");
+    foreach (var remote in new[] { "", "https://example.com/owner/repo", "https://github.com.evil/owner/repo" })
+        True(StatusLineRenderer.GitHubRepository(remote) is null, "Other remote uses project fallback");
+    True(StatusLineRenderer.ParseGit("# branch.head main\0", "").Ahead is null, "No upstream unknown");
+    var line = StatusLineRenderer.Render("repo", git.Branch, new(), null, new(), [], [], 200, false, git);
+    // A glyph and a number, never a label: "mod:" and "ahead:" spend more columns than they
+    // explain, and the branch rides in the repository's own field rather than behind a separator
+    // that would read as a different subject.
+    True(line.Contains("repo main", StringComparison.Ordinal), "Branch sits with its repository");
+    True(line.Contains("∆3 ↑2↓3", StringComparison.Ordinal), "Git health is glyph and number");
+    foreach (var label in new[] { "mod:", "ahead:", "behind:" })
+    {
+        True(!line.Contains(label, StringComparison.Ordinal), "No verbose Git label: " + label);
+    }
+    return Task.CompletedTask;
+}
+
+static async Task TestStatusLineGitLocalAsync()
+{
+    await WithTemporaryDirectoryAsync(async root =>
+    {
+        var standalone = await StatusLineRenderer.ReadGitAsync(root, WorkspaceMode.Standalone);
+        True(standalone.Modified is null, "Standalone never assumes Git");
+        var absent = await StatusLineRenderer.ReadGitAsync(root, WorkspaceMode.Git);
+        True(absent.Modified is null, "Non-repository degrades");
+        var runner = new ProcessRunner();
+        True((await runner.RunAsync("git", ["init"], root)).Success, "Local fixture initialized");
+        True((await runner.RunAsync("git", ["config", "remote.origin.url", "https://github.com/owner/repo.git"], root)).Success,
+            "Remote configured without network");
+        await File.WriteAllTextAsync(Path.Combine(root, "new.txt"), "new");
+        var local = await StatusLineRenderer.ReadGitAsync(root, WorkspaceMode.Git);
+        Equal(1, local.Modified!.Value, "Real porcelain counts path");
+        True(local.Ahead is null && local.Behind is null, "Unborn repository has no upstream");
+        Equal("owner/repo", StatusLineRenderer.GitHubRepository(local.Remote)!, "Local remote read");
+    });
+}
+
 static async Task TestStatusLineAgreesWithTheDashboardAsync()
 {
     await WithTemporaryDirectoryAsync(async root =>

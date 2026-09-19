@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FKNRTD.Domain;
+using FKNRTD.Dashboard;
 using FKNRTD.Services;
 using FKNRTD.Telemetry;
 
@@ -30,11 +31,12 @@ internal static class StatusLineRenderer
                 // Claude may render before FKNRTD.CLI is initialized. A useful usage line is still possible.
             }
 
+            // Claude Code consumes ANSI through a pipe; redirection does not disable colour here.
             var useColor = !arguments.Has("no-color") &&
                            string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR"));
             if (paths is null)
             {
-                Console.WriteLine(RenderUninitialized(claude, useColor));
+                WriteFrame(RenderUninitialized(claude, useColor, TerminalWidth()));
                 return 0;
             }
 
@@ -68,19 +70,21 @@ internal static class StatusLineRenderer
             var repository = string.IsNullOrWhiteSpace(config.ProjectName)
                 ? new DirectoryInfo(paths.Root).Name
                 : config.ProjectName;
-            var branch = ReadBranch(start);
+            var git = await ReadGitAsync(start, config.Mode, cancellationToken).ConfigureAwait(false);
+            repository = GitHubRepository(git.Remote) ?? repository;
+            var quality = LatestQuality(await store.LoadTasksAsync(cancellationToken).ConfigureAwait(false));
             var width = TerminalWidth();
 
-            Console.WriteLine(Render(
+            WriteFrame(Render(
                 repository,
-                branch,
+                git.Branch,
                 claude,
                 codex,
                 config,
                 agents,
                 conflicts,
                 width,
-                useColor));
+                useColor, git, quality));
             return 0;
         }
         catch (System.Text.Json.JsonException)
@@ -90,157 +94,281 @@ internal static class StatusLineRenderer
             // input does not contain any JSON tokens. Expected the input to start with..." - is the
             // worst possible thing to put there: it is long, it is truncated mid-sentence, and it
             // describes a fault in something the reader did not run.
-            Console.WriteLine("FKN | no status from Claude Code yet");
+            WriteFrame(SingleLine("FKN | no status from Claude Code yet", TerminalWidth()));
             return 0;
         }
         catch (Exception exception) when (exception is not StackOverflowException &&
                                           exception is not OutOfMemoryException)
         {
             // Anything else is a workspace fault, and those messages were written to be read.
-            Console.WriteLine($"FKN | {SingleLine(exception.Message, 80)}");
+            WriteFrame(SingleLine($"FKN | {exception.Message}", TerminalWidth()));
             return 0;
         }
     }
 
-    private static string Render(
-        string repository,
-        string branch,
-        UsageSnapshot claude,
-        UsageSnapshot? codex,
-        FknrtdConfig config,
-        IReadOnlyList<AgentRuntimeState> agents,
-        IReadOnlyList<ConflictRecord> conflicts,
-        int width,
-        bool useColor)
-    {
-        var risk = conflicts.FirstOrDefault();
-        var riskAgents = risk is null ? string.Empty : string.Join("+", risk.AgentIds);
-        var riskPaths = risk is null ? string.Empty : string.Join(",", risk.Paths.Take(2));
-        var riskText = risk is null
-            ? "√ SAFE"
-            : risk.Kind == ConflictKind.Collision
-                ? $"× COLLISION {riskAgents}: {riskPaths}"
-                : $"∆ {risk.Kind.ToString().ToUpperInvariant()}: {riskPaths}";
+    // The pipe protocol uses LF for both row separators and the final terminator,
+    // independent of platform and colour mode.
+    private static void WriteFrame(string frame) => Console.Write(frame + "\n");
 
-        if (width < 80)
+    internal sealed record GitHealth(string Branch = "N/A", int? Modified = null,
+        int? Ahead = null, int? Behind = null, string Remote = "");
+
+    internal static QualitySnapshot? LatestQuality(IEnumerable<WorkflowTask> tasks) => tasks
+        .Where(task => task.Quality.UpdatedAt is not null)
+        .OrderByDescending(task => task.Quality.UpdatedAt)
+        .ThenBy(task => task.Id, StringComparer.Ordinal)
+        .Select(task => task.Quality).FirstOrDefault();
+
+    internal static string Render(
+        string repository, string branch, UsageSnapshot claude, UsageSnapshot? codex,
+        FknrtdConfig config, IReadOnlyList<AgentRuntimeState> agents,
+        IReadOnlyList<ConflictRecord> conflicts, int width, bool useColor,
+        GitHealth? git = null, QualitySnapshot? quality = null)
+    {
+        width = Math.Max(0, width);
+        var alerts = new List<string>();
+        if (conflicts.Any(item => item.Kind == ConflictKind.Collision)) alerts.Add("×COLLISION");
+        if (agents.Any(item => item.State == AgentActivityState.Blocked)) alerts.Add("■BLOCKED");
+        if (quality is not null && (quality.Commands.Any(item => !item.Passed) ||
+            new[] { quality.Build, quality.Tests, quality.Lint, quality.Types, quality.Security }
+                .Contains(StageState.Failed))) alerts.Add("×VERIFY");
+        var critical = alerts.Count > 0;
+        var wide = width >= 140;
+        var twoRow = width >= 100;
+
+        // Every fit test measures plain text. ANSI never participates in display-column math,
+        // which is what keeps a coloured frame exactly as wide as the colourless one.
+        bool Fits(List<Segment> row, Segment candidate) =>
+            Text.DisplayWidth(Compose(row.Append(candidate))) <= width;
+        void Add(List<Segment> row, string text, Tone tone = Tone.Plain, string separator = " | ")
         {
-            var fields = new List<string>
+            var candidate = new Segment(SingleLine(text, int.MaxValue), tone, separator);
+            if (Fits(row, candidate)) row.Add(candidate);
+        }
+
+        var first = new List<Segment> { new("FKN", Tone.Badge) };
+        if (critical) first.Add(new(string.Join(" ", alerts), Tone.Alert));
+
+        // The branch belongs to the repository, so it rides inside the same field. Behind a
+        // separator it would read as a different subject rather than as where this one is.
+        var located = SingleLine(repository, width < 80 ? 14 : wide ? 40 : 24);
+        if (twoRow && branch.Length > 0 && !branch.Equals("unknown", StringComparison.Ordinal))
+        {
+            located += " " + SingleLine(branch, 20);
+        }
+
+        Add(first, located, Tone.Repository);
+
+        // Context leads, because it is the figure most likely to change what to do next. The
+        // meter shrinks before the row gives up any number: a bar without its percentage is
+        // decoration, and a percentage without its bar still tells the reader everything.
+        // On a narrow row a critical condition takes the space telemetry would have had. Context
+        // is worth knowing; a collision is worth acting on, and only one of them fits.
+        if (!critical || twoRow)
+        {
+            var meterSize = wide ? 5 : twoRow ? 3 : 0;
+            string Context(int size) => (wide ? "CTX " : "ctx") +
+                Meter(claude.ContextRemainingPercent, size) +
+                (claude.ContextRemainingPercent is null ? string.Empty : " left");
+            while (meterSize > 0 && !Fits(first, new Segment(Context(meterSize)))) meterSize--;
+            Add(first, Context(meterSize));
+        }
+
+        // A glyph and a number, never a label. "mod:" and "ahead:" spend more columns than they
+        // explain, and an unknown count is left out rather than shown as a zero that would read
+        // as "in sync" when the truth is "no upstream to compare against".
+        if (git is not null)
+        {
+            var state = new List<string>();
+            if (git.Modified is { } modified) state.Add("∆" + Number(modified));
+            if (git.Ahead is { } ahead && git.Behind is { } behind)
             {
-                Paint("FKN", 86, 212, 221, useColor),
-                Paint(SingleLine(repository, 14), 88, 166, 255, useColor),
-                $"ctx{Percent(claude.ContextRemainingPercent)}",
-                $"Cl{Percent(claude.FiveHourRemainingPercent)}/{Percent(claude.WeeklyRemainingPercent)}",
-                $"Cx{Percent(codex?.FiveHourRemainingPercent)}/{Percent(codex?.WeeklyRemainingPercent)}"
-            };
-            if (risk is not null)
-            {
-                fields.Add(Paint(risk.Kind == ConflictKind.Collision ? "×COLLISION" : "∆RISK",
-                    255, 123, 114, useColor, bold: true));
+                state.Add("↑" + Number(ahead) + "↓" + Number(behind));
             }
 
-            return string.Join(" | ", fields);
+            if (state.Count > 0) Add(first, string.Join(" ", state), Tone.Warn);
         }
 
-        if (width < 100)
+        if (!twoRow)
         {
-            return string.Join(" | ",
-                Paint("FKN", 86, 212, 221, useColor),
-                Paint(repository, 88, 166, 255, useColor),
-                $"ctx{Percent(claude.ContextRemainingPercent)}",
-                $"Cl {Percent(claude.FiveHourRemainingPercent)}/{Percent(claude.WeeklyRemainingPercent)}",
-                $"Cdx {Percent(codex?.FiveHourRemainingPercent)}/{Percent(codex?.WeeklyRemainingPercent)}",
-                Paint(riskText, risk is null ? (byte)86 : (byte)255, risk is null ? (byte)211 : (byte)123, risk is null ? (byte)100 : (byte)114,
-                    useColor));
+            Add(first, $"Cl {Meter(claude.FiveHourRemainingPercent, 0)}/{Meter(claude.WeeklyRemainingPercent, 0)}", Tone.Claude);
+            Add(first, $"Cx {Meter(codex?.FiveHourRemainingPercent, 0)}/{Meter(codex?.WeeklyRemainingPercent, 0)}", Tone.Codex);
+            return RenderFields(first, width, useColor);
         }
 
-        var activity = config.Agents
-            .Select(definition =>
-            {
-                var state = agents.FirstOrDefault(item =>
-                    item.AgentId.Equals(definition.Id, StringComparison.OrdinalIgnoreCase));
-                var activity = state?.State ?? AgentActivityState.Offline;
-                return $"{definition.DisplayName} {StateIcon(activity)} " +
-                       SingleLine(state?.Intent ?? "offline", 32);
-            })
-            .Take(width >= 140 ? 4 : 2);
-        var second = string.Join(" | ", activity.Append(Paint(
-            riskText,
-            risk is null ? (byte)86 : (byte)255,
-            risk is null ? (byte)211 : (byte)123,
-            risk is null ? (byte)100 : (byte)114,
-            useColor,
-            bold: risk is not null)));
-        if (width < 140)
+        var second = new List<Segment>();
+        var usageSize = wide ? 0 : 0;
+        Add(second, $"Claude 5h {Meter(claude.FiveHourRemainingPercent, usageSize)} 7d {Meter(claude.WeeklyRemainingPercent, usageSize)}", Tone.Claude);
+        Add(second, $"Codex 5h {Meter(codex?.FiveHourRemainingPercent, usageSize)} 7d {Meter(codex?.WeeklyRemainingPercent, usageSize)}", Tone.Codex);
+
+        // Agent entries are a group: a two-letter seat, its state glyph and what it is doing,
+        // spaced rather than piped so the eye reads them as one list.
+        var listed = 0;
+        foreach (var definition in config.Agents.Take(wide ? 4 : 2))
         {
-            var medium = string.Join(" | ",
-                Paint("FKN", 86, 212, 221, useColor, bold: true),
-                Paint($"{repository} on {branch}", 88, 166, 255, useColor),
-                $"ctx {Percent(claude.ContextRemainingPercent)}",
-                Paint($"Cl {Percent(claude.FiveHourRemainingPercent)}/{Percent(claude.WeeklyRemainingPercent)}",
-                    255, 166, 87, useColor),
-                Paint($"Cdx {Percent(codex?.FiveHourRemainingPercent)}/{Percent(codex?.WeeklyRemainingPercent)}",
-                    210, 168, 255, useColor));
-            return medium + Environment.NewLine + second;
+            var state = agents.FirstOrDefault(item =>
+                item.AgentId.Equals(definition.Id, StringComparison.OrdinalIgnoreCase));
+            var entry = Seat(definition.Id) + StateIcon(state?.State ?? AgentActivityState.Offline) +
+                        " " + SingleLine(state?.Intent ?? "offline", wide ? 24 : 16);
+            var before = second.Count;
+            Add(second, entry, SeatTone(definition.Id), listed == 0 ? " | " : " ");
+            if (second.Count > before) listed++;
         }
 
-        var first = string.Join(" | ",
-            Paint("FKN", 86, 212, 221, useColor, bold: true),
-            Paint($"{repository} on {branch}", 88, 166, 255, useColor),
-            $"CTX {Percent(claude.ContextRemainingPercent)} left",
-            Paint($"Claude 5h {Percent(claude.FiveHourRemainingPercent)} 7d {Percent(claude.WeeklyRemainingPercent)}",
-                255, 166, 87, useColor),
-            Paint($"Codex 5h {Percent(codex?.FiveHourRemainingPercent)} 7d {Percent(codex?.WeeklyRemainingPercent)}",
-                210, 168, 255, useColor));
-        return first + Environment.NewLine + second;
+        if (quality is not null)
+        {
+            // The persisted model has no measured-count flags. A stored zero is not evidence that
+            // a runner parsed a count, so an unmeasured figure says so rather than claiming none.
+            Add(second, $"tests:{Count(quality.TestsPassed)}/{Count(quality.TestsFailed)} " +
+                        $"lint:{Count(quality.LintIssues)}");
+        }
+
+        // Nothing is said when nothing is wrong. A marker that reads SAFE whenever the workspace
+        // is fine is telemetry that never changes what the reader should do next, and the row is
+        // worth more to the figure it would have crowded out.
+        if (!critical && conflicts.Count > 0) Add(second, "∆RISK", Tone.Alert);
+
+        return RenderFields(first, width, useColor) + "\n" + RenderFields(second, width, useColor);
     }
 
-    private static string RenderUninitialized(UsageSnapshot claude, bool useColor) => string.Join(" | ",
-        Paint("FKN", 86, 212, 221, useColor),
-        $"CTX {Percent(claude.ContextRemainingPercent)} left",
-        Paint($"Claude 5h {Percent(claude.FiveHourRemainingPercent)} 7d {Percent(claude.WeeklyRemainingPercent)}",
-            255, 166, 87, useColor),
-        "run fknrtd init");
+    private enum Tone { Plain, Badge, Repository, Claude, Codex, Alert, Safe, Warn }
 
-    private static string ReadBranch(string root)
+    /// <summary>
+    /// A field and the separator that precedes it. Agent entries sit a space apart so the eye reads
+    /// them as one list, while everything else is divided by a pipe.
+    /// </summary>
+    private sealed record Segment(string Text, Tone Tone = Tone.Plain, string Separator = " | ");
+
+    private static string Compose(IEnumerable<Segment> fields) => string.Concat(
+        fields.Select((field, index) => (index == 0 ? string.Empty : field.Separator) + field.Text));
+
+    private static string RenderFields(IReadOnlyList<Segment> fields, int width, bool useColor)
     {
-        try
+        // Fit and truncate plain text first. ANSI never participates in display-column math, which
+        // is what keeps a coloured row exactly as wide as the colourless one.
+        var plain = SingleLine(Compose(fields), width);
+        if (!useColor) return plain;
+        var output = new System.Text.StringBuilder();
+        var offset = 0;
+        foreach (var field in fields)
         {
-            var current = new DirectoryInfo(Path.GetFullPath(root));
-            while (current is not null &&
-                   !File.Exists(Path.Combine(current.FullName, ".git")) &&
-                   !Directory.Exists(Path.Combine(current.FullName, ".git")))
+            if (offset >= plain.Length) break;
+            if (offset > 0)
             {
-                current = current.Parent;
+                var separatorLength = Math.Min(field.Separator.Length, plain.Length - offset);
+                output.Append(plain.AsSpan(offset, separatorLength));
+                offset += separatorLength;
             }
 
-            if (current is null)
+            var length = Math.Min(field.Text.Length, plain.Length - offset);
+            var text = plain.Substring(offset, length);
+            output.Append(field.Tone switch
             {
-                return "unknown";
-            }
-
-            var gitPath = Path.Combine(current.FullName, ".git");
-            var gitDirectory = gitPath;
-            if (File.Exists(gitPath))
-            {
-                var pointer = File.ReadAllText(gitPath).Trim();
-                if (pointer.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase))
-                {
-                    var value = pointer[7..].Trim();
-                    gitDirectory = Path.GetFullPath(value, current.FullName);
-                }
-            }
-
-            var head = File.ReadAllText(Path.Combine(gitDirectory, "HEAD")).Trim();
-            const string prefix = "ref: refs/heads/";
-            return head.StartsWith(prefix, StringComparison.Ordinal)
-                ? head[prefix.Length..]
-                : head.Length >= 7 ? head[..7] : head;
+                Tone.Badge => Paint(text, 86, 212, 221, true, bold: true),
+                Tone.Repository => Paint(text, 88, 166, 255, true),
+                Tone.Claude => Paint(text, 255, 166, 87, true),
+                Tone.Codex => Paint(text, 210, 168, 255, true),
+                Tone.Alert => Paint(text, 255, 123, 114, true, bold: true),
+                Tone.Safe => Paint(text, 86, 211, 100, true),
+                Tone.Warn => Paint(text, 255, 196, 87, true),
+                _ => text
+            });
+            offset += length;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return "unknown";
-        }
+
+        return output.ToString();
     }
+
+    /// <summary>Each seat keeps the colour it carries everywhere else, so a glance finds its entry.</summary>
+    private static Tone SeatTone(string agentId) =>
+        agentId.Equals("codex", StringComparison.OrdinalIgnoreCase) ? Tone.Codex : Tone.Claude;
+
+    /// <summary>Two letters for an agent, so a row can name four of them and still say what each is doing.</summary>
+    private static string Seat(string agentId) => agentId.ToLowerInvariant() switch
+    {
+        "claude" => "Cl",
+        "codex" => "Cx",
+        "cline" => "Cn",
+        "copilot" => "Cp",
+        _ => agentId.Length >= 2
+            ? char.ToUpperInvariant(agentId[0]) + agentId[1..2].ToLowerInvariant()
+            : agentId.ToUpperInvariant()
+    };
+
+    private static string Number(int? value) => value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "N/A";
+    private static string Count(int value) => value > 0 ? Number(value) : "N/A";
+
+    internal static string Meter(double? value, int size)
+    {
+        if (value is null || !double.IsFinite(value.Value)) return "N/A";
+        var percent = Math.Clamp(value.Value, 0, 100);
+        var filled = (int)Math.Round(size * percent / 100, MidpointRounding.AwayFromZero);
+        return size <= 0 ? Percent(percent) : new string('█', filled) + new string('░', size - filled) + " " + Percent(percent);
+    }
+
+    internal static async Task<GitHealth> ReadGitAsync(string root, WorkspaceMode mode, CancellationToken cancellationToken = default)
+    {
+        if (mode != WorkspaceMode.Git) return new();
+        var runner = new ProcessRunner();
+        Task<CommandResult> Run(params string[] args) => runner.RunAsync("git", args, root,
+            cancellationToken: cancellationToken, timeout: TimeSpan.FromSeconds(1));
+        var statusTask = Run("--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "-uall");
+        var remoteTask = Run("config", "--get", "remote.origin.url");
+        await Task.WhenAll(statusTask, remoteTask).ConfigureAwait(false);
+        var status = await statusTask.ConfigureAwait(false);
+        var remote = await remoteTask.ConfigureAwait(false);
+        return ParseGit(status.Success ? status.StandardOutput : null,
+            remote.Success ? remote.StandardOutput.Trim() : "");
+    }
+
+    internal static GitHealth ParseGit(string? status, string remote)
+    {
+        if (status is null) return new(Remote: remote);
+        var branch = "N/A";
+        int? ahead = null, behind = null;
+        var modified = 0;
+        var records = status.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < records.Length; i++)
+        {
+            var record = records[i];
+            if (record.StartsWith("# branch.head ", StringComparison.Ordinal)) branch = record[14..];
+            else if (record.StartsWith("# branch.ab ", StringComparison.Ordinal))
+            {
+                var parts = record[12..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 && int.TryParse(parts[0], out var a) && int.TryParse(parts[1], out var b))
+                { ahead = a; behind = Math.Abs(b); }
+            }
+            else if (record.StartsWith("1 ", StringComparison.Ordinal) || record.StartsWith("2 ", StringComparison.Ordinal) ||
+                     record.StartsWith("u ", StringComparison.Ordinal) || record.StartsWith("? ", StringComparison.Ordinal))
+            {
+                modified++;
+                if (record.StartsWith("2 ", StringComparison.Ordinal)) i++; // Rename source is a second record.
+            }
+        }
+        return new(branch, modified, ahead, behind, remote);
+    }
+
+    internal static string? GitHubRepository(string remote)
+    {
+        string path;
+        if (remote.StartsWith("git@github.com:", StringComparison.OrdinalIgnoreCase)) path = remote[15..];
+        else if (Uri.TryCreate(remote, UriKind.Absolute, out var uri) &&
+                 uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
+                 uri.Scheme is "https" or "http" or "ssh") path = uri.AbsolutePath.Trim('/');
+        else return null;
+        path = path.TrimEnd('/');
+        if (path.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) path = path[..^4];
+        var parts = path.Split('/');
+        return parts.Length == 2 && parts.All(part => part.Length > 0) ? path : null;
+    }
+
+    private static string RenderUninitialized(UsageSnapshot claude, bool useColor, int width) =>
+        RenderFields([
+            new("FKN", Tone.Badge),
+            new($"CTX {Meter(claude.ContextRemainingPercent, width >= 100 ? 5 : 0)} left"),
+            new($"Claude 5h {Meter(claude.FiveHourRemainingPercent, 0)} 7d {Meter(claude.WeeklyRemainingPercent, 0)}", Tone.Claude),
+            new("run fknrtd init")
+        ], width, useColor);
 
     private static string? ReadString(JsonElement root, params string[] path)
     {
@@ -265,7 +393,7 @@ internal static class StatusLineRenderer
 
         try
         {
-            return Console.WindowWidth;
+            return Console.WindowWidth > 0 ? Console.WindowWidth : 140;
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException or
                                           PlatformNotSupportedException)
@@ -305,8 +433,8 @@ internal static class StatusLineRenderer
 
     private static string SingleLine(string value, int maximum)
     {
-        var clean = string.Join(' ', value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
-        return clean.Length <= maximum ? clean : clean[..Math.Max(1, maximum - 1)] + "…";
+        var clean = new string(value.Select(character => char.IsControl(character) ? ' ' : character).ToArray());
+        return Text.Truncate(clean, maximum);
     }
 
     private static string Paint(
