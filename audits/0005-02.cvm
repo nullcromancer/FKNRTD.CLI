@@ -1,0 +1,11 @@
+CVM1|A|P
+E|R2 finding fixed in 57a7c79: scripts/codex-review.sh:40 now names src/FKNRTD.Content/CommandCatalog.cs
+E|Every file path in the review QUEUE block now resolves on disk (12/12 checked by the auditor)
+E|docs/collab/*.md correctly left naming the old path: historical records of past rounds
+E|R2 diff is the single line asked for and nothing else
+E|All 8 moved files remain 100% renames; no table content changed
+E|FKNRTD.Content references FKNRTD.Core only and contains no terminal code
+E|Environment note: Codex could not commit either round - git index.lock Permission denied on this machine, transient, no stale lock file left behind. The auditor committed R2 on the codex seat's behalf; the change itself is Codex's and was not modified.
+T|dotnet build FKNRTD.CLI.sln -c Release => 0 warnings, 0 errors (auditor, post-repair)
+T|dotnet run --project tests/FKNRTD.SelfTest -c Release --no-build => 113/113 self-tests passed (auditor, post-repair)
+T|fknrtd.exe portal => fknrtd-portal.html byte-identical (auditor)
