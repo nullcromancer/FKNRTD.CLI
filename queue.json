@@ -1081,7 +1081,7 @@
       "id": 13,
       "title": "Statusline: bars, git health, code health, priority",
       "state": "landed",
-      "phase": "landed",
+      "phase": "cleaned",
       "path": "briefs/0013-statusline-bars-git-health-code-health-p.cvm",
       "seat": "codex",
       "created": "2026-09-19T20:54:44+00:00",
@@ -1191,12 +1191,17 @@
           "seat": "claude",
           "commit": "ec3a7adbbf6ebd848c933ae023906529b4389322",
           "backup_ref": "refs/pairing/backups/13/20260919-174524"
+        },
+        {
+          "type": "cleanup",
+          "at": "2026-09-19T21:45:24+00:00",
+          "seat": "runtime"
         }
       ],
       "round": 4,
       "protocol": "caveman-v1",
       "implementer": "codex",
-      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0013-statusline-bars-git-health-code-health-p",
+      "worktree": null,
       "branch": "codex/pair-13-statusline-bars-git-health-code-health-p",
       "base_branch": "feature/standalone-workspaces-and-tool-management",
       "base_oid": "6d94e78529e2bbf3dc68512752b3cc973460f67b",
