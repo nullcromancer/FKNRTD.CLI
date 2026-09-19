@@ -918,7 +918,7 @@
       "id": 12,
       "title": "Doctor parity and diff failure",
       "state": "ready",
-      "phase": "briefed",
+      "phase": "worktree-ready",
       "path": "briefs/0012-doctor-parity-and-diff-failure.cvm",
       "seat": null,
       "created": "2026-09-19T17:30:09+00:00",
@@ -929,10 +929,23 @@
           "at": "2026-09-19T17:30:09+00:00",
           "seat": "claude",
           "lint": []
+        },
+        {
+          "type": "worktree",
+          "at": "2026-09-19T17:30:09+00:00",
+          "seat": "runtime",
+          "path": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0012-doctor-parity-and-diff-failure",
+          "branch": "codex/pair-12-doctor-parity-and-diff-failure",
+          "base": "dac76e3de964edbbfcb3ad5db1211d1307c86157"
         }
       ],
       "round": 0,
-      "protocol": "caveman-v1"
+      "protocol": "caveman-v1",
+      "implementer": "codex",
+      "worktree": "C:\\Users\\ms\\.pairing\\worktrees\\FKNRTD.CLI-5aa0a98612\\0012-doctor-parity-and-diff-failure",
+      "branch": "codex/pair-12-doctor-parity-and-diff-failure",
+      "base_branch": "feature/standalone-workspaces-and-tool-management",
+      "base_oid": "dac76e3de964edbbfcb3ad5db1211d1307c86157"
     }
   ]
 }
